@@ -1,4 +1,4 @@
-package com.ibrhalil.systemforge.tenant;
+package com.ibrhalil.systemforge.common.tenant;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -17,7 +17,7 @@ class TenantContextTests {
     void testTenantContextSetAndGet() {
         String testTenant = "test-tenant-123";
         TenantContext.setCurrentTenant(testTenant);
-        
+
         assertEquals(testTenant, TenantContext.getCurrentTenant());
     }
 
@@ -25,7 +25,7 @@ class TenantContextTests {
     void testTenantContextClear() {
         TenantContext.setCurrentTenant("some-tenant");
         TenantContext.clear();
-        
+
         assertNull(TenantContext.getCurrentTenant());
     }
 }

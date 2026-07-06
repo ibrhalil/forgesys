@@ -1,5 +1,6 @@
 package com.ibrhalil.systemforge.exception;
 
+import com.ibrhalil.systemforge.common.exception.TenantNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

@@ -1,18 +1,19 @@
-package com.ibrhalil.systemforge.tenant;
+package com.ibrhalil.systemforge.common.tenant;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
  * ThreadLocal context class to store and retrieve the current tenant identifier.
+ * Shared between the web layer (TenantFilter sets it) and the persistence layer
+ * (multi-tenant connection provider reads it).
  */
-public class TenantContext {
+public final class TenantContext {
 
     private static final Logger log = LoggerFactory.getLogger(TenantContext.class);
     private static final ThreadLocal<String> currentTenant = new ThreadLocal<>();
 
     private TenantContext() {
-        // Prevent instantiation
     }
 
     public static void setCurrentTenant(String tenantId) {

@@ -1,6 +1,6 @@
 package com.ibrhalil.systemforge.controller;
 
-import com.ibrhalil.systemforge.tenant.TenantContext;
+import com.ibrhalil.systemforge.common.tenant.TenantContext;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
