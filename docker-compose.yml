@@ -1,40 +1,63 @@
-version: '3.8'
-
+# ============================================================
+# Dev infra: PostgreSQL + Redis only (NO app).
+# Developer runs the Spring Boot app from IntelliJ IDEA (dev profile)
+# against these containers, and the frontend via "npm run dev".
+#
+#   docker compose up -d
+#
+# Sensible defaults are baked in via ${VAR:-default}, so a fresh
+# checkout works without a .env file.
+# ============================================================
 services:
   db:
     image: postgres:16-alpine
     container_name: systemforge-db
     environment:
-      POSTGRES_DB: systemforge
-      POSTGRES_USER: forgeadmin
-      POSTGRES_PASSWORD: forgepassword
+      POSTGRES_DB: ${POSTGRES_DB:-systemforge}
+      POSTGRES_USER: ${POSTGRES_USER:-forgeadmin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-forgepassword}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U forgeadmin -d systemforge"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-forgeadmin} -d ${POSTGRES_DB:-systemforge}"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - systemforge-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: systemforge-app
+  redis:
+    image: redis:7.4-alpine
+    container_name: systemforge-redis
     ports:
-      - "8080:8080"
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/systemforge
-      - SPRING_DATASOURCE_USERNAME=forgeadmin
-      - SPRING_DATASOURCE_PASSWORD=forgepassword
-      - SPRING_DATASOURCE_DRIVER_CLASS_NAME=org.postgresql.Driver
-      - SPRING_JPA_DATABASE_PLATFORM=org.hibernate.dialect.PostgreSQLDialect
-    restart: always
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: redis-server --appendonly yes
+    networks:
+      - systemforge-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  systemforge-net:
+    driver: bridge
 
 volumes:
   postgres_data:
+  redis_data:

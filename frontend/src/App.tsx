@@ -1,10 +1,17 @@
 import { useState, useEffect } from 'react';
 import './App.css';
 
-interface TenantResponse {
-  status: string;
-  message: string;
-  tenantId?: string;
+type HealthStatus = 'UP' | 'DOWN' | 'OUT_OF_SERVICE' | 'UNKNOWN';
+
+interface HealthComponent {
+  status: HealthStatus;
+  details?: Record<string, unknown>;
+}
+
+interface HealthResponse {
+  status: HealthStatus;
+  components?: Record<string, HealthComponent>;
+  message?: string;
 }
 
 interface Project {
@@ -24,7 +31,7 @@ interface Task {
 }
 
 const TENANT_DATA: Record<string, { projects: Project[]; tasks: Task[]; teamSize: number; monthlySpend: string }> = {
-  'acme-corp': {
+  'acme': {
     teamSize: 14,
     monthlySpend: '$4,200',
     projects: [
@@ -38,7 +45,7 @@ const TENANT_DATA: Record<string, { projects: Project[]; tasks: Task[]; teamSize
       { id: '103', title: 'Design Glassmorphism Dashboard UI', assignee: 'Alex Smith', priority: 'High', done: false }
     ]
   },
-  'stark-industries': {
+  'stark': {
     teamSize: 45,
     monthlySpend: '$28,500',
     projects: [
@@ -52,7 +59,7 @@ const TENANT_DATA: Record<string, { projects: Project[]; tasks: Task[]; teamSize
       { id: '103', title: 'Add thermal resistance logging', assignee: 'Jarvis', priority: 'Low', done: true }
     ]
   },
-  'wayne-enterprises': {
+  'wayne': {
     teamSize: 8,
     monthlySpend: '$9,800',
     projects: [
@@ -69,43 +76,42 @@ const TENANT_DATA: Record<string, { projects: Project[]; tasks: Task[]; teamSize
 };
 
 function App() {
-  const [selectedTenant, setSelectedTenant] = useState<string>('acme-corp');
-  const [apiResponse, setApiResponse] = useState<TenantResponse | null>(null);
+  const [selectedTenant, setSelectedTenant] = useState<string>('acme');
+  const [healthResponse, setHealthResponse] = useState<HealthResponse | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'projects' | 'tasks'>('overview');
 
   useEffect(() => {
-    fetchTenantTest();
-  }, [selectedTenant]);
+    fetchBackendHealth();
+  }, []);
 
-  const fetchTenantTest = async () => {
+  const fetchBackendHealth = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('/api/v1/tenant-test', {
-        headers: {
-          'X-Tenant-ID': selectedTenant
-        }
-      });
+      const response = await fetch('/actuator/health');
       if (response.ok) {
         const data = await response.json();
-        setApiResponse(data);
+        setHealthResponse({
+          status: data.status as HealthStatus,
+          components: data.components as Record<string, HealthComponent> | undefined
+        });
       } else {
-        setApiResponse({
-          status: 'error',
+        setHealthResponse({
+          status: 'DOWN',
           message: `Server returned error status ${response.status}`
         });
       }
-    } catch (err: any) {
-      setApiResponse({
-        status: 'offline',
-        message: 'Could not connect to Spring Boot API. Showing simulation data.'
+    } catch {
+      setHealthResponse({
+        status: 'DOWN',
+        message: 'Backend unreachable. Showing demo data.'
       });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const activeTenantData = TENANT_DATA[selectedTenant] || TENANT_DATA['acme-corp'];
+  const activeTenantData = TENANT_DATA[selectedTenant] || TENANT_DATA['acme'];
 
   return (
     <div className="dashboard-container">
@@ -145,62 +151,81 @@ function App() {
             onChange={(e) => setSelectedTenant(e.target.value)}
             className="tenant-select"
           >
-            <option value="acme-corp">🏢 Acme Corporation</option>
-            <option value="stark-industries">🚀 Stark Industries</option>
-            <option value="wayne-enterprises">🦇 Wayne Enterprises</option>
+            <option value="acme">🏢 Acme Corporation</option>
+            <option value="stark">🚀 Stark Industries</option>
+            <option value="wayne">🦇 Wayne Enterprises</option>
           </select>
         </div>
       </aside>
 
-      {/* Main Content Area */}
+        {/* Main Content Area */}
       <main className="main-content">
         <header className="top-bar">
           <div className="header-title">
-            <h1>Workspace Management</h1>
-            <p className="subtitle">SaaS Multi-tenant Control Panel</p>
+            <h1>SystemForge</h1>
+            <p className="subtitle">Multi-tenant SaaS platform — Phase 1 (infrastructure)</p>
           </div>
           <div className="connection-status">
+            <span className="badge demo" title="All project/task data below is mock. Backend integration arrives in Phase 4.">
+              ⚠ Demo Data
+            </span>
             {isLoading ? (
               <span className="badge loading">Connecting...</span>
-            ) : apiResponse?.status === 'success' ? (
-              <span className="badge live">🟢 Spring Boot Connected</span>
+            ) : healthResponse?.status === 'UP' ? (
+              <span className="badge live">🟢 Backend UP</span>
             ) : (
-              <span className="badge offline">🔴 Offline Mode</span>
+              <span className="badge offline">🔴 Backend DOWN</span>
             )}
           </div>
         </header>
 
-        {/* API Multi-tenancy status display */}
+        {/* Backend health status */}
         <section className="api-info-panel">
           <div className="panel-header">
-            <h3>Multitenancy Context (Headers & ThreadLocal)</h3>
-            <button className="btn-refresh" onClick={fetchTenantTest}>
-              🔄 Refresh Sync
+            <h3>Backend Health</h3>
+            <button className="btn-refresh" onClick={fetchBackendHealth}>
+              🔄 Refresh
             </button>
           </div>
           <div className="api-log">
             <div className="log-row">
-              <span className="log-label">HTTP Header sent:</span>
-              <code>X-Tenant-ID: {selectedTenant}</code>
+              <span className="log-label">Health endpoint:</span>
+              <code>GET /actuator/health</code>
             </div>
             <div className="log-row">
-              <span className="log-label">Backend Response:</span>
+              <span className="log-label">Overall status:</span>
               <span className="log-value">
-                {apiResponse ? (
-                  apiResponse.status === 'success' ? (
-                    <span className="text-success">
-                      Authenticated! Tenant <strong>{apiResponse.tenantId}</strong> resolved by filter ThreadLocal context.
-                    </span>
-                  ) : (
-                    <span className="text-warning">
-                      {apiResponse.message}
-                    </span>
-                  )
+                {healthResponse ? (
+                  <strong className={healthResponse.status === 'UP' ? 'text-success' : 'text-warning'}>
+                    {healthResponse.status}
+                  </strong>
                 ) : (
                   'Querying backend...'
                 )}
               </span>
             </div>
+            {healthResponse?.components && Object.keys(healthResponse.components).length > 0 && (
+              <div className="log-row">
+                <span className="log-label">Components:</span>
+                <div className="health-components">
+                  {Object.entries(healthResponse.components).map(([name, component]) => (
+                    <span
+                      key={name}
+                      className={`health-chip ${component.status === 'UP' ? 'up' : 'down'}`}
+                      title={component.details ? JSON.stringify(component.details) : undefined}
+                    >
+                      {component.status === 'UP' ? '✓' : '✗'} {name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {healthResponse?.message && (
+              <div className="log-row">
+                <span className="log-label">Note:</span>
+                <span className="log-value text-warning">{healthResponse.message}</span>
+              </div>
+            )}
           </div>
         </section>
 
@@ -274,7 +299,7 @@ function App() {
         {activeTab === 'projects' && (
           <div className="tab-pane fade-in">
             <div className="data-panel full-width">
-              <h3>All Projects for {selectedTenant.replace('-', ' ').toUpperCase()}</h3>
+              <h3>All Projects for {selectedTenant.toUpperCase()}</h3>
               <table className="data-table">
                 <thead>
                   <tr>
@@ -313,7 +338,7 @@ function App() {
         {activeTab === 'tasks' && (
           <div className="tab-pane fade-in">
             <div className="data-panel full-width">
-              <h3>All Backlog Tasks for {selectedTenant.replace('-', ' ').toUpperCase()}</h3>
+              <h3>All Backlog Tasks for {selectedTenant.toUpperCase()}</h3>
               <table className="data-table">
                 <thead>
                   <tr>

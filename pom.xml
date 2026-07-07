@@ -5,7 +5,7 @@
 
     <groupId>com.ibrhalil</groupId>
     <artifactId>systemforge</artifactId>
-    <version>0.0.2</version>
+    <version>0.0.3</version>
 
     <name>systemforge</name>
     <description>SystemForge — Multi-tenant SaaS platform</description>
@@ -17,6 +17,7 @@
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <java.version>21</java.version>
         <spring-boot.version>4.1.0</spring-boot.version>
+        <lombok.version>1.18.46</lombok.version>
     </properties>
 
     <modules>
@@ -59,6 +60,13 @@
                     <configuration>
                         <release>${java.version}</release>
                         <parameters>true</parameters>
+                        <annotationProcessorPaths>
+                            <path>
+                                <groupId>org.projectlombok</groupId>
+                                <artifactId>lombok</artifactId>
+                                <version>${lombok.version}</version>
+                            </path>
+                        </annotationProcessorPaths>
                     </configuration>
                 </plugin>
 
