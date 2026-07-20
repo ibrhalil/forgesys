@@ -69,10 +69,11 @@ backend/src/main/resources/static/
 # Keep directory placeholders, ignore runtime contents.
 # ============================================================
 
-# PostgreSQL / Redis runtime data (large, host-specific)
+# PostgreSQL runtime data (large, host-specific).
+# Redis uses a Docker named volume (see docker-compose.yml), so there is
+# no infra/data/redis on the host anymore.
 infra/data/postgres/*
-infra/data/redis/*
-!infra/data/**/.gitkeep
+!infra/data/postgres/.gitkeep
 
 # Application log files
 infra/logs/*
