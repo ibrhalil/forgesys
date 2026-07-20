@@ -8,7 +8,7 @@ React 19 + TypeScript + Vite SPA. Maven build (kök pom) backend jar'ına gömü
 
 ```bash
 cd frontend
-npm install
+npm install --include=optional
 npm run dev       # http://localhost:3000 (/api -> :8080 proxy)
 npm run lint      # oxlint
 npm run build     # tsc -b && vite build -> dist/
@@ -36,4 +36,5 @@ npm run preview   # build çıktısını lokal serve et
 
 - **Mevcut frontend mock veriyle çalışır** — gerçek API entegrasyonu YOK. `GET /actuator/health` ile backend'in up/down durumunu kontrol eder; up ise "Spring Boot Connected", yoksa "Offline Mode" rozeti gösterir. Tüm liste/tablo verileri `TENANT_DATA` mock'undan gelir. Faz 4'te yeniden yazılacak.
 - **Planlanan ama henüz YOK:** TanStack Query v5, Zustand v5, Tailwind CSS, react-router-dom, Vitest, React Testing Library, Playwright. Mevcut stil custom CSS.
-- **`package-lock.json` commit edilmeli** (`npm ci` Docker build için).
+- **`package-lock.json` kullanılmaz ve commit edilmez.** `.npmrc` içindeki `package-lock=false` lock üretimini kapatır. Maven/Docker da `npm install --include=optional --no-package-lock` kullanır; native optional paketler hedef platforma göre kurulur.
+- Doğrudan bağımlılıklar `package.json` içinde tam sürümle sabitlenir (`save-exact=true`).

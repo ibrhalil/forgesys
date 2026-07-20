@@ -55,7 +55,7 @@
                         </goals>
                         <phase>generate-resources</phase>
                         <configuration>
-                            <arguments>install</arguments>
+                            <arguments>install --include=optional --no-package-lock</arguments>
                         </configuration>
                     </execution>
                     <execution>

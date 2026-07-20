@@ -5,7 +5,7 @@
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.0-brightgreen.svg)](https://spring.io/projects/spring-boot)
 [![React](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791.svg)](https://www.postgresql.org)
-[![Version](https://img.shields.io/badge/version-0.0.3-lightgrey.svg)](#)
+[![Version](https://img.shields.io/badge/version-0.0.3-lightgrey.svg)]()
 
 **Modüler çok-kiracılı (multi-tenant) SaaS platformu.** Şirketler (tenant) kayıt olur, kendi ekiplerini yönetir ve ihtiyaç duydukları **modülleri** açar (Tasks, Notes, Warehouse, Logistics) ya da kendi **custom app'lerini** (Notion-style database builder) yaratır. Hibrit model: built-in modüller (Odoo/ERPNext mantığı) + tenant custom app'leri (Notion/Airtable mantığı). Modül aktivasyonu **plan bazlıdır** (Free/Pro/Enterprise). Kullanıcılar rol-bazlı erişim kontrolü (RBAC) ile giriş yapar.
 
@@ -66,10 +66,12 @@ docker compose up -d
 
 # 3b. Frontend — Vite dev server http://localhost:3000
 cd frontend
-nvm use                              # Node 20.18.0 (.nvmrc'den) — ilk sefer zorunlu
-npm install                          # package-lock.json yeniden üretir (engines field kontrol eder)
+nvm use                              # Node 20.20.2 (.nvmrc'den) — ilk sefer zorunlu
+npm install --include=optional       # lock dosyası üretmeden lokal kurulum
 npm run dev                          # /api -> http://localhost:8080 proxy
 ```
+
+> Proje `package-lock.json` kullanmaz (`.npmrc`: `package-lock=false`). Doğrudan bağımlılık sürümleri `package.json` içinde tam sürüm olarak sabittir; Maven ve Docker da `npm install --include=optional --no-package-lock` çalıştırır. Böylece native optional paketler kurulumu yapan işletim sistemine göre seçilir.
 
 - Uygulama: http://localhost:8080 · Frontend: http://localhost:3000
 - Veritabanı: `localhost:5432` (default: `systemforge` / `forgeadmin` / `forgepassword`) · Redis: `localhost:6379`
@@ -136,7 +138,7 @@ docker compose -f docker-compose-prod.yml up -d --build
 Frontend mock veriye düşer, backend çevrimdışı modda simülasyon çalıştırır:
 
 ```bash
-cd frontend && npm install && npm run dev
+cd frontend && npm install --include=optional && npm run dev
 ```
 
 ## API Endpoint'leri
@@ -251,7 +253,7 @@ Kurallar: Subject <72 karakter, küçük harfle başlasın, nokta ile bitmesin, 
   ```
 - **Backend ayağa kalkıyor ama frontend static servis etmiyor** → `./mvnw clean install` (tüm modülleri yeniden build).
 - **Frontend "Offline Mode" gösteriyor** → Backend çalışmıyor; başlat veya mock veriyle devam et (normal davranış).
-- **`npm ci` Docker build'de fail** → `package-lock.json` commit edildi mi kontrol et.
+- **Vite/Rolldown/Lightning CSS native binding bulunamıyor** → Node 20.20.2'yi (`nvm use`) kullanıp `node_modules` dizinini temizleyerek `npm install --include=optional` çalıştır.
 
 ## Dahası
 

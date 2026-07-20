@@ -49,6 +49,7 @@ dist-ssr
 
 # Frontend local Node.js install (frontend-maven-plugin)
 frontend/node/
+frontend/package-lock.json
 
 # Backend static resources (generated from frontend build, copied by maven-resources-plugin)
 backend/src/main/resources/static/
