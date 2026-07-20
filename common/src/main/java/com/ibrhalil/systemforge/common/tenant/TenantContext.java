@@ -3,6 +3,8 @@ package com.ibrhalil.systemforge.common.tenant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Optional;
+
 /**
  * ThreadLocal context class to store and retrieve the current tenant identifier.
  * Shared between the web layer (TenantFilter sets it) and the persistence layer
@@ -14,6 +16,7 @@ public final class TenantContext {
     private static final ThreadLocal<String> currentTenant = new ThreadLocal<>();
 
     private TenantContext() {
+        throw new UnsupportedOperationException("This is a utility class and cannot be instantiated");
     }
 
     public static void setCurrentTenant(String tenantId) {
@@ -21,8 +24,8 @@ public final class TenantContext {
         currentTenant.set(tenantId);
     }
 
-    public static String getCurrentTenant() {
-        return currentTenant.get();
+    public static Optional<String> getCurrentTenant() {
+        return Optional.ofNullable(currentTenant.get());
     }
 
     public static void clear() {
