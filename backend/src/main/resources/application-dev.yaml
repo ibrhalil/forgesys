@@ -32,3 +32,7 @@ logging:
   level:
     com.ibrhalil.systemforge: DEBUG
     org.hibernate.SQL: DEBUG
+  # Human-readable logs written to ./infra/logs/spring.log (project-relative).
+  # Set LOGGING_FILE_PATH env to override (e.g. when running outside the repo).
+  file:
+    path: ${LOGGING_FILE_PATH:infra/logs}

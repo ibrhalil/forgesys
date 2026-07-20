@@ -1,0 +1,38 @@
+# ============================================================
+# EditorConfig — https://editorconfig.org
+# Enforces consistent style across IDEs (IntelliJ IDEA, VS Code,
+# Vim, Emacs, etc.) on every platform. Line endings default to LF
+# to match the Docker/Linux runtime; only Windows-only batch
+# scripts use CRLF.
+# ============================================================
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+# Windows-only batch scripts
+[*.{cmd,bat,ps1}]
+end_of_line = crlf
+
+# Frontend stack — 2-space indent (Vite/React/TS convention)
+[*.{ts,tsx,js,jsx,mjs,cjs,json,jsonc,html,css,scss,yaml,yml}]
+indent_size = 2
+
+# Maven POMs — 4-space, often tab-free
+[*.xml]
+indent_size = 4
+
+# Markdown — keep trailing whitespace (two trailing spaces = line break)
+[*.md]
+trim_trailing_whitespace = false
+max_line_length = off
+
+# Makefiles require tabs
+[Makefile]
+indent_style = tab

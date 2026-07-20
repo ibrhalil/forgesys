@@ -34,8 +34,7 @@ build/
 # Environment variables (contains secrets — never commit)
 .env
 
-# Logs
-logs
+# Logs — application log files anywhere in the tree
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -63,3 +62,28 @@ backend/src/main/resources/static/
 *.njsproj
 *.sln
 *.sw?
+
+# ============================================================
+# infra/ — runtime infrastructure directory.
+# Keep directory placeholders, ignore runtime contents.
+# ============================================================
+
+# PostgreSQL / Redis runtime data (large, host-specific)
+infra/data/postgres/*
+infra/data/redis/*
+!infra/data/**/.gitkeep
+
+# Application log files
+infra/logs/*
+!infra/logs/.gitkeep
+
+# TLS material — secrets, never committed (matches AGENTS.md rule)
+infra/ssl/*
+!infra/ssl/.gitkeep
+
+# Externalized config overrides — may contain prod secrets.
+# infra/config/ stays committable for non-secret templates; if you drop
+# secrets here, gitignore them explicitly by filename.
+infra/config/application-prod.yaml
+infra/config/application-*.yaml
+!infra/config/.gitkeep

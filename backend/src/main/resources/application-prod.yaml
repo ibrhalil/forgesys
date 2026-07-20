@@ -15,7 +15,36 @@ spring:
     schemas: public
     locations: classpath:db/migration/public
     baseline-on-migrate: true
+  # Externalized config overlay is wired up via SPRING_CONFIG_ADDITIONAL_LOCATION
+  # env var (see docker-compose-prod.yml + .env.example) — not via spring.config.import
+  # here, to avoid duplicate resolution.
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+  info:
+    env:
+      enabled: false
 
 logging:
   level:
     com.ibrhalil.systemforge: INFO
+    org.hibernate.SQL: WARN
+  # File appender — destination provided via env (default /app/logs in container).
+  # Spring Boot writes spring.log under this directory with built-in rotation
+  # (10MB per file, 7-day archive window).
+  file:
+    path: ${LOGGING_FILE_PATH:/app/logs}
+  # Structured logging (Spring Boot 3.4+/4.1 built-in) — ECS JSON for log aggregation
+  # (ELK / Loki / Datadog). Console stays JSON too so docker logs is parseable.
+  structured:
+    format:
+      file: ecs
+      console: ecs

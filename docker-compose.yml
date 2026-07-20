@@ -7,28 +7,56 @@
 #
 # Sensible defaults are baked in via ${VAR:-default}, so a fresh
 # checkout works without a .env file.
+#
+# Volumes are bind-mounted under ./infra/data so dev data is visible
+# on the host (easy inspect / backup / wipe). See infra/README.md for
+# the macOS permission note if postgres refuses to start.
 # ============================================================
 services:
   db:
     image: postgres:16-alpine
     container_name: systemforge-db
+    init: true
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-systemforge}
       POSTGRES_USER: ${POSTGRES_USER:-forgeadmin}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-forgepassword}
+      # Warn in container logs if no FSYNC/optimization is set (dev convenience)
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+      # Use a subdirectory of the bind-mount as PGDATA. Avoids "directory exists
+      # but is not empty" when the mount point contains hidden files (.gitkeep,
+      # .DS_Store). Official postgres image recommendation.
+      PGDATA: /var/lib/postgresql/data/pgdata
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      # Persisted data (host-visible)
+      - ./infra/data/postgres:/var/lib/postgresql/data
+      # First-run init scripts (extensions etc.) — see infra/init-sql/README.md
+      - ./infra/init-sql:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-forgeadmin} -d ${POSTGRES_DB:-systemforge}"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+      # FOWNER: entrypoint chmod's /var/run/postgresql (socket dir) which is
+      # owned by postgres user, not the root inside the container.
+      - FOWNER
     networks:
       - systemforge-net
     logging:
-      driver: "json-file"
+      driver: local
       options:
         max-size: "10m"
         max-file: "3"
@@ -36,20 +64,31 @@ services:
   redis:
     image: redis:7.4-alpine
     container_name: systemforge-redis
+    init: true
+    restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
-      - redis_data:/data
+      - ./infra/data/redis:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 5s
     command: redis-server --appendonly yes
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETUID
+      - SETGID
+      - CHOWN
     networks:
       - systemforge-net
     logging:
-      driver: "json-file"
+      driver: local
       options:
         max-size: "10m"
         max-file: "3"
@@ -57,7 +96,3 @@ services:
 networks:
   systemforge-net:
     driver: bridge
-
-volumes:
-  postgres_data:
-  redis_data:

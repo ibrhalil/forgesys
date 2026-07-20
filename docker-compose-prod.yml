@@ -7,68 +7,110 @@
 #
 # Use --build whenever application/module code changes so the
 # image is rebuilt; without it a stale image may be reused.
+#
+# Security posture:
+#   - DB port is NOT published; only reachable on the internal
+#     network by the app. Use `docker compose exec db psql` for
+#     admin access.
+#   - All services: no-new-privileges, least capability.
+#   - App binds infra/config (ro), infra/templates (ro),
+#     infra/ssl (ro), infra/logs (rw).
 # ============================================================
 services:
   db:
     image: postgres:16-alpine
     container_name: systemforge-db-prod
+    init: true
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    ports:
-      - "5432:5432"
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+      # Subdirectory of bind-mount as PGDATA — robust against mount-point
+      # hidden files (.gitkeep, .DS_Store, Docker metadata).
+      PGDATA: /var/lib/postgresql/data/pgdata
+    # No `ports:` — DB is internal-only. Admin via:
+    #   docker compose -f docker-compose-prod.yml exec db psql -U $POSTGRES_USER -d $POSTGRES_DB
+    expose:
+      - "5432"
     volumes:
-      - postgres_data_prod:/var/lib/postgresql/data
+      - ./infra/data/postgres:/var/lib/postgresql/data
+      - ./infra/init-sql:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-      - systemforge-net
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+      # FOWNER: entrypoint chmod's /var/run/postgresql (socket dir).
+      - FOWNER
     deploy:
       resources:
         limits:
           cpus: '1.0'
           memory: 512M
+    networks:
+      - systemforge-net
     logging:
-      driver: "json-file"
+      driver: local
       options:
         max-size: "10m"
-        max-file: "3"
+        max-file: "5"
 
   redis:
     image: redis:7.4-alpine
     container_name: systemforge-redis-prod
-    ports:
-      - "6379:6379"
+    init: true
+    restart: unless-stopped
+    expose:
+      - "6379"
     volumes:
-      - redis_data_prod:/data
+      - ./infra/data/redis:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 5s
     command: redis-server --appendonly yes
-    networks:
-      - systemforge-net
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETUID
+      - SETGID
+      - CHOWN
     deploy:
       resources:
         limits:
           cpus: '0.5'
           memory: 256M
+    networks:
+      - systemforge-net
     logging:
-      driver: "json-file"
+      driver: local
       options:
         max-size: "10m"
-        max-file: "3"
+        max-file: "5"
 
   app:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: systemforge-app
+    init: true
+    restart: unless-stopped
     ports:
       - "8080:8080"
     depends_on:
@@ -85,7 +127,23 @@ services:
       - SPRING_JPA_DATABASE_PLATFORM=org.hibernate.dialect.PostgreSQLDialect
       - SPRING_DATA_REDIS_HOST=${SPRING_DATA_REDIS_HOST}
       - SPRING_DATA_REDIS_PORT=${SPRING_DATA_REDIS_PORT}
-    restart: always
+      # Externalized config overlay (optional) — infra/config/*.yaml override jar-baked values.
+      - SPRING_CONFIG_ADDITIONAL_LOCATION=${SPRING_CONFIG_ADDITIONAL_LOCATION:-optional:file:/config/}
+      # File-based log destination inside the container (mounted below).
+      - LOGGING_FILE_PATH=${LOGGING_FILE_PATH:-/app/logs}
+    volumes:
+      # Externalized prod overrides (read-only)
+      - ./infra/config:/config:ro
+      # Email/templates (read-only)
+      - ./infra/templates:/templates:ro
+      # TLS material (read-only)
+      - ./infra/ssl:/ssl:ro
+      # Spring Boot file appender destination (read-write)
+      - ./infra/logs:/app/logs
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     networks:
       - systemforge-net
     healthcheck:
@@ -94,16 +152,17 @@ services:
       timeout: 3s
       start_period: 40s
       retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 768M
     logging:
-      driver: "json-file"
+      driver: local
       options:
         max-size: "10m"
-        max-file: "3"
+        max-file: "10"
 
 networks:
   systemforge-net:
     driver: bridge
-
-volumes:
-  postgres_data_prod:
-  redis_data_prod:

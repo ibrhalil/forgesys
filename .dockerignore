@@ -1,0 +1,63 @@
+# ============================================================
+# Docker build context filter — keeps the context small, the
+# image cacheable, and prevents secrets / runtime data from
+# leaking into the image layer chain.
+#
+# Applies to: docker build . , docker compose up --build
+# ============================================================
+
+# VCS
+.git
+.gitignore
+.gitattributes
+.github
+
+# IDE
+.idea
+.vscode
+.run
+*.iml
+*.ipr
+*.iws
+
+# Build artifacts
+**/target/
+**/build/
+**/dist/
+**/out/
+backend/src/main/resources/static/
+
+# Runtime data — DB volumes, logs, ssl material
+infra/data/
+infra/logs/
+infra/ssl/
+
+# Externalized prod config — may contain secrets
+infra/config/application-*.yaml
+
+# Env / secrets — never bake into image
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+debug.log
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Node — frontend build stage installs fresh
+frontend/node_modules/
+frontend/node/
+frontend/dist/
+frontend/.vite/
+
+# Docs / meta
+docs/
+*.md
+LICENSE
+AGENTS.md
+BACKLOG.md

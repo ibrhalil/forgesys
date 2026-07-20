@@ -100,17 +100,30 @@ Konfigürasyon **profile-based** çalışır. Aktif profil `SPRING_PROFILES_ACTI
 
 ## Çalıştırma
 
-### Production deployment (server)
+### Production deployment (server — Debian/Ubuntu)
 
 ```bash
+# 0. (One-time on the host) Install Docker Engine + Compose v2 plugin:
+#    https://docs.docker.com/engine/install/debian/
+sudo apt-get update
+sudo apt-get install -y docker.io docker-compose-v2
+sudo usermod -aG docker $USER   # re-login afterwards
+docker --version && docker compose version
+
 # 1. .env oluştur (gerçek secret'larla — .env.example şablonu)
 cp .env.example .env
 #   ...edit POSTGRES_PASSWORD, SPRING_DATASOURCE_PASSWORD, vb.
 
-# 2. (Opsiyonel) test gate — Dockerfile kendi build'ini yapar, bu sadece testleri doğrular
+# 2. Bind-mount volume izinleri — postgres (UID 70) ve redis (UID 999)
+#    host dizinlerine yazabilmeli. Linux native Docker bunu otomatik
+#    yapmaz (Docker Desktop gibi user-namespace mapping yoktur).
+sudo chown -R 70:70  infra/data/postgres && sudo chmod 700 infra/data/postgres
+sudo chown -R 999:999 infra/data/redis
+
+# 3. (Opsiyonel) test gate — Dockerfile kendi build'ini yapar, bu sadece testleri doğrular
 mvn clean install
 
-# 3. Tam stack'i build & başlat
+# 4. Tam stack'i build & başlat
 docker compose -f docker-compose-prod.yml up -d --build
 #   Kod değişikliği sonrası her yeniden deploy'da --build şart.
 ```
@@ -171,12 +184,25 @@ systemforge/
 ├── persistence/             # JPA entity'ler + çok-kiracılı altyapı + Flyway migration
 ├── backend/                 # Spring Boot uygulaması (executable jar üretir)
 ├── frontend/                # React + Vite SPA
+├── infra/                   # Runtime altyapısı (config, data, logs, ssl, init-sql, templates)
 ├── docker-compose.yml       # Dev infra: PostgreSQL + Redis (app YOK, IDE'den çalışır)
 ├── docker-compose-prod.yml  # Prod stack: app + db + redis (.env'den okur)
 ├── Dockerfile               # Multi-stage: backend build -> runtime
 ├── AGENTS.md                # AI asistanları için kurallar (modül bazlı AGENTS.md'lerle)
 └── BACKLOG.md               # Ticket / yol haritası (SF-001...SF-405)
 ```
+
+**`infra/` dizini** — kaynak kodu değil, runtime/operasyonel altyapıyı tutar (bkz. [`infra/README.md`](infra/README.md)):
+
+| Alt dizin          | Amaç                                                            | Commit?                         |
+|--------------------|----------------------------------------------------------------|---------------------------------|
+| `config/`          | Prod için externalized Spring override'ları                     | Sadece `.gitkeep`               |
+| `data/postgres/`   | PostgreSQL bind-mount volume (dev + prod)                       | Hayır (runtime veri)            |
+| `data/redis/`      | Redis AOF bind-mount volume                                     | Hayır (runtime veri)            |
+| `init-sql/`        | Docker `/docker-entrypoint-initdb.d/` script'leri (ilk kurulum) | Evet                            |
+| `logs/`            | Spring Boot + container log bind-mount                          | Hayır (runtime veri)            |
+| `ssl/`             | TLS sertifikaları (Nginx / app HTTPS)                           | **Hayır** — secret, asla commit |
+| `templates/`       | Externalize runtime template'leri (mail HTML/CSS vb.)           | Evet                            |
 
 **Modül bağımlılık grafiği (döngüsüz):** `common ← persistence ← backend` · `frontend` bağımsız. Sadece `backend` executable jar üretir; `common` ve `persistence` kütüphane jar'ıdır.
 
@@ -211,7 +237,18 @@ Kurallar: Subject <72 karakter, küçük harfle başlasın, nokta ile bitmesin, 
 
 - **`mvnw: Permission denied`** → `chmod +x mvnw`
 - **Port 8080 / 3000 / 5432 kullanımda** → `lsof -i :8080` ile bul, durdur.
-- **Docker container DB'ye bağlanamıyor** → önce `docker compose up db` ile DB'yi ayrı kaldır, `pg_isready` kontrol et. Eski volume sorununda `docker compose down -v` (veri gider).
+- **Docker container DB'ye bağlanamıyor** → önce `docker compose up db` ile DB'yi ayrı kaldır, `pg_isready` kontrol et.
+- **PostgreSQL container "permission denied for data directory" (macOS)** → bind-mount `infra/data/postgres/`'un sahibi `postgres` (UID 70) olmalı:
+  ```bash
+  sudo chown -R 70:70 infra/data/postgres && chmod 700 infra/data/postgres
+  # Redis için (UID 999):
+  sudo chown -R 999:999 infra/data/redis
+  ```
+- **DB verisini sıfırlamak** → named volume yok artık; doğrudan host dizinini temizle:
+  ```bash
+  docker compose down
+  rm -rf infra/data/postgres/* infra/data/redis/*
+  ```
 - **Backend ayağa kalkıyor ama frontend static servis etmiyor** → `./mvnw clean install` (tüm modülleri yeniden build).
 - **Frontend "Offline Mode" gösteriyor** → Backend çalışmıyor; başlat veya mock veriyle devam et (normal davranış).
 - **`npm ci` Docker build'de fail** → `package-lock.json` commit edildi mi kontrol et.

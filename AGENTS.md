@@ -49,6 +49,19 @@ Her modülün kendi `AGENTS.md`'si var — modüle özgü kurallar orada.
 - `backend/` — Spring Boot uygulaması (controller/service/security/config). Executable jar üretir. → `backend/AGENTS.md`
 - `frontend/` — React 19 + TypeScript + Vite SPA. → `frontend/AGENTS.md`
 
+## Operasyonel Altyapı (`infra/`)
+
+Kaynak kodu değil, runtime/operasyonel dosyalar. Detaylar `infra/README.md`'de.
+
+- `infra/config/` — prod externalized override. İçine `application-prod.yaml` bırakırsan jar'dakini geçersiz kılar (`SPRING_CONFIG_ADDITIONAL_LOCATION`). **Secret varsa commit etme.**
+- `infra/data/{postgres,redis}/` — bind-mount volume. **Commit edilmez.** macOS'te izin sorunu için postgres UID 70, redis UID 999.
+- `infra/init-sql/` — Docker postgres `/docker-entrypoint-initdb.d/` script'leri. **SADECE ilk DB yaratımında** çalışır (extension, rol). **Flyway migration'larından tamamen ayrı** — karıştırma.
+- `infra/logs/` — Spring Boot file appender + container log bind-mount. **Commit edilmez.**
+- `infra/ssl/` — TLS sertifikaları / private key'ler. **ASLA commit etme** (kök "Sınırlar" kuralıyla çakışır).
+- `infra/templates/` — externalize runtime template'leri (mail HTML/CSS vb.).
+
+**init-sql vs Flyway (kritik ayrım):** Flyway her startup'ta `flyway_schema_history`'den çalışır (versioned). `init-sql/` ise postgres image'ı tarafından yalnızca **data directory boşsa** (ilk kurulum) çalışır. Aynı dosyayı iki yere koyma — Flyway checksum/history tutarsızlığı çöker.
+
 ## Kritik Kurallar (tüm modüller)
 
 - **Tenant izolasyonu ZORUNLU.** Hiçbir sorgu tenant filtresiz olmamalı. Tenant verisi sızdıran en kritik bug sınıfıdır. Tenant bağlamı `TenantFilter` tarafından kurulur (`common.TenantContext` ThreadLocal); controller'da tenant doğrulama YAPMA.
