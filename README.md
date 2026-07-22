@@ -14,7 +14,7 @@
 ## Özellikler
 
 **Mevcut (Faz 1 tamamlandı):**
-- Multi-module Maven yapısı (`common` ← `persistence` ← `backend` + `frontend`)
+- Multi-module Maven yapısı (`common` <- `persistence` <- `backend` + `frontend`)
 - Schema-per-tenant multi-tenancy: subdomain çözümleme + Hibernate `SCHEMA` stratejisi
 - Flyway per-schema migration (public auto-config + tenant programmatik)
 - Tenant signup endpoint: `POST /api/v1/auth/company/register` — Company + schema + admin user oluşturur
@@ -22,7 +22,7 @@
 - BCrypt password encoding, Bean Validation, merkezi hata yönetimi (`ErrorResponse`)
 - Docker: PostgreSQL + Redis + app (non-root), layered jars, actuator health
 
-**Planlanan (kararlar kilitlendi — yol haritası `BACKLOG.md`):**
+**Planlanan (kararlar kilitlendi — yol haritası [`docs/ROADMAP.md`](docs/ROADMAP.md)):**
 - Spring Security + JWT (login/refresh/logout, httpOnly cookie) + RBAC yönetimi
 - 3 katmanlı log (audit + giriş geçmişi + request/trace)
 - **Built-in modüller:** Tasks, Notes, Warehouse, Logistics (plan bazlı aktivasyon)
@@ -80,7 +80,7 @@ npm run dev                          # /api -> http://localhost:8080 proxy
 
 ## Konfigürasyon
 
-Konfigürasyon **profile-based** çalışır. Aktif profil `SPRING_PROFILES_ACTIVE` ile seçilir (varsayılan: `dev`).
+Konfigürasyon **profile-based** çalışır. Aktif profil `SPRING_PROFILES_ACTIVE` ile seçilir (varsayılan: `dev`). Profil detayları (DB, ddl-auto, flyway, H2 ayarları) tek source: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#konfigurasyon-profilleri).
 
 | Profil | DB | Kullanım | `.env` gerekir mi? |
 |--------|----|---------|----|
@@ -199,7 +199,7 @@ npm run dev                      # http://localhost:3000 (/api -> :8080 proxy)
 | `--no-transfer-progress` | Bağımlılık indirme ilerlemesini gizle (CI-friendly) |
 | `-T <n>` | Paralel build (`-T 4` = 4 thread) |
 
-> Testler `test` profilinde H2 (MODE=PostgreSQL) ile çalışır → build **Docker gerektirmez**. Dev/prod PostgreSQL kullanır. Detay: [`AGENTS.md`](AGENTS.md).
+> Testler `test` profilinde H2 (MODE=PostgreSQL) ile çalışır -> build **Docker gerektirmez**. Dev/prod PostgreSQL kullanır. Detay: [`AGENTS.md`](AGENTS.md).
 
 ## API Endpoint'leri
 
@@ -233,7 +233,7 @@ curl -X POST http://localhost:8080/api/v1/auth/company/register \
 
 > Bu endpoint `TenantFilter`'dan muaf tutulur (`shouldNotFilter`) — zaten tenant'ı oluşturuyor.
 
-**Planlanan endpoint grupları** (`BACKLOG.md`): Auth (`/auth/login` · `/refresh` · `/logout` · `/register` · `/me`), User CRUD (`/users`), RBAC (`/roles` · `/permissions` · `/groups`), Log (`/audit-logs` · `/login-history` · `/request-logs`), Modules (`/modules`), Custom Apps (`/apps`).
+**Planlanan endpoint grupları** ([`docs/ROADMAP.md`](docs/ROADMAP.md)): Auth (`/auth/login` · `/refresh` · `/logout` · `/register` · `/me`), User CRUD (`/users`), RBAC (`/roles` · `/permissions` · `/groups`), Log (`/audit-logs` · `/login-history` · `/request-logs`), Modules (`/modules`), Custom Apps (`/apps`).
 
 ## Proje Yapısı
 
@@ -251,7 +251,10 @@ systemforge/
 ├── docker-compose-prod.yml  # Prod stack: app + db + redis (.env'den okur)
 ├── Dockerfile               # Multi-stage: backend build -> runtime
 ├── AGENTS.md                # AI asistanları için kurallar (modül bazlı AGENTS.md'lerle)
-└── BACKLOG.md               # Ticket / yol haritası (SF-001...SF-405)
+└── docs/
+    ├── ARCHITECTURE.md      # Mimari diyagram, request lifecycle, config profilleri
+    ├── ROADMAP.md           # Faz/epik yol haritası (ticket numarasız)
+    └── DECISIONS.md         # Karar kayıtları (K-XX/RISK-XX/DEBT-XX)
 ```
 
 **`infra/` dizini** — kaynak kodu değil, runtime/operasyonel altyapıyı tutar (bkz. [`infra/README.md`](infra/README.md)):
@@ -266,7 +269,7 @@ systemforge/
 | `ssl/`             | TLS sertifikaları (Nginx / app HTTPS)                           | **Hayır** — secret, asla commit |
 | `templates/`       | Externalize runtime template'leri (mail HTML/CSS vb.)           | Evet                            |
 
-**Modül bağımlılık grafiği (döngüsüz):** `common ← persistence ← backend` · `frontend` bağımsız. Sadece `backend` executable jar üretir; `common` ve `persistence` kütüphane jar'ıdır.
+**Modül bağımlılık grafiği (döngüsüz):** `common` <- `persistence` <- `backend` · `frontend` bağımsız. Sadece `backend` executable jar üretir; `common` ve `persistence` kütüphane jar'ıdır.
 
 ## Katkı Sağlama
 
@@ -274,8 +277,8 @@ systemforge/
 
 - `main` — Production dalı. Her zaman deploy edilebilir.
 - `develop` — Aktif geliştirme dalı.
-- `feat/SF-123-kisa-aciklama` — Yeni özellik (ticket ID `BACKLOG.md`'den).
-- `fix/SF-123-kisa-aciklama` — Hata düzeltme.
+- `feat/SF-NN-kisa-aciklama` — Yeni özellik (geliştirici kendi `SF-NN` numarasını verir, yol haritasına bağımlı değil).
+- `fix/SF-NN-kisa-aciklama` — Hata düzeltme.
 - Tüm PR'lar `develop`'a karşı. Squash merge. Merge sonrası branch silinir.
 
 ### Commit Convention
@@ -297,29 +300,29 @@ Kurallar: Subject <72 karakter, küçük harfle başlasın, nokta ile bitmesin, 
 
 ### Troubleshooting
 
-- **`mvnw: Permission denied`** → `chmod +x mvnw`
-- **Port 8080 / 3000 / 5432 kullanımda** → `lsof -i :8080` ile bul, durdur.
-- **Docker container DB'ye bağlanamıyor** → önce `docker compose up db` ile DB'yi ayrı kaldır, `pg_isready` kontrol et.
-- **PostgreSQL container "permission denied for data directory" (macOS)** → bind-mount `infra/data/postgres/`'un sahibi `postgres` (UID 70) olmalı:
+- **`mvnw: Permission denied`** -> `chmod +x mvnw`
+- **Port 8080 / 3000 / 5432 kullanımda** -> `lsof -i :8080` ile bul, durdur.
+- **Docker container DB'ye bağlanamıyor** -> önce `docker compose up db` ile DB'yi ayrı kaldır, `pg_isready` kontrol et.
+- **PostgreSQL container "permission denied for data directory" (macOS)** -> bind-mount `infra/data/postgres/`'un sahibi `postgres` (UID 70) olmalı:
   ```bash
   sudo chown -R 70:70 infra/data/postgres && chmod 700 infra/data/postgres
   # Redis için (UID 999):
   sudo chown -R 999:999 infra/data/redis
   ```
-- **DB verisini sıfırlamak** → named volume yok artık; doğrudan host dizinini temizle:
+- **DB verisini sıfırlamak** -> named volume yok artık; doğrudan host dizinini temizle:
   ```bash
   docker compose down
   rm -rf infra/data/postgres/* infra/data/redis/*
   ```
-- **Backend ayağa kalkıyor ama frontend static servis etmiyor** → `./mvnw clean install` (tüm modülleri yeniden build).
-- **Frontend "Offline Mode" gösteriyor** → Backend çalışmıyor; başlat veya mock veriyle devam et (normal davranış).
-- **Vite/Rolldown/Lightning CSS native binding bulunamıyor** → Node 20.20.2'yi (`nvm use`) kullanıp `node_modules` dizinini temizleyerek `npm install --include=optional` çalıştır.
+- **Backend ayağa kalkıyor ama frontend static servis etmiyor** -> `./mvnw clean install` (tüm modülleri yeniden build).
+- **Frontend "Backend DOWN" gösteriyor** -> Backend çalışmıyor; başlat veya mock veriyle devam et (normal davranış).
+- **Vite/Rolldown/Lightning CSS native binding bulunamıyor** -> Node 20.20.2'yi (`nvm use`) kullanıp `node_modules` dizinini temizleyerek `npm install --include=optional` çalıştır.
 
 ## Dahası
 
-- **Mimari:** `docs/ARCHITECTURE.md` (bileşen diyagramı, request lifecycle, şema-per-tenant modeli, entity hiyerarşisi).
+- **Mimari:** `docs/ARCHITECTURE.md` (bileşen diyagramı, request lifecycle, şema-per-tenant modeli, entity hiyerarşisi, config profilleri).
+- **Yol haritası:** `docs/ROADMAP.md` (Faz/epik, ticket numarasız). **Karar kayıtları:** `docs/DECISIONS.md` (K-XX/RISK-XX/DEBT-XX).
 - **AI asistanı kuralları:** `AGENTS.md` (kök) + her modülün kendi `AGENTS.md`'si (`common/`, `persistence/`, `backend/`, `frontend/`).
-- **Ticketlar / yol haritası:** `BACKLOG.md` (Faz 1.5-6, SF-001...SF-405).
 
 ## License
 

@@ -4,50 +4,35 @@
 
 **SystemForge** — modüler çok-kiracılı (multi-tenant) SaaS platformu. Java 21 + Spring Boot 4.1, PostgreSQL 16, Redis 7.4, Flyway. Hibrit model: built-in modüller (Tasks/Notes/Warehouse/Logistics — Odoo/ERPNext mantığı) + tenant custom app'leri (Notion/Airtable mantığı, JSONB EAV). **Schema-per-tenant** izolasyonu; **User-per-tenant** (global user yok); RBAC (User-Role + Group-Role + Role-Permission).
 
-## Kurulum
+## Doküman Haritası
 
-Detaylı kurulum/çalıştırma `README.md`'de. Özet:
+- [`README.md`](README.md) — kurulum, çalıştırma, **build komutları** (tek source), API, troubleshooting.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — mimari diyagram, request lifecycle, schema-per-tenant, entity hiyerarşisi, **config profilleri** (tek source).
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) — faz/epik yol haritası (ticket numarasız, amaca odaklı).
+- [`docs/DECISIONS.md`](docs/DECISIONS.md) — karar kayıtları (K-XX mimari, RISK-XX risk, DEBT-XX teknik borç).
+- Her modülün kendi `AGENTS.md`'si: [`common/`](common/AGENTS.md) · [`persistence/`](persistence/AGENTS.md) · [`backend/`](backend/AGENTS.md) · [`frontend/`](frontend/AGENTS.md).
+
+## Kurulum (özet)
+
+Detay ve tüm komutlar `README.md`'de. Özet:
 
 ```bash
 mvn clean install          # tüm modüller (testler H2'de, Docker gerektirmez)
 docker compose up -d       # db + redis (dev infra)
 # backend: SystemforgeApplication'ı IDE'den run/debug (dev profili)
-# frontend: cd frontend && npm install && npm run dev
+# frontend: cd frontend && npm install --include=optional && npm run dev
 ```
 
 - `.env` yalnızca prod Docker Compose içindir; `dev` profilinde gerekmez. Asla commit edilmez (`.gitignore`'da).
-
-## Komutlar
-
-```bash
-# Build
-./mvnw clean install                       # tüm modüller + testler
-./mvnw clean install -DskipTests           # hızlı build
-
-# Backend çalıştır (root'tan DEĞİL — her zaman -pl backend)
-./mvnw -pl backend spring-boot:run
-
-# Test (dosya-bazlı tercih edilir)
-./mvnw -pl backend test -Dtest=ClassName#methodName   # tek test
-./mvnw -pl backend test                                # backend testleri
-./mvnw test                                            # tüm suite (sadece açıkça istenirse)
-
-# Frontend (frontend/ dizininde)
-cd frontend && npm run dev      # :3000, /api -> :8080
-cd frontend && npm run lint     # oxlint
-cd frontend && npm run build    # tsc -b && vite build
-```
-
-> Testler `test` profilinde (H2 in-memory) çalışır → build Docker gerektirmez. Dev/prod PostgreSQL kullanır.
 
 ## Modüller
 
 Her modülün kendi `AGENTS.md`'si var — modüle özgü kurallar orada.
 
-- `common/` — paylaşılan çekirdek (`TenantContext`, paylaşılan exception'lar). **Spring/JPA YOK.** → `common/AGENTS.md`
-- `persistence/` — JPA entity'ler + multi-tenancy altyapısı + Flyway migration. → `persistence/AGENTS.md`
-- `backend/` — Spring Boot uygulaması (controller/service/security/config). Executable jar üretir. → `backend/AGENTS.md`
-- `frontend/` — React 19 + TypeScript + Vite SPA. → `frontend/AGENTS.md`
+- `common/` — paylaşılan çekirdek (`TenantContext`, paylaşılan exception'lar). **Spring/JPA YOK.**
+- `persistence/` — JPA entity'ler + multi-tenancy altyapısı + Flyway migration.
+- `backend/` — Spring Boot uygulaması (controller/service/security/config). Executable jar üretir.
+- `frontend/` — React 19 + TypeScript + Vite SPA.
 
 ## Operasyonel Altyapı (`infra/`)
 
@@ -66,40 +51,36 @@ Kaynak kodu değil, runtime/operasyonel dosyalar. Detaylar `infra/README.md`'de.
 
 - **Tenant izolasyonu ZORUNLU.** Hiçbir sorgu tenant filtresiz olmamalı. Tenant verisi sızdıran en kritik bug sınıfıdır. Tenant bağlamı `TenantFilter` tarafından kurulur (`common.TenantContext` ThreadLocal); controller'da tenant doğrulama YAPMA.
 - **Kök pom sadece lightweight parent + aggregator'dır** — modüllere bağımlılık dayatmaz (`<dependencies>` yok), sadece version management sağlar. Hiçbir modül `spring-boot-starter-parent`'ı parent yapmaz.
-- **Modüller arası döngüsel bağımlılık YASAK.** Bağımlılık grafiği: `common ← persistence ← backend`. `frontend` bağımsız.
+- **Modüller arası döngüsel bağımlılık YASAK.** Bağımlılık grafiği: `common` <- `persistence` <- `backend`. `frontend` bağımsız.
 - **Versiyonlar root `<properties>`'te** (`spring-boot.version`, `java.version`). Modül pom'larında version yazılmaz.
 - **ID'ler her yerde UUID** (`GenerationType.UUID`). Tablo adları `t_` prefix'li.
 - **Kod stili:** paket `com.ibrhalil.systemforge.*`, DTO'lar `record`, merkezi hata yönetimi `@RestControllerAdvice` (`ErrorResponse`), Lombok backend modülünde.
 
 ## Test
 
-- `test` profili (H2 `MODE=PostgreSQL`) → `@SpringBootTest` `@ActiveProfiles("test")` ile. Build Docker gerektirmez.
-- Dev/prod PostgreSQL. Dev profili `localhost:5432` default'ları gömülü.
+- Config profilleri (dev/prod/test, H2, ddl-auto, flyway.enabled) tek source: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#konfigurasyon-profilleri).
 - Yeni endpoint için en az bir test ekle. Tenant izolasyonu içeren değişiklikte ekstra dikkat.
 
 ## Sınırlar
 
 **Asla:**
+- **Habersiz git işlemi yapma.** `git commit`, `git push`, `git amend`, `git merge`, `git rebase`, `git reset --hard`, branch oluşturma/silme, `gh pr create` vb. — bunların HEPSİ yalnızca kullanıcı **açıkça** istediğinde yapılır. "İşim bitti, commit atayım" gibi inisiyatif ALMA. Kullanıcı commit/push demeden staging alanında kal. `git add`/`git status`/`git diff`/`git log` (salt-okunur) serbesttir.
 - `.env`, `application-prod.yaml` secret'larını, RSA key'lerini (`certs/*.pem`) commit etme / okuma.
-- `ddl-auto`'yu `validate` yapma (multi-tenant + lazy tenant şeması yüzünden startup'ta çöker — her zaman `none`, şema Flyway'de).
+- `ddl-auto`'yu `validate` yapma (multi-tenant + lazy tenant şeması yüzünden startup'ta çöker — her zaman `none`, şema Flyway'de). Test profili istisnası: `create-drop`.
 - Cross-tenant sorgu yazma. Hassas veriyi (şifre, token, PII) log'a yazma.
 
 **Önce sor:**
-- Yeni Flyway migration eklerken (özellikle mevcut tenant şemalarını etkilerse — `TenantMigrationRunner` gerekir).
+- Yeni Flyway migration eklerken (özellikle mevcut tenant şemalarını etkilerse — `TenantMigrationRunner` gerekir, bkz. [RISK-16](docs/DECISIONS.md#risk-16--yeni-tenant-migration-mevcut-tenantlarda-calismaz)).
 - Yeni bağımlılık eklerken (önce root pom'a uygun mu kontrol et).
 
 **Her zaman:**
 - Yeni endpoint'e test ekle.
-- Servis katmanı yazma işlerinde `@Transactional` kullan (method-level; lookup'larda `readOnly=true`).
+- Servis katmanı yazma işlerinde `@Transactional` kullan (method-level; lookup'larda `readOnly=true`). **İstisna:** `provisionTenant` şu an transaction'suz ([DEBT-10](docs/DECISIONS.md#debt-10--provisiontenant-transactionsuz)), K-21 ile düzeltilecek.
 
 ## Git
 
-- Branch: `feat/SF-123-kisa-aciklama` (ticket ID `BACKLOG.md`'den). Merge sonrası branch silinir.
-- Commit: Conventional Commits — `feat(tenant): add subdomain resolver`, `fix(auth): handle expired token`, `refactor: ...`, `test: ...`, `docs: ...`, `chore(deps): ...`. Subject <72 karakter, küçük harf, noktasız, imperative.
+> **Aşağıdaki kurallar YALNIZCA kullanıcı commit/push/PR'ı açıkça istediğinde uygulanır.** Agent habersiz commit, push, amend, merge, branch oluşturma/silme veya PR yapamaz — bkz. yukarıdaki "Sınırlar / Asla". Değişiklikleri staging'de bırak, kullanıcı `git add`/`commit`/`push`/`gh pr create` demeden işlem yapma.
+
+- **Branch:** `feat/SF-NN-kisa-aciklama` — geliştirici kendi `SF-NN` numarasını verir, yol haritasına bağımlı değil. Merge sonrası branch silinir.
+- **Commit:** Conventional Commits — `feat(tenant): add subdomain resolver`, `fix(auth): handle expired token`, `refactor: ...`, `test: ...`, `docs: ...`, `chore(deps): ...`. Subject <72 karakter, küçük harf, noktasız, imperative.
 - Tüm PR'lar `develop`'a karşı. Squash merge. PR öncesi: `./mvnw test` + `npm run lint`.
-
-## Dahası
-
-- **Ticketlar / yol haritası:** `BACKLOG.md` (Faz 1.5-6, SF-001...SF-405).
-- **Kurulum / konfigürasyon / API detayları:** `README.md`.
-- **Mimari karar gerekçeleri:** ilgili modülün `AGENTS.md`'sinde.
