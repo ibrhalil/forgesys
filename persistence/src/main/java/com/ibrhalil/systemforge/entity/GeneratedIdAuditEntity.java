@@ -1,6 +1,5 @@
 package com.ibrhalil.systemforge.entity;
 
-import java.util.Objects;
 import java.util.UUID;
 import jakarta.persistence.Column;
 import jakarta.persistence.GeneratedValue;
@@ -34,6 +33,6 @@ public abstract class GeneratedIdAuditEntity extends AuditEntity {
 
     @Override
     public int hashCode() {
-        return Objects.hash(getClass());
+        return id == null ? System.identityHashCode(this) : id.hashCode();
     }
 }

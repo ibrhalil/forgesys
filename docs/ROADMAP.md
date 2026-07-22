@@ -59,10 +59,10 @@ Cross-cutting iyileştirmeler. Auth işinden önce yapılmalı.
 
 ### Epic 2.0.B — Critical Fixes
 Kod analizi sonucu keşfedilen P0 düzeltmeler. User CRUD / log'dan ÖNCE çözülmeli.
-- [ ] `TenantMigrationRunner` (`ApplicationRunner`) — startup'ta tüm `t_companies` şemalarını Flyway migrate (RISK-16). V2 tenant migration'ından ÖNCE gelmeli.
-- [ ] UNIQUE -> partial index (`WHERE is_deleted=false`): username/email + role/perm/group name. Tenant template + mevcut tenant'larda (RISK-17). User CRUD'dan ÖNCE.
-- [ ] `hashCode()` düzelt — hem `BaseEntity` hem `GeneratedIdAuditEntity` (DEBT-7). RBAC'dan ÖNCE.
-- [ ] `TaskDecorator` — TenantContext + SecurityContext propagation (`@Async`, RISK-10).
+- [x] `TenantMigrationRunner` (`ApplicationRunner`, `@Profile("!test")`) — startup'ta tüm `t_companies` şemalarını `TenantMigrationSupport` üzerinden Flyway migrate (RISK-16 — ÇÖZÜLDÜ). V2 tenant migration'ından ÖNCE gelmeli.
+- [x] UNIQUE -> partial index (`WHERE is_deleted=false`): public `t_companies` (name/subdomain/email_domain/schema_name) + tenant `t_users`/`t_roles`/`t_permissions`/`t_groups`. `public/V2` + `tenant/V2` (RISK-17 — ÇÖZÜLDÜ). User CRUD'dan ÖNCE.
+- [x] `hashCode()` düzelt — hem `BaseEntity` hem `GeneratedIdAuditEntity` (ID-bazlı, DEBT-7 — ÇÖZÜLDÜ). RBAC'dan ÖNCE.
+- [ ] `TaskDecorator` — TenantContext + SecurityContext propagation (`@Async`, RISK-10). **Ertelendi:** ileriye dönük altyapı; şu an `@Async` tüketici yok. İlk async iş (audit/email) ortaya çıkınca, Faz 2.3 auth sonrasına bırakıldı.
 
 ### Epic 2.0.C — Hibrit Tenant Signup Verification (K-21)
 > K-21 kararı — PLANLANDI, uygulanmadı. Detay: [DECISIONS.md K-21](DECISIONS.md#k-21).

@@ -66,7 +66,17 @@ Her kayıt:
   - `VerificationSender` interface + profile bazlı impl'ler: `test`->`InMemoryVerificationSender`, `dev`->`LogVerificationSender`, `prod`->`MailVerificationSender` (mail starter SF sonrası erteli)
   - `CompanyStatus.PROVISIONING` gerçekten kullanılır hale gelir
   - Tenant signup admin email doğrulaması (`public` şema) ile tenant içi user email doğrulaması (`User.emailVerificationToken`, tenant şeması) AYNI şey DEĞİL.
-- **Not:** Backend/persistence AGENTS.md'leri şu an bu kararı "mevcut" gibi anlatmıyor; gerçek tek-fazlı akışı belgeliyor. K-21 uygulandığında bu dokümanlar güncellenir.
+- **Not 1 (migration çakışması):** `public/V2` ve `tenant/V2` sürümleri RISK-17 partial index işiyle dolu (bkz. Epic 2.0.B). K-21 implement edilirken tenant verification token tablosu `public/V3` olmalı (V2 ÇÖZÜLDÜ).
+- **Not 2:** Backend/persistence AGENTS.md'leri şu an bu kararı "mevcut" gibi anlatmıyor; gerçek tek-fazlı akışı belgeliyor. K-21 uygulandığında bu dokümanlar güncellenir.
+
+### K-22
+**Tenant Domain Handoff / Schema Archival (2026-07-22) — PLANLANDI**
+- **Bağlam:** Nadir ama gerçek bir senaryo: bir şirket aboneliğini kapatır/ödemez → `SUSPENDED`/`TERMINATED`. Daha sonra aynı email domain'i (örn. şirket iflası, domain başkasına geçti) farklı bir kişi tarafından tekrar SystemForge'a kayıt olmak isteyebilir. Eski şirketin subdomain/emailDomain/schema_name değerleri serbest kalmalı, ama eski veri kaybolmamalı (arşiv).
+- **Karar:** İki katmanlı yaklaşım:
+  1. **Kısıt katmanı (RISK-17 partial index ile sağlandı):** Soft-delete edilmiş şirketin `subdomain`/`email_domain`/`schema_name` değerleri `WHERE is_deleted = false` partial index sayesinde aktif satırlar arasında benzersiz kalmaya devam ederken, silinen satır tekrar kullanılabilir. Yeni kayıt temiz geçer.
+  2. **Fiziksel arşiv (operasyonel, platform admin):** Eski şirketin fiziksel şeması `ALTER SCHEMA tenant_X RENAME TO tenant_X_archived` ile yeniden adlandırılır. Yeni kayıt fresh `tenant_X` şeması + Flyway ile yaratılır; eski veri `tenant_X_archived`'da platformdan ayrı (orphan) kalır.
+- **Durum:** PLANLANDI. Katman 1 (partial index) uygulandı (RISK-17, Epic 2.0.B). Katman 2 (fiziksel schema rename + reaktivasyon onay maili) platform admin tooling / Faz 6 (Billing & Abonelik) kapsamında gelecek.
+- **Etki:** RISK-17 kapsamı açıkça `t_companies` dahil 9 index olacak şekilde tasarlandı (sadece tenant-side değil) — bu senaryoyu destekler. `CompanyStatus` yaşam döngüsü (ACTIVE → SUSPENDED → TERMINATED + reaktivasyon) Faz 6 ile netleşecek.
 
 ---
 
@@ -103,26 +113,27 @@ Her kayıt:
 - **Durum:** ÇÖZÜLDÜ.
 
 ### RISK-16
-**Yeni tenant migration mevcut tenant'larda çalışmaz**
+**Yeni tenant migration mevcut tenant'larda çalışmaz (ÇÖZÜLDÜ)**
 - **Bağlam:** Programmatik tenant Flyway migration sadece yeni provision edilen tenant'larda çalışır. Mevcut tenant'lar V1'de takılır; yeni V2 tenant migration'ı onlara uygulanmaz.
-- **Karar:** `TenantMigrationRunner` (`ApplicationRunner`) — startup'ta tüm `t_companies` şemalarını Flyway migrate eder. Yeni tenant migration'ından ÖNCE gelmeli.
-- **Durum:** Planlandı (Faz 2.0.B).
+- **Karar:** `TenantMigrationRunner` (`ApplicationRunner`, `@Profile("!test")`) — startup'ta tüm `t_companies` şemalarını `TenantMigrationSupport` üzerinden Flyway migrate eder. Yeni tenant migration'ından ÖNCE gelmeli.
+- **Durum:** ÇÖZÜLDÜ (Epic 2.0.B). `TenantMigrationSupport` bean'i ortak Flyway mantığını taşır (hem runner hem `TenantProvisioningService` kullanır). Tek tenant hatası diğerlerini durdurmaz (per-tenant try/catch + log). Test profilinde kapalı (`@Profile("!test")` — H2 + flyway kapalı).
 
 ### RISK-17
-**Soft-delete + UNIQUE çakışması**
+**Soft-delete + UNIQUE çakışması (ÇÖZÜLDÜ)**
 - **Bağlam:** DB seviyesi UNIQUE constraint soft-delete ile çakışır (silinmiş satır kalır, aynı isimde yenisi insert edilemez).
 - **Karar:** Partial index: `CREATE UNIQUE INDEX ... WHERE is_deleted = false`. Sadece `SoftDeleteAuditEntity` subclass'ları için. `GeneratedIdAuditEntity` subclass'ları (soft-delete'siz) normal UNIQUE kullanır.
-- **Durum:** Planlandı (Faz 2.0.B, User CRUD'dan önce).
+- **Durum:** ÇÖZÜLDÜ (Epic 2.0.B). `public/V2` + `tenant/V2` ile 9 partial index: public `t_companies` (name/subdomain/email_domain/schema_name) + tenant `t_users`(username,email)/`t_roles`/`t_permissions`/`t_groups`(name). K-22 domain-handoff senaryosunu destekler. Join tabloları ve `t_refresh_tokens.token` normal UNIQUE kaldı. Gerçek DB doğrulaması Epic 3.X Testcontainers'da (H2 test profilinde Flyway kapalı).
 
 ---
 
 ## Teknik Borç (DEBT-XX)
 
 ### DEBT-7
-**hashCode() bug**
+**hashCode() bug (ÇÖZÜLDÜ)**
 - **Bağlam:** `BaseEntity` ve `GeneratedIdAuditEntity` `Objects.hash(getClass())` kullanıyor -> aynı tipteki tüm entity'lere aynı hash -> `Set<Role>` gibi koleksiyonlarda çakışma.
 - **Karar:** `hashCode()` ID baz alınacak şekilde düzeltilecek (her iki base sınıfta).
-- **Durum:** Açık. RBAC (Set<Permission> vb.)'dan önce düzeltilmeli (Faz 2.0.B).
+- **Durum:** ÇÖZÜLDÜ (Epic 2.0.B). Uygulama: `id == null ? System.identityHashCode(this) : id.hashCode()`. Persist öncesi (id null) identity hash, persist sonrası ID-bazlı. RBAC'dan önce düzeltildi.
+- **Konvansiyon:** ID persist sırasında `null→UUID` değiştiği için yeni (transient) entity'yi persist **öncesinde** `HashSet`/`HashMap` anahtarı olarak kullanıp persist sonrası lookup yapmak güvenli değildir. Pratik kullanımda (DB'den yüklenen entity'ler) sorun yok.
 
 ### DEBT-10
 **provisionTenant transaction'suz**

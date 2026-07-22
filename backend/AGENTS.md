@@ -12,10 +12,10 @@ Root package `com.ibrhalil.systemforge` (NOT a `.backend` subpackage):
 - `SystemforgeApplication` — main.
 - `tenant/` — `TenantFilter` (subdomain resolution).
 - `controller/` — REST (`/api/v1/*`). `[PHASE 3]` `modules/` subpackage.
-- `service/` — business logic. `[PHASE 3]` `modules/` subpackage.
+- `service/` — business logic incl. `TenantProvisioningService`, `TenantMigrationSupport` (shared programmatic tenant Flyway). `[PHASE 3]` `modules/` subpackage.
 - `dto/` — request/response DTOs (`record`).
 - `exception/` — `GlobalExceptionHandler`, `ErrorResponse`.
-- `config/` — `MultiTenancyJpaConfig`, `SecurityConfig`.
+- `config/` — `MultiTenancyJpaConfig`, `SecurityConfig`, `TenantMigrationRunner` (`ApplicationRunner`, `@Profile("!test")`).
 
 ## Tenant Context rules (CRITICAL)
 
@@ -25,7 +25,7 @@ Root package `com.ibrhalil.systemforge` (NOT a `.backend` subpackage):
 - When tenant context is null the resolver returns `"public"` -> public-schema data (Company) is reachable.
 - Services that programmatically set the tenant (e.g. `TenantProvisioningService.provisionTenant` -> `createAdminUser`) MUST call `TenantContext.clear()` in `finally`.
 - The `X-Tenant-ID` header fallback is active **only in the `dev` profile**. Fully disabled in prod.
-- `TenantContext` is NOT propagated automatically across `@Async` threads — a `TaskDecorator` is required ([RISK-10](../docs/DECISIONS.md#risk-10)).
+- `TenantContext` is NOT propagated automatically across `@Async` threads — a `TaskDecorator` is required ([RISK-10](../docs/DECISIONS.md#risk-10)). **Deferred** to after Phase 2.3 auth (no `@Async` consumer yet; `@EnableAsync` absent).
 
 ## Endpoint rules
 
@@ -49,11 +49,12 @@ Root package `com.ibrhalil.systemforge` (NOT a `.backend` subpackage):
 - **`TenantProvisioningService.provisionTenant(request)`** — single-phase SYNCHRONOUS flow:
   1. `validateUnique` (subdomain + emailDomain uniqueness)
   2. `createSchema` (raw JDBC `CREATE SCHEMA`)
-  3. `runTenantMigrations` (programmatic Flyway)
+  3. `runTenantMigrations` -> delegates to `TenantMigrationSupport.migrateSchema(schemaName)` (shared programmatic Flyway)
   4. `createCompany` (status=`ACTIVE`)
   5. `createAdminUser` (tenant context set + finally clear)
 - DDL (`CREATE SCHEMA`) is an implicit commit in PostgreSQL -> OUTSIDE the transaction. **`provisionTenant` is currently NOT `@Transactional`** — partial-write risk ([DEBT-10](../docs/DECISIONS.md#debt-10)). It is refactored when K-21 lands (`createPendingCompany` + `verifyAndProvision`, both transactional).
 - Lookups should use `@Transactional(readOnly=true)`.
+- **`TenantMigrationRunner`** (`config/`, `ApplicationRunner`, `@Profile("!test")`) — at startup, iterates `t_companies` (public schema, no tenant context) and runs `TenantMigrationSupport.migrateSchema(schemaName)` per tenant. Applies new tenant migrations (`tenant/V2`, `V3`, ...) to EXISTING tenants ([RISK-16](../docs/DECISIONS.md#risk-16) — RESOLVED). Per-tenant try/catch: one broken schema doesn't abort others. Disabled in `test` profile (H2 + flyway off).
 
 ## Configuration
 
