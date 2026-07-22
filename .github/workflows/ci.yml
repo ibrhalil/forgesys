@@ -31,11 +31,12 @@ jobs:
           cache: maven
 
       # Test profili H2 (MODE=PostgreSQL) kullanır -> PostgreSQL/Redis gerekmez.
-      # frontend-maven-plugin kendi Node'unu indirir; native optional deps hedef
-      # platform (linux) için kurulur. Tüm modüller (common, persistence, backend)
-      # build + test edilir.
+      # Sadece backend + upstream (common, persistence) build edilir. frontend
+      # modülü atlanır çünkü paralel "frontend" job'ında lint+build koşar; böylece
+      # npm install/build iki kez çalışmaz. backend testleri static resource'lara
+      # bağımlı değil (AuditingTest, SystemforgeApplicationTests).
       - name: Build & Test
-        run: ./mvnw --no-transfer-progress clean install
+        run: ./mvnw --no-transfer-progress clean install -pl backend -am
 
   frontend:
     name: Frontend (lint + build)

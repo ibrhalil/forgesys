@@ -141,6 +141,66 @@ Frontend mock veriye düşer, backend çevrimdışı modda simülasyon çalışt
 cd frontend && npm install --include=optional && npm run dev
 ```
 
+## Build Komutları
+
+Hızlı başlangıç yukarıda. Bu bölüm **geliştirme/referans** için tüm yaygın komutları listeler.
+
+### Maven (backend)
+
+```bash
+# Full build — tüm modüller (common, persistence, backend, frontend) + testler.
+# frontend-maven-plugin npm install/build çalıştırır, çıktıyı backend jar'a gömer.
+./mvnw clean install
+
+# Sadece backend + upstream (frontend build yok — hızlı). CI bunu kullanır.
+./mvnw clean install -pl backend -am
+
+# Testleri atla (sadece derle + package)
+./mvnw clean install -DskipTests
+
+# Tek test sınıfı / tek metod
+./mvnw -pl backend test -Dtest=AuditingTest
+./mvnw -pl backend test -Dtest=AuditingTest#shouldAudit
+
+# Backend'i terminalden çalıştır (IDE yerine)
+./mvnw -pl backend spring-boot:run
+
+# Debug çıktısı (bağımlılık/plugin sorunlarını araştırma — çok detaylı)
+./mvnw clean install -X
+
+# Error stack trace (build başarısızlığında detaylı hata)
+./mvnw clean install -e
+
+# Offline mode (bağımlılıklar önceden indirilmiş olmalı)
+./mvnw -o clean install
+```
+
+### Frontend (npm)
+
+```bash
+cd frontend
+npm install --include=optional   # lock dosyası yok (.npmrc: package-lock=false)
+npm run lint                     # oxlint
+npm run build                    # tsc -b && vite build -> dist/
+npm run dev                      # http://localhost:3000 (/api -> :8080 proxy)
+```
+
+### Yaygın Maven flag'leri
+
+| Flag | Açıklama |
+|------|----------|
+| `-pl <modül>` | Sadece belirtilen modülü build et (`backend`, `persistence`...) |
+| `-am` | Also-make: belirtilen modülün upstream bağımlılıkları da build edilir |
+| `-DskipTests` | Testleri çalıştırmadan derle/package et |
+| `-Dtest=Class#method` | Belirli test(ler)i çalıştır (`*` wildcard destekler) |
+| `-X` | Debug log (en detaylı) |
+| `-e` | Error stack trace |
+| `-o` | Offline mode (indirme yapma) |
+| `--no-transfer-progress` | Bağımlılık indirme ilerlemesini gizle (CI-friendly) |
+| `-T <n>` | Paralel build (`-T 4` = 4 thread) |
+
+> Testler `test` profilinde H2 (MODE=PostgreSQL) ile çalışır → build **Docker gerektirmez**. Dev/prod PostgreSQL kullanır. Detay: [`AGENTS.md`](AGENTS.md).
+
 ## API Endpoint'leri
 
 Tüm endpoint'ler `/api/v1/*` prefix'i altında. Hata yanıtları tek tip `ErrorResponse` formatında (`GlobalExceptionHandler`).
