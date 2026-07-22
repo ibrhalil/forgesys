@@ -1,19 +1,19 @@
 # common/AGENTS.md
 
-## Modül
+## Module
 
-Paylaşılan çekirdek — `TenantContext` (ThreadLocal), paylaşılan exception'lar. Hem web katmanı (`backend.TenantFilter`) hem persistence katmanı (`SchemaPerTenantConnectionProvider`) tarafından ortak kullanılır. Kök AGENTS.md'deki genel kurallar geçerli.
+Shared core — `TenantContext` (ThreadLocal), shared exceptions. Used by both the web layer (`backend.TenantFilter`) and the persistence layer (`SchemaPerTenantConnectionProvider`). General rules from the root AGENTS.md apply.
 
-## Kurallar (ZORUNLU)
+## Rules (MANDATORY)
 
-- **Spring/JPA bağımlılığı YASAK.** Bu modül lightweight çekirdektir; `pom.xml`'de yalnızca `slf4j-api` (compile) + `junit-jupiter` (test) olmalı. `spring-boot-starter-*` EKLEME — modül amacını bozar.
-- Paket: `com.ibrhalil.systemforge.common.*` — `tenant/`, `exception/` alt paketleri.
-- Buraya konan tip birden fazla modülce paylaşılıyorsa doğru yerdir; yalnızca `backend`'in kullandığı tipler buraya DEĞİL `backend`'e konur.
+- **Spring/JPA dependency is FORBIDDEN.** This module is a lightweight core; `pom.xml` must contain only `slf4j-api` (compile) + `junit-jupiter` (test). Do NOT add `spring-boot-starter-*` — it defeats the module's purpose.
+- Package: `com.ibrhalil.systemforge.common.*` — subpackages `tenant/`, `exception/`.
+- A type belongs here only if shared by more than one module; types used solely by `backend` go in `backend`, not here.
 
-## Mevcut
+## Current contents
 
-- `common/tenant/TenantContext` — `final` utility sınıf, `ThreadLocal<String>`. Static metotlar: `setCurrentTenant(String)`, `getCurrentTenant()`, `clear()`. Her istekte `TenantFilter` set eder, `finally`'de `clear()` çağrılmalı (ThreadLocal leak yok).
-- `common/exception/TenantNotFoundException` — `RuntimeException`. Persistence fırlatır, `backend.GlobalExceptionHandler` HTTP 400'e map eder.
+- `common/tenant/TenantContext` — `final` utility class, `ThreadLocal<String>`. Static methods: `setCurrentTenant(String)`, `getCurrentTenant()`, `clear()`. `TenantFilter` sets it per request; `clear()` must be called in `finally` (no ThreadLocal leak).
+- `common/exception/TenantNotFoundException` — `RuntimeException`. Thrown by persistence, mapped to HTTP 400 by `backend.GlobalExceptionHandler`.
 
 ## Test
 
@@ -21,4 +21,4 @@ Paylaşılan çekirdek — `TenantContext` (ThreadLocal), paylaşılan exception
 ./mvnw -pl common test
 ```
 
-`TenantContext` birim testleri mevcut. Yeni ThreadLocal kullanan kodda leak testi ekle.
+`TenantContext` unit tests exist. Add a leak test for any new ThreadLocal-using code.

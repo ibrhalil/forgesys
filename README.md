@@ -80,7 +80,7 @@ npm run dev                          # /api -> http://localhost:8080 proxy
 
 ## Konfigürasyon
 
-Konfigürasyon **profile-based** çalışır. Aktif profil `SPRING_PROFILES_ACTIVE` ile seçilir (varsayılan: `dev`). Profil detayları (DB, ddl-auto, flyway, H2 ayarları) tek source: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#konfigurasyon-profilleri).
+Konfigürasyon **profile-based** çalışır. Aktif profil `SPRING_PROFILES_ACTIVE` ile seçilir (varsayılan: `dev`). Profil detayları (DB, ddl-auto, flyway, H2 ayarları) tek source: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#konfigürasyon-profilleri).
 
 | Profil | DB | Kullanım | `.env` gerekir mi? |
 |--------|----|---------|----|

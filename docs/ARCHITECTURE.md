@@ -78,7 +78,7 @@ sequenceDiagram
 - `TenantContext` bir `ThreadLocal<String>` — request thread boyunca yaşar, `finally` bloğunda **mutlaka** clear edilmeli (thread pool reuse nedeniyle).
 - `SchemaPerTenantConnectionProvider.getConnection` her connection alımında `SET search_path TO <tenant>, public` çalıştırır; `releaseConnection`'da reset eder.
 - Schema adı regex `^[a-z0-9_]+$` ile doğrulanır — SQL injection savunması.
-- `@Async` thread'lerde `TenantContext` otomatik taşınmaz — `TaskDecorator` gerekir ([RISK-10](DECISIONS.md#risk-10--async-threadlerde-tenantcontext-tasinmaz)).
+- `@Async` thread'lerde `TenantContext` otomatik taşınmaz — `TaskDecorator` gerekir ([RISK-10](DECISIONS.md#risk-10)).
 - Tenant context null ise resolver `"public"` döner → public şema verisine (Company) erişilir.
 
 ## Schema-per-Tenant Modeli
@@ -144,9 +144,9 @@ flowchart TB
 5. Admin user INSERT (JPA).
 6. `TenantContext.clear()` `finally`'de.
 
-> **Bilinen borç:** `provisionTenant` + `createAdminUser` `@Transactional` DEĞİL — kısmi write riski ([DEBT-10](DECISIONS.md#debt-10--provisiontenant-transactionsuz)). İki fazlı akış (K-21) uygulanınca refactor edilir.
+> **Bilinen borç:** `provisionTenant` + `createAdminUser` `@Transactional` DEĞİL — kısmi write riski ([DEBT-10](DECISIONS.md#debt-10)). İki fazlı akış (K-21) uygulanınca refactor edilir.
 >
-> **İki fazlı plan (K-21, uygulanmadı):** signup `PROVISIONING` Company yaratır (hafif), admin email verify linki `verify` endpoint'inde SENKRON `ACTIVE`'e çeker. Detay [DECISIONS.md K-21](DECISIONS.md#k-21--hibrit-tenant-signup-verification-2026-07-20--planlandi-uygulanmadi).
+> **İki fazlı plan (K-21, uygulanmadı):** signup `PROVISIONING` Company yaratır (hafif), admin email verify linki `verify` endpoint'inde SENKRON `ACTIVE`'e çeker. Detay [DECISIONS.md K-21](DECISIONS.md#k-21).
 
 ## Modül Bağımlılık Grafiği
 

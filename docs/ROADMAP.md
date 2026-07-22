@@ -28,7 +28,7 @@ Faz 1 altyapı tamamlandı:
 > K-18 (2026-07-09) ile Faz 2 sonrasına ertelendi. Aşağıdaki epic'ler toplamda sayılır ama aktif değil. `@Transactional` fix (1.5.A) Faz 2'de K-21 ile çözülür.
 
 ### Epic 1.5.A — @Transactional Fix
-`provisionTenant()` ve `createAdminUser()` transactional. Helper metotlar `readOnly`. Rollback testi (partial writes). Detay: [DEBT-10](DECISIONS.md#debt-10--provisiontenant-transactionsuz).
+`provisionTenant()` ve `createAdminUser()` transactional. Helper metotlar `readOnly`. Rollback testi (partial writes). Detay: [DEBT-10](DECISIONS.md#debt-10).
 
 ### Epic 1.5.B — Nginx Gateway Config
 `nginx/nginx.conf` (rate limit, headers, gzip), `conf.d/default.conf` (routing), `nginx/Dockerfile`, config validation testi.
@@ -65,7 +65,7 @@ Kod analizi sonucu keşfedilen P0 düzeltmeler. User CRUD / log'dan ÖNCE çöz�
 - [ ] `TaskDecorator` — TenantContext + SecurityContext propagation (`@Async`, RISK-10).
 
 ### Epic 2.0.C — Hibrit Tenant Signup Verification (K-21)
-> K-21 kararı — PLANLANDI, uygulanmadı. Detay: [DECISIONS.md K-21](DECISIONS.md#k-21--hibrit-tenant-signup-verification-2026-07-20--planlandi-uygulanmadi).
+> K-21 kararı — PLANLANDI, uygulanmadı. Detay: [DECISIONS.md K-21](DECISIONS.md#k-21).
 
 İki fazlı signup akışı:
 - `TenantVerificationToken` entity (`public` şema, `GeneratedIdAuditEntity`) + `public/V2__tenant_verification_tokens.sql` migration + repository
