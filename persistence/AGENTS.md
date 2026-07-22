@@ -47,9 +47,9 @@ src/main/resources/db/migration/
 └ tenant/   # programmatic at provisioning — in each tenant schema (TenantProvisioningService.provisionTenant)
 ```
 
-- Public migration runs via Spring Boot auto-config; tenant migration runs programmatically via `TenantProvisioningService.provisionTenant()`.
-- **A new tenant migration that affects existing tenants requires `TenantMigrationRunner`** ([RISK-16](../docs/DECISIONS.md#risk-16)) — otherwise existing tenants stay stuck on V1.
-- For H2 compatibility use the long form `TIMESTAMP WITH TIME ZONE` — the `TIMESTAMPTZ` shorthand is unsupported on H2.
+- Public migration runs via Spring Boot auto-config; tenant migration runs programmatically via `TenantProvisioningService.provisionTenant()` (delegating to `TenantMigrationSupport`).
+- **A new tenant migration that affects existing tenants requires `TenantMigrationRunner`** ([RISK-16](../docs/DECISIONS.md#risk-16) — RESOLVED) — otherwise existing tenants stay stuck on V1. The runner (in `backend`, `@Profile("!test")`) iterates `t_companies` at startup and runs `TenantMigrationSupport.migrateSchema()` per tenant schema. New tenant migrations land in `tenant/V2__...`, `tenant/V3__...` etc.; the runner applies them to existing tenants automatically.
+- For H2 compatibility use the long form `TIMESTAMP WITH TIME ZONE` — the `TIMESTAMPTZ` shorthand is unsupported on H2. (Note: tenant/public migration SQL never runs on H2 — test profile has `flyway.enabled=false` + `create-drop`. Partial-index `WHERE` syntax is H2-incompatible but only ever executes on PostgreSQL.)
 
 ## Repository
 
@@ -64,5 +64,5 @@ Package `com.ibrhalil.systemforge.persistence.repository`. Extends `JpaRepositor
 
 - **`ddl-auto=none` is MANDATORY** (NEVER `validate`). Schema-per-tenant + lazy tenant schema means `validate` at startup tries to verify every entity against the `public` schema -> `missing table` crash. The schema lives entirely in Flyway. (Test profile exception: `create-drop` + `flyway.enabled=false`.)
 - **`@EntityScan("com.ibrhalil.systemforge.entity")`** (entities live in the `entity` package, NOT `persistence.entity`). Repositories live in `com.ibrhalil.systemforge.persistence.repository`. This split is wired by an explicit scan in `MultiTenancyJpaConfig` (in backend).
-- **`hashCode()` bug ([DEBT-7](../docs/DECISIONS.md#debt-7)):** `BaseEntity`/`GeneratedIdAuditEntity` use `Objects.hash(getClass())` -> same hash for all entities of a type -> `Set<Role>` collisions. Must be fixed before RBAC.
-- **Soft-delete + UNIQUE ([RISK-17](../docs/DECISIONS.md#risk-17)):** a DB-level UNIQUE constraint conflicts with soft delete (the deleted row remains). A partial index is required: `CREATE UNIQUE INDEX ... WHERE is_deleted = false`. Only for `SoftDeleteAuditEntity` subclasses; `GeneratedIdAuditEntity` subclasses (`RefreshToken`) use a normal UNIQUE.
+- **`hashCode()` ([DEBT-7](../docs/DECISIONS.md#debt-7) — RESOLVED):** `BaseEntity`/`GeneratedIdAuditEntity` use `id == null ? System.identityHashCode(this) : id.hashCode()` (ID-based). Do NOT put a transient (pre-persist) entity into a `HashSet`/`HashMap` key and look it up after persist — the ID flips `null→UUID` and the hash changes. Entities loaded from the DB are fine.
+- **Soft-delete + UNIQUE ([RISK-17](../docs/DECISIONS.md#risk-17) — RESOLVED):** DB-level UNIQUE conflicts with soft delete (deleted row remains). Partial index required: `CREATE UNIQUE INDEX ... WHERE is_deleted = false`. Applied in `public/V2` + `tenant/V2` for all `SoftDeleteAuditEntity` subclasses — public `t_companies` (name/subdomain/email_domain/schema_name) + tenant `t_users`(username,email)/`t_roles`/`t_permissions`/`t_groups`(name). `GeneratedIdAuditEntity` subclasses (`RefreshToken`) and join tables keep normal UNIQUE.

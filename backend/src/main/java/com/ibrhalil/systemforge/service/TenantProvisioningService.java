@@ -11,7 +11,6 @@ import com.ibrhalil.systemforge.persistence.repository.CompanyRepository;
 import com.ibrhalil.systemforge.persistence.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.flywaydb.core.Flyway;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -30,6 +29,7 @@ public class TenantProvisioningService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final DataSource dataSource;
+    private final TenantMigrationSupport tenantMigrationSupport;
 
     public Company provisionTenant(CompanyRegisterRequest request) {
         log.info("Provisioning new tenant: {}", request.subdomain());
@@ -131,13 +131,6 @@ public class TenantProvisioningService {
     }
 
     private void runTenantMigrations(String schemaName) {
-        Flyway flyway = Flyway.configure()
-                .dataSource(dataSource)
-                .schemas(schemaName)
-                .locations("classpath:db/migration/tenant")
-                .baselineOnMigrate(true)
-                .load();
-        flyway.migrate();
-        log.info("Flyway migrations executed for schema: {}", schemaName);
+        tenantMigrationSupport.migrateSchema(schemaName);
     }
 }
