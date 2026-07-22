@@ -55,10 +55,10 @@ jobs:
           # package-lock.json commit edilmez (.npmrc package-lock=false)
           # -> cache: npm kullanmıyoruz.
 
-      # Lock file yok (proje politikası) -> npm ci değil install.
-      # --no-package-lock: aracı değiştirmesin, --include=optional: native paketler.
+      # Lock file yok (proje politikası: .npmrc package-lock=false).
+      # --include=optional: native paketler (esbuild/rollup) linux için kurulur.
       - name: Install dependencies
-        run: npm install --include=optional --no-package-lock
+        run: npm install --include=optional
 
       - name: Lint (oxlint)
         run: npm run lint
