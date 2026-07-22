@@ -1,98 +1,71 @@
 # backend/AGENTS.md
 
-## Modül
+## Module
 
-Spring Boot uygulaması — controller/service/security/config. `common` + `persistence`'a bağımlı. Sadece bu modül executable jar üretir (`systemforge-backend.jar`). Kök AGENTS.md'deki genel kurallar geçerli.
+Spring Boot application — controller/service/security/config. Depends on `common` + `persistence`. Only this module produces an executable jar (`systemforge-backend.jar`). General rules from the root AGENTS.md apply.
 
-## Komutlar
+For commands see [README](../README.md#build-komutları). Backend summary: `./mvnw -pl backend spring-boot:run` (NOT from root, always `-pl backend`), `./mvnw -pl backend test -Dtest=ClassName#method`.
 
-```bash
-./mvnw -pl backend spring-boot:run                  # çalıştır (root'tan DEĞİL, her zaman -pl backend)
-./mvnw -pl backend test -Dtest=ClassName#method     # tek test
-./mvnw -pl backend test                              # backend testleri
-./mvnw -pl backend -am clean install                 # bağımlılıklarıyla (common+persistence) build
-```
+## Package layout
 
-> `spring-boot:run` root'tan çalışmaz (root aggregator'dır). Her zaman `-pl backend`.
-
-## Paket Yapısı
-
-Kök paket `com.ibrhalil.systemforge` (`.backend` subpackage DEĞİL):
+Root package `com.ibrhalil.systemforge` (NOT a `.backend` subpackage):
 - `SystemforgeApplication` — main.
-- `tenant/` — `TenantFilter` (subdomain çözümleme).
-- `controller/` — REST (`/api/v1/*`). [FAZ 3] `modules/` alt paketi.
-- `service/` — iş mantığı. [FAZ 3] `modules/` alt paketi.
-- `notification/` — **[K-21]** `VerificationSender` interface + profile bazlı impl'ler (tenant signup doğrulama kanalı).
-- `dto/` — request/response DTO'ları (`record`).
+- `tenant/` — `TenantFilter` (subdomain resolution).
+- `controller/` — REST (`/api/v1/*`). `[PHASE 3]` `modules/` subpackage.
+- `service/` — business logic. `[PHASE 3]` `modules/` subpackage.
+- `dto/` — request/response DTOs (`record`).
 - `exception/` — `GlobalExceptionHandler`, `ErrorResponse`.
 - `config/` — `MultiTenancyJpaConfig`, `SecurityConfig`.
 
-## Tenant Context Kuralları (KRİTİK)
+## Tenant Context rules (CRITICAL)
 
-- `TenantFilter` (`OncePerRequestFilter`): Host header → subdomain → `CompanyRepository.findBySubdomain` → `schemaName` → `TenantContext`. Sadece `ACTIVE` durumdaki Company'ler çözümlenir (`PROVISIONING`/`SUSPENDED`/`TERMINATED` çözümlenmez).
-- `shouldNotFilter()` ile `/api/v1/auth/**` ve `/actuator/**` muaf (tenant bağlamı gerektirmez). **Özellikle `/api/v1/auth/company/register` ve `/api/v1/auth/company/verify` muaf olmak ZORUNDA** — tenant henüz yok (`PROVISIONING`) veya yeni yaratılıyor (K-21).
-- **Controller'da tenant doğrulama YAPMA** — filter tek sorumluluk alanı.
-- Tenant context null ise resolver `"public"` döner → public şema verilerine (Company, TenantVerificationToken) erişilebilir.
-- Programmatik tenant set eden servisler (örn. `TenantProvisioningService.verifyAndProvision` → `createAdminUser`) `finally`'de `TenantContext.clear()` yapmalı.
-- `X-Tenant-ID` header fallback **yalnızca `dev` profilinde** aktif. Prod'da tamamen kapalı.
-- `@Async` thread'lerinde `TenantContext` otomatik taşınmaz — `TaskDecorator` gerekir (SF-181).
+- `TenantFilter` (`OncePerRequestFilter`): Host header -> subdomain -> `CompanyRepository.findBySubdomain` -> `schemaName` -> `TenantContext`. Only `ACTIVE` Companies are resolved (`PROVISIONING`/`SUSPENDED`/`TERMINATED` are not).
+- `shouldNotFilter()` exempts `/api/v1/auth/**` and `/actuator/**` (no tenant context needed). `/api/v1/auth/company/register` MUST be exempt — the tenant is being created.
+- **Do NOT validate tenant in the controller** — the filter is the single responsibility owner.
+- When tenant context is null the resolver returns `"public"` -> public-schema data (Company) is reachable.
+- Services that programmatically set the tenant (e.g. `TenantProvisioningService.provisionTenant` -> `createAdminUser`) MUST call `TenantContext.clear()` in `finally`.
+- The `X-Tenant-ID` header fallback is active **only in the `dev` profile**. Fully disabled in prod.
+- `TenantContext` is NOT propagated automatically across `@Async` threads — a `TaskDecorator` is required ([RISK-10](../docs/DECISIONS.md#risk-10)).
 
-## Endpoint Kuralları
+## Endpoint rules
 
-- Tüm endpoint'ler `/api/v1/*` prefix'i altında.
-- Response DTO (`record`) olarak dönmeli, entity'ler direkt expose EDİLMEZ.
-- Hata yanıtları tek tip `ErrorResponse` (`GlobalExceptionHandler`): `TenantNotFoundException`/`IllegalArgumentException`/validation → 400, generic → 500.
+- All endpoints live under the `/api/v1/*` prefix.
+- Return a response DTO (`record`); entities MUST NOT be exposed directly. **Current exception:** `AuthController.registerCompany()` returns `ResponseEntity<Map<String,Object>>` — MapStruct + DTO refactor happens in Epic 2.1 ([ROADMAP](../docs/ROADMAP.md)).
+- Errors use the uniform `ErrorResponse` (`GlobalExceptionHandler`): `TenantNotFoundException`/`IllegalArgumentException`/validation -> 400, generic -> 500.
 - Bean Validation (`@Valid` + `@NotBlank`/`@Pattern`/`@Email`).
 
-**Tenant Signup Endpoint'leri (K-21, iki fazlı hibrit akış):**
+### Current endpoint
 
-| Method | Path | Açıklama | Auth |
+| Method | Path | Description | Auth |
 |--------|------|----------|------|
-| `POST` | `/api/v1/auth/company/register` | Yeni tenant **signup** — `PROVISIONING` Company + `TenantVerificationToken` yaratır. Şema/migration YOK. `VerificationSender` ile doğrulama linki gönderir (profile bazlı: test→memory, dev→log, prod→mail). | Public |
-| `POST` | `/api/v1/auth/company/verify` | Doğrulama token'ını consumes — SENKRON olarak schema CREATE + Flyway tenant migration + admin user yaratır, Company `ACTIVE`'e çeker, token `usedAt` set eder. Ağır işlem (birkaç sn), tek request içinde biter. | Public |
+| `POST` | `/api/v1/auth/company/register` | New tenant signup — SYNCHRONOUS: `provisionTenant` creates an `ACTIVE` Company + schema CREATE + Flyway tenant migration + admin user. | Public |
 
-> **Tetikleyici:** PROVISIONING → ACTIVE geçişi polling/event ile DEĞİL, kullanıcının maildeki linke tıklaması (HTTP request) ile senkron olur. Background job gerekmez (opsiyonel cleanup SF-104).
+> **A two-phase flow is planned (K-21) but NOT implemented:** create a `PROVISIONING` Company, then promote to `ACTIVE` on email verify. Details in [DECISIONS.md K-21](../docs/DECISIONS.md#k-21). It is parked in the ROADMAP as Epic 2.0.C; when implemented this section is updated.
 
-> **TenantFilter muafiyeti:** Her iki endpoint de `/api/v1/auth/**` prefix'inde olduğu için `shouldNotFilter` kapsamında — değişiklik GEREKMEZ. Doğru.
+> `TenantFilter` exemption: the endpoint is under the `/api/v1/auth/**` prefix, so it is already covered by `shouldNotFilter`.
 
-## VerificationSender Abstraction (K-21, SF-100)
+## Service layer
 
-Profile bazlı doğrulama kanalı — test edilebilirliği sağlar, mail altyapısına耦合 etmez:
+- **`TenantProvisioningService.provisionTenant(request)`** — single-phase SYNCHRONOUS flow:
+  1. `validateUnique` (subdomain + emailDomain uniqueness)
+  2. `createSchema` (raw JDBC `CREATE SCHEMA`)
+  3. `runTenantMigrations` (programmatic Flyway)
+  4. `createCompany` (status=`ACTIVE`)
+  5. `createAdminUser` (tenant context set + finally clear)
+- DDL (`CREATE SCHEMA`) is an implicit commit in PostgreSQL -> OUTSIDE the transaction. **`provisionTenant` is currently NOT `@Transactional`** — partial-write risk ([DEBT-10](../docs/DECISIONS.md#debt-10)). It is refactored when K-21 lands (`createPendingCompany` + `verifyAndProvision`, both transactional).
+- Lookups should use `@Transactional(readOnly=true)`.
 
-```java
-public interface VerificationSender {
-    void send(Company company, String token);
-}
-```
+## Configuration
 
-| Profile | Impl | Davranış |
-|---------|------|----------|
-| `test` | `InMemoryVerificationSender` | Mail atılmaz; token `ConcurrentHashMap`'te. Test assertion için `peek()` |
-| `dev` | `LogVerificationSender` | INFO log'a verify link yazılır (terminalden kopyala-yapıştır) |
-| `prod` | `MailVerificationSender` (SF-105, ertelendi) | SMTP/SendGrid/SES |
+Config profiles (dev/prod/test) are the single source: [ARCHITECTURE.md - Configuration Profiles](../docs/ARCHITECTURE.md#konfigürasyon-profilleri).
 
-> `spring-boot-starter-mail` pom'a SF-105'e kadar EKLENMEZ. Test/dev impl'leri hiçbir external bağımlılık gerektirmez — build Docker gerektirmez (H2 + Mockito yeterli).
+- `application.yaml` (base) + `application-dev.yaml` + `application-prod.yaml` + `application-test.yaml`. Active profile via `SPRING_PROFILES_ACTIVE` (default `dev`).
+- `MultiTenancyJpaConfig`: `@EntityScan("com.ibrhalil.systemforge.entity")` + `@EnableJpaRepositories("com.ibrhalil.systemforge.persistence.repository")` + `@EnableJpaAuditing` + Hibernate multi-tenancy beans + `DateTimeProvider` (UTC, [RISK-15](../docs/DECISIONS.md#risk-15)) + `AuditorAware` (hardcoded `"system"`).
 
-## Servis Katmanı
+## Gotchas
 
-- Yazma işlerinde `@Transactional` (method-level) ZORUNLU (DEBT-10, SF-001/SF-002). Lookup'larda `@Transactional(readOnly=true)`.
-- **`TenantProvisioningService` (K-21 ile refactor, SF-101):**
-  - `createPendingCompany(req)` `@Transactional` — `PROVISIONING` Company + `TenantVerificationToken` (public şema, hafif). Şema/migration YOK.
-  - `verifyAndProvision(token)` `@Transactional` — token valid → schema CREATE (raw JDBC, DDL implicit commit) + Flyway tenant migration (programmatik) + admin user (tenant context set + finally clear) + Company `ACTIVE` + token `usedAt`. Senkron.
-- DDL (`CREATE SCHEMA`) PostgreSQL'de implicit commit → transaction DIŞI. JPA writes atomic, DDL transaction'ın başında veya sonunda çalışır (strategic ordering).
-
-## Konfigürasyon / Profiller
-
-- `application.yaml` (temel) + `application-dev.yaml` + `application-prod.yaml` + `application-test.yaml`. Aktif profil `SPRING_PROFILES_ACTIVE` (default `dev`).
-- **`dev`:** PostgreSQL `localhost:5432` (default'lar gömülü, `.env` gerekmez), `ddl-auto=none`, DEBUG, `LogVerificationSender`.
-- **`prod`:** PostgreSQL, credential'lar `.env`'den (`.env.example` şablon), INFO, `MailVerificationSender` (SF-105 sonrası).
-- **`test`:** H2 in-memory (`MODE=PostgreSQL`), `ddl-auto=create-drop`, `flyway.enabled=false` (Spring Boot 4.1 + Flyway 12'de autoconfig H2 dialect'ı yükleyemiyor — bkz. `docs/ARCHITECTURE.md` Test Profilleri). `@SpringBootTest` `@ActiveProfiles("test")` → build Docker gerektirmez. `InMemoryVerificationSender`. Migration'ların gerçek H2/PostgreSQL test'i `BACKLOG.md` SF-270 (Testcontainers) kapsamında.
-- `MultiTenancyJpaConfig`: `@EntityScan("com.ibrhalil.systemforge.entity")` + `@EnableJpaRepositories("com.ibrhalil.systemforge.persistence.repository")` + `@EnableJpaAuditing`. Hibernate multi-tenancy bean'leri burada tanımlanır.
-
-## Gotcha'lar
-
-- **`AuditorAware` hardcoded `"system"` (RISK-3, SF-160)** — auth kurulunca SecurityContext'ten gerçek userId alınmalı. **Ancak signup endpoint'leri (`register`/`verify`) her zaman `"system"` ile audit edilir** — kimliği doğrulanmış kullanıcı yok (tenant signup context'i). Bu beklenen bir durum, bug değil.
-- **`SecurityConfig`** şu an yalnız `BCryptPasswordEncoder` bean'i tanımlı; tam `SecurityFilterChain` henüz YOK (Faz 2.3). Signup endpoint'leri zaten `TenantFilter` muafiyetinde olduğu için SecurityFilterChain kurulana kadar açık; SF-072 sonrası `permitAll` olarak explicit configure edilmeli.
-- BCrypt strength mevcut 10 (hedef 12 — RISK-13, Faz 2.3).
-- CORS henüz yok (Faz 2.3). Vite proxy dev'de gizliyor, prod'da kırılır.
-- **`TenantVerificationToken` soft-deletesiz** — `GeneratedIdAuditEntity`'den inherit. `usedAt` ile invalidasyon yapılır, soft-delete gerekmez.
+- **`AuditorAware` is hardcoded to `"system"`** ([RISK-3](../docs/DECISIONS.md#risk-3)) — once auth lands it must read the real userId from SecurityContext. Signup endpoints are always audited as `"system"` (no authenticated user in the tenant-signup context) — this is expected, not a bug.
+- **`SecurityConfig`** currently defines only a `BCryptPasswordEncoder` bean (strength 10); there is NO full `SecurityFilterChain` yet. **Important:** the `spring-boot-starter-security` dependency is also ABSENT — only `spring-security-crypto` (for BCrypt). So a SecurityFilterChain cannot be set up at all; the starter is added together with the setup in a single PR in Phase 2.3 ([ROADMAP Epic 2.3](../docs/ROADMAP.md)). The signup endpoint stays open because it is exempt from `TenantFilter`.
+- BCrypt strength is 10 (target 12 — [RISK-13](../docs/DECISIONS.md#risk-13)).
+- CORS is not present yet (Phase 2.3). The Vite proxy hides it in dev; it breaks in prod.
+- The `CompanyStatus` enum: `PROVISIONING`, `ACTIVE`, `SUSPENDED`, `TERMINATED`. **Current code only uses `ACTIVE`** (`provisionTenant` sets ACTIVE directly). `PROVISIONING` activates when K-21 (Epic 2.0.C) is implemented.

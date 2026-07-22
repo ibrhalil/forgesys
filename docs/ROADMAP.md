@@ -1,0 +1,281 @@
+# Yol Haritası (Roadmap)
+
+> Stratejik faz/epik planı. Fazlar sıralı bağlam, epic'ler iş kümeleri. **Önceden numaralandırılmış ticket tablosu YOK** — işler epic bazında, amaca odaklı tanımlı. Geliştirici kendi SF-NN tag'ini (branch/commit) verir, bu dosyaya bağımlı değil.
+
+## Durum Etiketleri
+
+- `TODO` — başlanmadı
+- `DOING` — aktif
+- `DONE` — tamamlandı
+- `[BLOCKED]` — engelli (notu ile)
+- `CANCEL` — iptal (gerekçe ile)
+
+## Mevcut Durum (Faz 1 — DONE)
+
+Faz 1 altyapı tamamlandı:
+- [x] Multi-module Maven yapısı (`common` <- `persistence` <- `backend` + `frontend`)
+- [x] Schema-per-tenant multi-tenancy: subdomain çözümleme + Hibernate `SCHEMA` stratejisi
+- [x] Flyway per-schema migration (public auto-config + tenant programmatik)
+- [x] Tenant signup endpoint: `POST /api/v1/auth/company/register` (tek-fazlı senkron — `provisionTenant` ACTIVE + şema + Flyway + admin user). İki fazlı akış K-21 ile planlandı (Epic 2.0.C).
+- [x] Entity hiyerarşisi: UUID, soft delete, optimistic locking, Spring Data auditing
+- [x] BCrypt password encoding, Bean Validation, merkezi hata yönetimi (`ErrorResponse`)
+- [x] Docker: PostgreSQL + Redis + app (non-root), layered jars, actuator health
+
+---
+
+## Faz 1.5 — Nginx Topology Refactor ([BLOCKED] — K-18)
+
+> K-18 (2026-07-09) ile Faz 2 sonrasına ertelendi. Aşağıdaki epic'ler toplamda sayılır ama aktif değil. `@Transactional` fix (1.5.A) Faz 2'de K-21 ile çözülür.
+
+### Epic 1.5.A — @Transactional Fix
+`provisionTenant()` ve `createAdminUser()` transactional. Helper metotlar `readOnly`. Rollback testi (partial writes). Detay: [DEBT-10](DECISIONS.md#debt-10).
+
+### Epic 1.5.B — Nginx Gateway Config
+`nginx/nginx.conf` (rate limit, headers, gzip), `conf.d/default.conf` (routing), `nginx/Dockerfile`, config validation testi.
+
+### Epic 1.5.C — Frontend Docker Ayrımı
+`frontend/pom.xml` kaderi kararı (spike), `frontend/Dockerfile` multi-stage, `backend/pom.xml`'den frontend plugin kaldır, kök `Dockerfile` backend-only, standalone docker build testi.
+
+### Epic 1.5.D — dev-full Compose
+`docker-compose.dev-full.yml` (5 servis + JPDA), network + depends_on + healthcheck, integration test (routing + rate limit), `vite.config.ts` proxy koru.
+
+### Epic 1.5.E — prod Compose
+`docker-compose-prod.yml` 3-container, TLS cert path placeholder, `.env.example` (nginx + JWT vars).
+
+---
+
+## Faz 2 — Kimlik Doğrulurma & RBAC + Log + Yönetim
+
+> Sıralama önemli — her alt-faz bir sonrakinin ön koşulu. K-18 sonrası Faz 1.5 atlandı, doğrudan Faz 2. Backend-önceli sıralama: tüm Faz 2 backend bitince Faz 4.0.B frontend gelir.
+
+### Epic 2.0 — Foundation Refactors
+Cross-cutting iyileştirmeler. Auth işinden önce yapılmalı.
+- [x] `DateTimeProvider` bean (UTC) — RISK-15 çözüldü
+- [ ] `ApiErrorResponse`/`ApiFieldError`/`ApiErrorFactory` (uniform error shape + traceId)
+- [ ] Exception hiyerarşisi: `BusinessException` -> `AuthException`/`ResourceNotFoundException` + stable error codes
+- [ ] `sanitizeRejectedValue` (validation error'da password/token maskeleme)
+- [ ] `RequestLoggingFilter` + traceId (MDC) + `X-Request-Id` header + log pattern
+- [ ] `PasswordEncodingListener` (JPA `@PrePersist`/`@PreUpdate`, şifre otomatik encode)
+
+### Epic 2.0.B — Critical Fixes
+Kod analizi sonucu keşfedilen P0 düzeltmeler. User CRUD / log'dan ÖNCE çözülmeli.
+- [ ] `TenantMigrationRunner` (`ApplicationRunner`) — startup'ta tüm `t_companies` şemalarını Flyway migrate (RISK-16). V2 tenant migration'ından ÖNCE gelmeli.
+- [ ] UNIQUE -> partial index (`WHERE is_deleted=false`): username/email + role/perm/group name. Tenant template + mevcut tenant'larda (RISK-17). User CRUD'dan ÖNCE.
+- [ ] `hashCode()` düzelt — hem `BaseEntity` hem `GeneratedIdAuditEntity` (DEBT-7). RBAC'dan ÖNCE.
+- [ ] `TaskDecorator` — TenantContext + SecurityContext propagation (`@Async`, RISK-10).
+
+### Epic 2.0.C — Hibrit Tenant Signup Verification (K-21)
+> K-21 kararı — PLANLANDI, uygulanmadı. Detay: [DECISIONS.md K-21](DECISIONS.md#k-21).
+
+İki fazlı signup akışı:
+- `TenantVerificationToken` entity (`public` şema, `GeneratedIdAuditEntity`) + `public/V2__tenant_verification_tokens.sql` migration + repository
+- `VerificationSender` interface + `InMemoryVerificationSender` (`test`) + `LogVerificationSender` (`dev`) — mail bağımlılığı YOK
+- `TenantProvisioningService` bölünür: `createPendingCompany()` (PROVISIONING, `@Transactional`, DEBT-10 kapsar) + `verifyAndProvision(token)` (ACTIVE, `@Transactional`, senkron)
+- DTO (`CompanyRegisterResponse`, `CompanyVerifyRequest`, `CompanyVerifyResponse`) + `AuthController` refactor: `register` PROVISIONING döner + `POST /api/v1/auth/company/verify` endpoint
+- Servis testi (Mockito + InMemoryVerificationSender ile register->verify + token expire + zaten-used senaryoları)
+- (Opsiyonel) Scheduled cleanup job — expired token + bağlı PROVISIONING Company'leri sil
+- (Ertelendi, Faz 5) `MailVerificationSender` (`prod`) + `spring-boot-starter-mail` pom'a + SMTP config
+
+### Epic 2.1 — MapStruct + DTO
+`persistence/pom.xml`: mapstruct (sıralama KRİTİK), `MappingConfig` (@MapperConfig), DTO record'ları, `AuthMapper` interface, `AuthController`: `Map.of` -> DTO+mapper, MapStruct build testi.
+
+### Epic 2.3 — Spring Security Core (tek PR)
+> `spring-boot-starter-security` tek başına default form login getirir, app'i kırar. Bu yüzden security setup tek PR'da commit edilmeli.
+
+- BCrypt migration stratejisi spike (RISK-13)
+- `pom.xml`: spring-boot-starter-security
+- `SecurityConfig`: filterChain + STATELESS + CSRF
+- `BCryptPasswordEncoder(12)`
+- `CorsConfig`: CorsConfigurationSource
+- JSON 401/403 handlers (`RestAuthenticationEntryPoint`, `RestAccessDeniedHandler`) — uniform shape + traceId
+- Security smoke test (401 + permitAll)
+
+### Epic 2.4 — JWT Infrastructure (oauth2-resource-server + RSA)
+> jjwt yerine `spring-boot-starter-oauth2-resource-server` (Nimbus). RSA asimetrik imzalama (RS256). RISK-14: auto-config filter AKTİF EDİLMEZ, custom `JwtAuthenticationFilter` gerekli.
+
+- `pom.xml`: oauth2-resource-server (jjwt DEĞİL)
+- `RsaKeyProperties` record + `certs/*.pem` + `.gitignore` + openssl keygen docs
+- `JwtConfig` (JwtEncoder/JwtDecoder bean, RS256) + `JwtTokenProvider` (Spring JwtClaimsSet)
+- `JwtTokenProvider` unit test (üret -> decode -> claims)
+- `CustomUserDetails` + `CustomUserDetailsService` (tenant-aware, Group -> Role -> Permission)
+- `tokenInvalidBefore` field `UserAccount`'a + Flyway tenant migration
+- `JwtAuthenticationFilter` (cookie -> decode -> Redis blacklist check + perms -> DB `tokenInvalidBefore` -> SecurityContext)
+- SecurityConfig'e filter hook (`.oauth2ResourceServer()` ÇAĞIRMA — RISK-14)
+- Filter integration test (cookie -> auth, yok -> 401, revoked -> 401)
+
+### Epic 2.6 — Redis
+`RedisConfig`: RedisTemplate + serializer + connection test. `TokenBlacklistService` + unit test. `PermissionCacheService` (TTL 10dk) + unit test.
+
+### Epic 2.5 — Auth Endpoints
+- `AuthService.login()` iş mantığı
+- LoginRequest/LoginResponse DTO
+- `POST /login`: Set-Cookie + RefreshToken DB
+- Login integration test
+- `POST /refresh`
+- `POST /logout`: **Redis blacklist (current access token, granular)** + RefreshToken revoke. `tokenInvalidBefore` KULLANMA (multi-device korunsun).
+- `POST /register`: email domain + User
+- `GET /me`
+- Refresh token rotation + reuse detection (ihlal -> tüm token revoke + `tokenInvalidBefore`)
+- ~~JwtAuthFilter blacklist hook~~ — CANCEL (`tokenInvalidBefore` ile gereksiz)
+
+### Epic 2.7-2.8 — Wrap-up
+- `AuditorAware` SecurityContext userId (RISK-3)
+- Bootstrap data initializer (rol/permission/group seed, idempotent, diff-based)
+- springdoc-openapi dep + Swagger scheme doc (profile gating)
+
+### Epic 2.9 — User & RBAC Management (K-18)
+> User CRUD + yetki atama/silme + user page + rol-bazlı panel. Backend kısmı (frontend karşılığı Epic 4.0.B). `@EnableMethodSecurity` + `@PreAuthorize` method-level yetkilendirme. Permission namespace `{module}:{resource}:{action}`.
+
+- `UserController` (`/api/v1/users`: sayfalı list / GET{id} / POST / PUT{id} / DELETE{id}) + DTO
+- `UserService` (`@Transactional`, soft-delete, account+profile cascade)
+- `UserProfileController` (`PUT /users/me/profile`) — firstName/phone/adres
+- Email doğrulama akışı (tenant **içi** mevcut user — K-21'den ayrı)
+- Password reset akışı
+- `GET /auth/me` (mevcut kullanıcı + permission/rol listesi)
+- `RoleController` (`/api/v1/roles`: CRUD + `/roles/{id}/permissions`)
+- `PermissionController` (`/api/v1/permissions`: list/CRUD)
+- `GroupController` (`/api/v1/groups`: CRUD + `/groups/{id}/roles`)
+- User-role/group atama (`/users/{id}/roles`, `/users/{id}/groups`) + `PermissionCacheService` evict
+- `@PreAuthorize` tüm admin endpoint'lerine (örn. `hasAuthority('iam:user:write')`)
+- User & RBAC integration test (CRUD + rol atama + tenant izolasyonu + permission red)
+
+### Epic 2.10 — Audit & Logging (K-19, 3 katmanlı log)
+> K-19 kararı. Audit log + giriş geçmişi + request/trace log. Her birinin kendi tablosu + endpoint'i. Request/trace altyapısı Epic 2.0 ile gelir; burada görüntüleme/arama eklenir. Yeni tenant migration `tenant/V2__audit_login_history.sql`.
+
+- `t_audit_logs` (actor/action/entity/old-new JSONB/ip/trace_id) + `t_login_history` (user/success/ip/user_agent/reason)
+- `AuditLog` + `LoginHistory` entity + repository (tenant şeması)
+- `AuditService` + AOP `@AuditLog` annotation (admin aksiyonları otomatik yakala)
+- Login history yazımı — login/refresh/register/logout'ta success+failure
+- Görüntüleme endpoint'leri: `GET /audit-logs`, `GET /login-history`, `GET /request-logs` (admin `@PreAuthorize`, sayfalı + filtre)
+- Request log arama — traceId ile lookup
+
+---
+
+## Faz 3 — Modüler Platform (Module System + Built-in Modüller)
+
+> Hibrit modüler platform: önce Module System altyapısı (3.0), sonra built-in modüller (3.1-3.4). Custom App Builder backend altyapısı da 3.0 ile gelir; UI'sı Faz 4.2.
+
+### Epic 3.0.A — Module System & Plan/Subscription (K-16)
+- `public/V2__plan_subscription_modules.sql`: `t_plans`, `t_subscriptions`, `t_tenant_modules`, `t_module_catalog`
+- `Plan`, `Subscription`, `TenantModuleActivation`, `ModuleCatalog` entity'leri
+- `Module` registry (enum/konfig — key, name, min_plan, flyway_path)
+- `ModuleActivationService` (plan kontrol -> Flyway tenant migration -> permission seed -> kayıt)
+- `PermissionSeeder` — modül aktivasyonunda `{module}:{resource}:{action}` namespace insert
+- Tenant signup -> `t_subscriptions` (default FREE) + varsayılan modüller (Tasks+Notes)
+- Module activation integration test (plan reject, Flyway, permission seed)
+
+### Epic 3.0.B — Custom App Builder Backend (K-15, Notion-style)
+- `tenant/V2__app_builder.sql`: `t_apps`, `t_app_properties`, `t_app_records`, `t_app_record_values(value JSONB)`, `t_app_views`
+- `persistence/pom.xml`: hypersistence-utils + `App*` entity'leri (JSONB mapping)
+- `AppBuilderService`: app/property/record/view CRUD + property type validation
+- Property type validators (TEXT/NUMBER/SELECT/DATE/USER/RELATION/FORMULA)
+- `AppRecordValueRepository` — JSONB GIN index ile sorgu (filter/sort)
+- Limit enforcement (max_custom_apps, max_records_per_app — soft-block)
+- Custom app builder CRUD testi
+- View config güvenliği spike (filter/formula expression injection — sandbox/AST validation)
+
+### Epic 3.0.C — Module/App API
+- `GET /api/v1/modules` (katalog + aktif) + `POST /modules/{key}/activate`
+- `GET/POST/PATCH/DELETE /api/v1/apps` (custom app CRUD)
+- `GET/POST/PATCH/DELETE /api/v1/apps/{id}/records` + `/properties` + `/views`
+- MapStruct mappers (`AppMapper`, `RecordMapper`, `ViewMapper`)
+
+### Epic 3.1 — Built-in "Tasks" Modülü
+`tenant/V3__module_tasks.sql` (`t_tasks`, `t_task_comments`). Entity + repository. `TaskService` + `TaskController` (`/api/v1/tasks`) + `@PreAuthorize('tasks:task:*')`. Kanban board view API (group by status). CRUD + permission isolation testi.
+
+### Epic 3.2 — Built-in "Notes" Modülü
+`tenant/V4__module_notes.sql` (`t_notes`, `t_note_categories`). Entity + service + controller (`/api/v1/notes`). Arama + kategori filtreleme.
+
+### Epic 3.3 — Built-in "Warehouse" Modülü
+`tenant/V5__module_warehouse.sql` (`t_products`, `t_warehouses`, `t_stock_items`, `t_stock_movements`). Entity'ler (Product/Warehouse/StockItem/StockMovement) + service + controller. Stok hareketleri (IN/OUT/TRANSFER) + minimum stok uyarısı.
+
+### Epic 3.4 — Built-in "Logistics" Modülü
+`tenant/V6__module_logistics.sql` (`t_shipments`, `t_vehicles`, `t_drivers`, `t_routes`). Entity'ler (Shipment/Vehicle/Driver/Route) + service + controller. Sevkiyat durum makinesi (CREATED -> IN_TRANSIT -> DELIVERED).
+
+### Epic 3.X — Testcontainer + Rate Limit
+- Testcontainers: tenant signup + modül aktivasyon + CRUD + **veri izolasyonu** e2e (P0 — kritik yol sonu)
+- Rate limiting (Redis, IP + tenant bazlı)
+
+---
+
+## Faz 4 — Frontend (Modüler UI + Custom App Builder UI)
+
+### Epic 4.0 — Frontend Core
+- Bağımlılıklar (TanStack Query, Zustand, Tailwind, react-router)
+- Tailwind setup + klasör mimarisi
+- Auth UI (login/register) + Zustand auth store + Axios interceptor
+- Modül-bazlı sidebar (`GET /modules` -> aktif modüller) + aktivasyon ekranı
+- `App.tsx` parçala + React Router route yapısı
+
+### Epic 4.0.B — Admin/User/Log Management UI (K-20)
+> K-20: backend Faz 2 bitince gelir. Faz 4 core stack burada kurulur. Tenant-scoped. Built-in modül UI'ları Epic 4.1'de kalır.
+
+- Login/Register sayfaları + Zustand auth store + axios interceptor (`withCredentials` cookie)
+- React Router + auth guard (rol/permission bazlı route koruma)
+- Admin panel — **User management** UI (CRUD + rol/grup atama)
+- Admin panel — **Role/Permission/Group yönetimi** UI
+- **User page** — profil düzenleme + email doğrulama durumu + kendi login geçmişi
+- **Audit log sayfası** (filtreli tablo: actor/action/entity/tarih)
+- **Login history sayfası** (user/başarı/IP/tarih filtre)
+- **Request log sayfası** (traceId arama + seviye filtre)
+- Rol-bazlı sidebar (permission'a göre menü göster/gizle)
+
+### Epic 4.1 — Built-in Modül UI'ları
+Tasks UI (liste + Kanban board), Notes UI (rich-text + kategori), Warehouse UI (ürün/stok tablosu + hareketler), Logistics UI (sevkiyat listesi + durum güncelleme).
+
+### Epic 4.2 — Custom App Builder UI (Notion-style — en iddialı)
+- App designer sihirbazı (isim/ikon/açıklama)
+- Property editor (tip seçimi + config — select options/relation/formula)
+- Record editör (property type'a göre input widget'ları)
+- TABLE view renderer (kolon=property, satır=record)
+- BOARD view renderer (Kanban — group_by)
+- CALENDAR view renderer (date property'sine göre)
+- GALLERY + LIST view renderer
+- Filter/sort/group_by config UI (drag-drop, expression editor)
+- Relation picker (başka app lookup)
+- Plan limit göstergesi (kalan quota)
+
+---
+
+## Faz 5 — Hardening & Operasyon
+
+- [ ] **TLS termination:** `nginx.conf` Let's Encrypt (certbot) veya external certs. HTTP -> HTTPS redirect. HSTS header.
+- [ ] **Observability:** actuator + Micrometer -> Prometheus metrics. `management.endpoints.web.exposure.include=health,info,metrics,prometheus`. Internal management portu. OpenTelemetry tracing ertelendi.
+- [ ] **CI/CD (GitHub Actions):** `.github/workflows/ci.yml` — PR'da `mvn test` + `npm run lint` + `npm run build`. main push -> Docker build + push registry. Secrets: GitHub Actions secret store.
+- [ ] **Ertelenen kararlar değerlendir:** OAuth2 sosyal giriş, WebSocket/SSE, S3/MinIO, OpenTelemetry, microservice geçişi.
+
+---
+
+## Faz 6 — Billing & Abonelik Yönetimi (K-16'nın tamamlanması)
+
+> K-16 plan yapısının finansal tarafı. Faz 3.0'da plan tanımlı; Faz 6 gerçek ödeme + plan yönetim akışını getirir.
+
+- Ödeme sağlayıcı seçimi spike (Stripe vs iyzico — Türkiye pazarı)
+- Ödeme sağlayıcı entegrasyonu + webhook dinleme
+- Plan upgrade/downgrade akışı (soft-block modül/limit yönetimi)
+- Invoice/fatura yönetimi + PDF
+- Trial period (14 gün PRO trial yeni tenant'lara)
+- Platform admin dashboard (MRR, churn, tenant istatistikleri)
+
+---
+
+## Kritik Yol
+
+Sıralı bağımlılıklar (her faz bir sonrakinin ön koşulu):
+
+**Faz 2:** DateTimeProvider fix (RISK-15, DONE) -> multi-tenancy/UNIQUE/hashCode fixes (RISK-16/17, DEBT-7) -> error altyapısı -> security setup -> JWT infra -> **ilk çalışan login** -> RBAC yönetimi -> audit/log -> UI (Faz 4.0.B)
+
+**Faz 3 başlangıcı:** Module system -> signup+plan -> App Builder backend -> Tasks çalışan -> **izolasyon testi** (Testcontainers, kritik yol sonu)
+
+**Paralel başlanabilir:** Foundation refactors, logging, password encoding listener, mapstruct, redis, openapi.
+
+**En uzun işler (paralel planlama için):** ModuleActivationService, AppBuilderService, App Builder UI bileşenleri, plan upgrade akışı.
+
+---
+
+## İlgili Dokümanlar
+
+- [Karar kayıtları](DECISIONS.md) — K-XX/RISK-XX/DEBT-XX
+- [Mimari](ARCHITECTURE.md) — bileşen diyagramı, request lifecycle, schema-per-tenant, entity hiyerarşisi, config profilleri
+- [README](../README.md) — kurulum, çalıştırma, API
+- [AGENTS.md](../AGENTS.md) (kök + modül bazlı) — AI asistan kuralları

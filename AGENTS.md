@@ -1,105 +1,95 @@
 # AGENTS.md
 
-## Proje
+## Project
 
-**SystemForge** — modüler çok-kiracılı (multi-tenant) SaaS platformu. Java 21 + Spring Boot 4.1, PostgreSQL 16, Redis 7.4, Flyway. Hibrit model: built-in modüller (Tasks/Notes/Warehouse/Logistics — Odoo/ERPNext mantığı) + tenant custom app'leri (Notion/Airtable mantığı, JSONB EAV). **Schema-per-tenant** izolasyonu; **User-per-tenant** (global user yok); RBAC (User-Role + Group-Role + Role-Permission).
+**SystemForge** — modular multi-tenant SaaS platform. Java 21 + Spring Boot 4.1, PostgreSQL 16, Redis 7.4, Flyway. Hybrid model: built-in modules (Tasks/Notes/Warehouse/Logistics — Odoo/ERPNext style) + tenant custom apps (Notion/Airtable style, JSONB EAV). **Schema-per-tenant** isolation; **user-per-tenant** (no global users); RBAC (User-Role + Group-Role + Role-Permission).
 
-## Kurulum
+## Language Policy (token optimization)
 
-Detaylı kurulum/çalıştırma `README.md`'de. Özet:
+- **Reasoning / chain-of-thought:** English.
+- **AI-facing docs (all `AGENTS.md` files):** English.
+- **User-facing docs (`README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/DECISIONS.md`):** English/Turkish mix is allowed; prefer Turkish where English obscures meaning.
+- **User communication (questions, answers, explanations, summaries):** Turkish.
+- **Code, commit messages, file/folder names, technical terms:** English.
+- **Only English and Turkish** are permitted — no other languages.
+
+## Documentation map
+
+- [`README.md`](README.md) — setup, running, **build commands** (single source), API, troubleshooting. (TR/mixed)
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — architecture diagram, request lifecycle, schema-per-tenant, entity hierarchy, **config profiles** (single source). (TR/mixed)
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) — phase/epic roadmap (no ticket numbers, goal-oriented). (TR/mixed)
+- [`docs/DECISIONS.md`](docs/DECISIONS.md) — decision log (K-XX architecture, RISK-XX risk, DEBT-XX tech debt). (TR/mixed)
+- Each module has its own `AGENTS.md`: [`common/`](common/AGENTS.md) · [`persistence/`](persistence/AGENTS.md) · [`backend/`](backend/AGENTS.md) · [`frontend/`](frontend/AGENTS.md). (all EN)
+
+## Setup (summary)
+
+Full detail and all commands live in `README.md`. Summary:
 
 ```bash
-mvn clean install          # tüm modüller (testler H2'de, Docker gerektirmez)
+mvn clean install          # all modules (tests run on H2, no Docker required)
 docker compose up -d       # db + redis (dev infra)
-# backend: SystemforgeApplication'ı IDE'den run/debug (dev profili)
-# frontend: cd frontend && npm install && npm run dev
+# backend: run/debug SystemforgeApplication from the IDE (dev profile)
+# frontend: cd frontend && npm install --include=optional && npm run dev
 ```
 
-- `.env` yalnızca prod Docker Compose içindir; `dev` profilinde gerekmez. Asla commit edilmez (`.gitignore`'da).
+- `.env` is for prod Docker Compose only; not needed in the `dev` profile. Never committed (in `.gitignore`).
 
-## Komutlar
+## Modules
 
-```bash
-# Build
-./mvnw clean install                       # tüm modüller + testler
-./mvnw clean install -DskipTests           # hızlı build
+Each module has its own `AGENTS.md` with module-specific rules.
 
-# Backend çalıştır (root'tan DEĞİL — her zaman -pl backend)
-./mvnw -pl backend spring-boot:run
+- `common/` — shared core (`TenantContext`, shared exceptions). **NO Spring/JPA.**
+- `persistence/` — JPA entities + multi-tenancy infrastructure + Flyway migration.
+- `backend/` — Spring Boot application (controller/service/security/config). Produces the executable jar.
+- `frontend/` — React 19 + TypeScript + Vite SPA.
 
-# Test (dosya-bazlı tercih edilir)
-./mvnw -pl backend test -Dtest=ClassName#methodName   # tek test
-./mvnw -pl backend test                                # backend testleri
-./mvnw test                                            # tüm suite (sadece açıkça istenirse)
+## Operational infrastructure (`infra/`)
 
-# Frontend (frontend/ dizininde)
-cd frontend && npm run dev      # :3000, /api -> :8080
-cd frontend && npm run lint     # oxlint
-cd frontend && npm run build    # tsc -b && vite build
-```
+Not source code; runtime/operational files. Details in `infra/README.md`.
 
-> Testler `test` profilinde (H2 in-memory) çalışır → build Docker gerektirmez. Dev/prod PostgreSQL kullanır.
+- `infra/config/` — prod externalized override. Dropping an `application-prod.yaml` here overrides the one inside the jar (`SPRING_CONFIG_ADDITIONAL_LOCATION`). **Do not commit secrets.**
+- `infra/data/{postgres,redis}/` — bind-mount volume. **Not committed.** On macOS, for permission issues: postgres UID 70, redis UID 999.
+- `infra/init-sql/` — Docker postgres `/docker-entrypoint-initdb.d/` scripts. Run **only on first DB creation** (extension, role). **Completely separate from Flyway migrations** — do not mix.
+- `infra/logs/` — Spring Boot file appender + container log bind-mount. **Not committed.**
+- `infra/ssl/` — TLS certificates / private keys. **NEVER commit** (conflicts with the "Limits / Never" rule below).
+- `infra/templates/` — externalized runtime templates (mail HTML/CSS etc.).
 
-## Modüller
+**init-sql vs Flyway (critical distinction):** Flyway runs every startup from `flyway_schema_history` (versioned). `init-sql/` is run by the postgres image **only when the data directory is empty** (first install). Never put the same file in both — Flyway checksum/history consistency breaks.
 
-Her modülün kendi `AGENTS.md`'si var — modüle özgü kurallar orada.
+## Critical rules (all modules)
 
-- `common/` — paylaşılan çekirdek (`TenantContext`, paylaşılan exception'lar). **Spring/JPA YOK.** → `common/AGENTS.md`
-- `persistence/` — JPA entity'ler + multi-tenancy altyapısı + Flyway migration. → `persistence/AGENTS.md`
-- `backend/` — Spring Boot uygulaması (controller/service/security/config). Executable jar üretir. → `backend/AGENTS.md`
-- `frontend/` — React 19 + TypeScript + Vite SPA. → `frontend/AGENTS.md`
-
-## Operasyonel Altyapı (`infra/`)
-
-Kaynak kodu değil, runtime/operasyonel dosyalar. Detaylar `infra/README.md`'de.
-
-- `infra/config/` — prod externalized override. İçine `application-prod.yaml` bırakırsan jar'dakini geçersiz kılar (`SPRING_CONFIG_ADDITIONAL_LOCATION`). **Secret varsa commit etme.**
-- `infra/data/{postgres,redis}/` — bind-mount volume. **Commit edilmez.** macOS'te izin sorunu için postgres UID 70, redis UID 999.
-- `infra/init-sql/` — Docker postgres `/docker-entrypoint-initdb.d/` script'leri. **SADECE ilk DB yaratımında** çalışır (extension, rol). **Flyway migration'larından tamamen ayrı** — karıştırma.
-- `infra/logs/` — Spring Boot file appender + container log bind-mount. **Commit edilmez.**
-- `infra/ssl/` — TLS sertifikaları / private key'ler. **ASLA commit etme** (kök "Sınırlar" kuralıyla çakışır).
-- `infra/templates/` — externalize runtime template'leri (mail HTML/CSS vb.).
-
-**init-sql vs Flyway (kritik ayrım):** Flyway her startup'ta `flyway_schema_history`'den çalışır (versioned). `init-sql/` ise postgres image'ı tarafından yalnızca **data directory boşsa** (ilk kurulum) çalışır. Aynı dosyayı iki yere koyma — Flyway checksum/history tutarsızlığı çöker.
-
-## Kritik Kurallar (tüm modüller)
-
-- **Tenant izolasyonu ZORUNLU.** Hiçbir sorgu tenant filtresiz olmamalı. Tenant verisi sızdıran en kritik bug sınıfıdır. Tenant bağlamı `TenantFilter` tarafından kurulur (`common.TenantContext` ThreadLocal); controller'da tenant doğrulama YAPMA.
-- **Kök pom sadece lightweight parent + aggregator'dır** — modüllere bağımlılık dayatmaz (`<dependencies>` yok), sadece version management sağlar. Hiçbir modül `spring-boot-starter-parent`'ı parent yapmaz.
-- **Modüller arası döngüsel bağımlılık YASAK.** Bağımlılık grafiği: `common ← persistence ← backend`. `frontend` bağımsız.
-- **Versiyonlar root `<properties>`'te** (`spring-boot.version`, `java.version`). Modül pom'larında version yazılmaz.
-- **ID'ler her yerde UUID** (`GenerationType.UUID`). Tablo adları `t_` prefix'li.
-- **Kod stili:** paket `com.ibrhalil.systemforge.*`, DTO'lar `record`, merkezi hata yönetimi `@RestControllerAdvice` (`ErrorResponse`), Lombok backend modülünde.
+- **Tenant isolation is MANDATORY.** No query may skip the tenant filter. Tenant data leakage is the most critical bug class. The tenant context is established by `TenantFilter` (`common.TenantContext` ThreadLocal); do NOT validate tenant in the controller.
+- **The root pom is only a lightweight parent + aggregator** — it does not impose dependencies on modules (no `<dependencies>`), only version management. No module uses `spring-boot-starter-parent` as parent.
+- **Cyclic dependencies between modules are FORBIDDEN.** Dependency graph: `common` <- `persistence` <- `backend`. `frontend` is independent.
+- **Versions live in the root `<properties>`** (`spring-boot.version`, `java.version`). Module poms do not pin versions.
+- **IDs are UUID everywhere** (`GenerationType.UUID`). Table names use the `t_` prefix.
+- **Code style:** package `com.ibrhalil.systemforge.*`, DTOs are `record`, centralized error handling via `@RestControllerAdvice` (`ErrorResponse`), Lombok in the backend module.
 
 ## Test
 
-- `test` profili (H2 `MODE=PostgreSQL`) → `@SpringBootTest` `@ActiveProfiles("test")` ile. Build Docker gerektirmez.
-- Dev/prod PostgreSQL. Dev profili `localhost:5432` default'ları gömülü.
-- Yeni endpoint için en az bir test ekle. Tenant izolasyonu içeren değişiklikte ekstra dikkat.
+- Config profiles (dev/prod/test, H2, ddl-auto, flyway.enabled) are the single source: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#konfigürasyon-profilleri).
+- Add at least one test per new endpoint. Extra care on changes touching tenant isolation.
 
-## Sınırlar
+## Limits
 
-**Asla:**
-- `.env`, `application-prod.yaml` secret'larını, RSA key'lerini (`certs/*.pem`) commit etme / okuma.
-- `ddl-auto`'yu `validate` yapma (multi-tenant + lazy tenant şeması yüzünden startup'ta çöker — her zaman `none`, şema Flyway'de).
-- Cross-tenant sorgu yazma. Hassas veriyi (şifre, token, PII) log'a yazma.
+**Never:**
+- **Run git operations without authorization.** `git commit`, `git push`, `git amend`, `git merge`, `git rebase`, `git reset --hard`, branch creation/deletion, `gh pr create`, etc. — ALL of these happen ONLY when the user explicitly asks. Do NOT take initiative like "I'm done, let me commit." Stay in staging until the user says commit/push. `git add`/`git status`/`git diff`/`git log` (read-only) are fine.
+- Do not commit/read `.env`, `application-prod.yaml` secrets, or RSA keys (`certs/*.pem`).
+- Do not set `ddl-auto` to `validate` (multi-tenant + lazy tenant schema crashes at startup — always `none`, the schema lives in Flyway). Test profile exception: `create-drop`.
+- Do not write cross-tenant queries. Do not log sensitive data (password, token, PII).
 
-**Önce sor:**
-- Yeni Flyway migration eklerken (özellikle mevcut tenant şemalarını etkilerse — `TenantMigrationRunner` gerekir).
-- Yeni bağımlılık eklerken (önce root pom'a uygun mu kontrol et).
+**Ask first:**
+- Before adding a new Flyway migration (especially if it affects existing tenant schemas — `TenantMigrationRunner` is required, see [RISK-16](docs/DECISIONS.md#risk-16)).
+- Before adding a new dependency (first check whether the root pom accommodates it).
 
-**Her zaman:**
-- Yeni endpoint'e test ekle.
-- Servis katmanı yazma işlerinde `@Transactional` kullan (method-level; lookup'larda `readOnly=true`).
+**Always:**
+- Add a test for a new endpoint.
+- Use `@Transactional` (method-level; `readOnly=true` for lookups) for service-layer write operations. **Exception:** `provisionTenant` is currently non-transactional ([DEBT-10](docs/DECISIONS.md#debt-10)); fixed with K-21.
 
 ## Git
 
-- Branch: `feat/SF-123-kisa-aciklama` (ticket ID `BACKLOG.md`'den). Merge sonrası branch silinir.
-- Commit: Conventional Commits — `feat(tenant): add subdomain resolver`, `fix(auth): handle expired token`, `refactor: ...`, `test: ...`, `docs: ...`, `chore(deps): ...`. Subject <72 karakter, küçük harf, noktasız, imperative.
-- Tüm PR'lar `develop`'a karşı. Squash merge. PR öncesi: `./mvnw test` + `npm run lint`.
+> **The rules below apply ONLY when the user explicitly asks for a commit/push/PR.** An agent must not commit, push, amend, merge, create/delete a branch, or open a PR on its own — see "Limits / Never" above. Leave changes in staging; do not act until the user says `git add`/`commit`/`push`/`gh pr create`.
 
-## Dahası
-
-- **Ticketlar / yol haritası:** `BACKLOG.md` (Faz 1.5-6, SF-001...SF-405).
-- **Kurulum / konfigürasyon / API detayları:** `README.md`.
-- **Mimari karar gerekçeleri:** ilgili modülün `AGENTS.md`'sinde.
+- **Branch:** `feat/SF-NN-kisa-aciklama` — the developer chooses their own `SF-NN` number; it is not tied to the roadmap. Branch is deleted after merge.
+- **Commit:** Conventional Commits — `feat(tenant): add subdomain resolver`, `fix(auth): handle expired token`, `refactor: ...`, `test: ...`, `docs: ...`, `chore(deps): ...`. Subject <72 chars, lowercase, no period, imperative mood.
+- All PRs target `develop`. Squash merge. Before a PR: `./mvnw test` + `npm run lint`.

@@ -1,6 +1,6 @@
 # Mimari
 
-SystemForge — modüler çok-kiracılı (multi-tenant) SaaS platformu. Schema-per-tenant izolasyonu, UUID PK, soft-delete + optimistic locking, Spring Data auditing. Hibrit ürün modeli: built-in modüller (Tasks/Notes/Warehouse/Logistics) + tenant custom app'leri (Notion-style App Builder). Bu doküman **mevcut Faz 1 altyapısını** belgeler; auth/RBAC/modüller `BACKLOG.md`'de planlanmıştır.
+SystemForge — modüler çok-kiracılı (multi-tenant) SaaS platformu. Schema-per-tenant izolasyonu, UUID PK, soft-delete + optimistic locking, Spring Data auditing. Hibrit ürün modeli: built-in modüller (Tasks/Notes/Warehouse/Logistics) + tenant custom app'leri (Notion-style App Builder). Bu doküman **mevcut Faz 1 altyapısını** belgeler; auth/RBAC/modüller [`ROADMAP.md`](ROADMAP.md)'de planlanmıştır.
 
 ## Sistem Bileşenleri
 
@@ -78,7 +78,7 @@ sequenceDiagram
 - `TenantContext` bir `ThreadLocal<String>` — request thread boyunca yaşar, `finally` bloğunda **mutlaka** clear edilmeli (thread pool reuse nedeniyle).
 - `SchemaPerTenantConnectionProvider.getConnection` her connection alımında `SET search_path TO <tenant>, public` çalıştırır; `releaseConnection`'da reset eder.
 - Schema adı regex `^[a-z0-9_]+$` ile doğrulanır — SQL injection savunması.
-- `@Async` thread'lerde `TenantContext` otomatik taşınmaz — `TaskDecorator` gerekir (`BACKLOG.md` SF-181).
+- `@Async` thread'lerde `TenantContext` otomatik taşınmaz — `TaskDecorator` gerekir ([RISK-10](DECISIONS.md#risk-10)).
 - Tenant context null ise resolver `"public"` döner → public şema verisine (Company) erişilir.
 
 ## Schema-per-Tenant Modeli
@@ -135,16 +135,18 @@ flowchart TB
 | `tenant_<sub>`   | `t_group_roles`     | Group↔Role join                      | `tenant/V1__...sql` |
 | `tenant_<sub>`   | `t_refresh_tokens`  | JWT refresh token'ları               | `tenant/V1__...sql` |
 
-**Tenant provisioning akışı** (`TenantProvisioningService.provisionTenant`):
+**Tenant provisioning akışı** (`TenantProvisioningService.provisionTenant`) — mevcut tek-fazlı senkron akış:
 
 1. `public.t_companies` satırı INSERT (subdomain, emailDomain, schemaName, status=ACTIVE).
 2. `CREATE SCHEMA tenant_<subdomain>` (raw JDBC, transaction dışı — DDL implicit commit).
-3. Flyway programmatik: `public/db/migration/tenant/*.sql` yeni şemada migrate.
+3. Flyway programmatik: `db/migration/tenant/*.sql` yeni şemada migrate.
 4. `TenantContext.setCurrentTenant("tenant_<subdomain>")` set et.
-5. Admin user INSERT (JPA, transactional).
+5. Admin user INSERT (JPA).
 6. `TenantContext.clear()` `finally`'de.
 
-> **Not:** `provisionTenant` + `createAdminUser` `@Transactional` değil (`BACKLOG.md` SF-001/002). Faz 2.0 refactoring kapsamında düzeltilecek.
+> **Bilinen borç:** `provisionTenant` + `createAdminUser` `@Transactional` DEĞİL — kısmi write riski ([DEBT-10](DECISIONS.md#debt-10)). İki fazlı akış (K-21) uygulanınca refactor edilir.
+>
+> **İki fazlı plan (K-21, uygulanmadı):** signup `PROVISIONING` Company yaratır (hafif), admin email verify linki `verify` endpoint'inde SENKRON `ACTIVE`'e çeker. Detay [DECISIONS.md K-21](DECISIONS.md#k-21).
 
 ## Modül Bağımlılık Grafiği
 
@@ -178,8 +180,8 @@ Döngüsel bağımlılık YASAK. Kök pom yalnız aggregator + version managemen
 classDiagram
     class AuditEntity {
         <<@MappedSuperclass>>
-        +OffsetDateTime createdAt
-        +OffsetDateTime updatedAt
+        +OffsetDateTime createdDate
+        +OffsetDateTime updatedDate
         +String createdBy
         +String updatedBy
     }
@@ -242,7 +244,7 @@ Profile-based config. Aktif profil `SPRING_PROFILES_ACTIVE` (default: `dev`).
 | `test` | H2 in-memory          | `@SpringBootTest`              | Hayır             |
 
 - `ddl-auto=none` ZORUNLU (ASLA `validate` — schema-per-tenant + lazy tenant şeması startup'ta çöker). Şema tamamen Flyway'de.
-- **Test profili istisnası:** `ddl-auto=create-drop` + `flyway.enabled=false`. Spring Boot 4.1 + Flyay 12'de `FlywayAutoConfiguration` H2 dialect algılamıyor (`flyway-database-h2` BOM'da yok), Flyay bean oluşturulmuyor. Test'ler Hibernate'in entity metadata'dan şema üretmesine güveniyor. Gerçek Flyay test'i `BACKLOG.md` SF-270 (Testcontainers) kapsamında.
+- **Test profili istisnası:** `ddl-auto=create-drop` + `flyway.enabled=false`. Spring Boot 4.1 + Flyway 12'de `FlywayAutoConfiguration` H2 dialect algılamıyor (`flyway-database-h2` BOM'da yok), Flyway bean oluşturulmuyor. Test'ler Hibernate'in entity metadata'dan şema üretmesine güveniyor. Gerçek Flyway test'i [`ROADMAP.md`](ROADMAP.md) Testcontainers kapsamında (Faz 3.X).
 - H2 `MODE=PostgreSQL`'de çalışır → build Docker gerektirmez.
 - H2 sınırları: `JSONB`, partial index, `SET search_path` desteklenmez → multi-tenancy akışı H2'de test edilemez, sadece context yükü doğrulanır.
 
@@ -250,7 +252,8 @@ Profile-based config. Aktif profil `SPRING_PROFILES_ACTIVE` (default: `dev`).
 
 - [`AGENTS.md`](../AGENTS.md) — AI asistan kuralları + genel proje prensipleri
 - [`README.md`](../README.md) — Kurulum, çalıştırma, API
-- [`BACKLOG.md`](../BACKLOG.md) — Yol haritası (Faz 1.5-6, SF-001...405) + karar kayıtları (K-XX, RISK-XX, DEBT-XX)
+- [`ROADMAP.md`](ROADMAP.md) — Faz/epik yol haritası (ticket numarasız)
+- [`DECISIONS.md`](DECISIONS.md) — Karar kayıtları (K-XX/RISK-XX/DEBT-XX)
 - [`backend/AGENTS.md`](../backend/AGENTS.md) — Backend modülü kuralları + gotcha'lar
 - [`persistence/AGENTS.md`](../persistence/AGENTS.md) — Persistence modülü, entity hiyerarşisi, Flyway
 - [`common/AGENTS.md`](../common/AGENTS.md) — Common çekirdek (TenantContext)
