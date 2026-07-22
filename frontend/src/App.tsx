@@ -122,21 +122,21 @@ function App() {
           <h2>SystemForge</h2>
         </div>
         <nav className="nav-menu">
-          <button 
+          <button
             className={`nav-item ${activeTab === 'overview' ? 'active' : ''}`}
             onClick={() => setActiveTab('overview')}
           >
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="icon"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
             Overview
           </button>
-          <button 
+          <button
             className={`nav-item ${activeTab === 'projects' ? 'active' : ''}`}
             onClick={() => setActiveTab('projects')}
           >
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="icon"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M12 6v6l4 2"/></svg>
             Projects
           </button>
-          <button 
+          <button
             className={`nav-item ${activeTab === 'tasks' ? 'active' : ''}`}
             onClick={() => setActiveTab('tasks')}
           >
@@ -146,8 +146,8 @@ function App() {
         </nav>
         <div className="tenant-selector-box">
           <label>Active Tenant Workspace</label>
-          <select 
-            value={selectedTenant} 
+          <select
+            value={selectedTenant}
             onChange={(e) => setSelectedTenant(e.target.value)}
             className="tenant-select"
           >
@@ -353,9 +353,9 @@ function App() {
                   {activeTenantData.tasks.map((t) => (
                     <tr key={t.id}>
                       <td>
-                        <span className={`status-indicator ${t.done ? 'done' : 'pending'}`}>
+                        <spann className={`status-indicator ${t.done ? 'done' : 'pending'}`}>
                           {t.done ? '✓ Completed' : '⚙ Pending'}
-                        </span>
+                        </spann>
                       </td>
                       <td><strong>{t.title}</strong></td>
                       <td>{t.assignee}</td>
