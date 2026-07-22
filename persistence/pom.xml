@@ -42,14 +42,18 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- Spring Boot 4 modularized auto-config: flyway-core alone no longer
+             triggers FlywayAutoConfiguration. The starter pulls in the
+             spring-boot-flyway auto-config module that actually runs migrations. -->
         <dependency>
-            <groupId>org.flywaydb</groupId>
-            <artifactId>flyway-core</artifactId>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-flyway</artifactId>
         </dependency>
-        
+
         <dependency>
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-database-postgresql</artifactId>
+            <scope>runtime</scope>
         </dependency>
 
         <dependency>

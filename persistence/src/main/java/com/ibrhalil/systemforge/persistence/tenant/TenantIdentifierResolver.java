@@ -9,8 +9,9 @@ public class TenantIdentifierResolver implements CurrentTenantIdentifierResolver
 
     @Override
     public String resolveCurrentTenantIdentifier() {
-        String tenant = TenantContext.getCurrentTenant();
-        return (tenant != null && !tenant.isBlank()) ? tenant : DEFAULT_TENANT;
+        return TenantContext.getCurrentTenant()
+            .filter(tenant -> !tenant.isBlank())
+            .orElse(DEFAULT_TENANT);
     }
 
     @Override

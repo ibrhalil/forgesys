@@ -3,8 +3,9 @@ package com.ibrhalil.systemforge.common.tenant;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import java.util.Optional;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 class TenantContextTests {
 
@@ -18,7 +19,10 @@ class TenantContextTests {
         String testTenant = "test-tenant-123";
         TenantContext.setCurrentTenant(testTenant);
 
-        assertEquals(testTenant, TenantContext.getCurrentTenant());
+        Optional<String> currentTenant = TenantContext.getCurrentTenant();
+
+        assertTrue(currentTenant.isPresent(), "Tenant context should contain not be empty");
+        assertEquals(testTenant, currentTenant.get());
     }
 
     @Test
@@ -26,6 +30,11 @@ class TenantContextTests {
         TenantContext.setCurrentTenant("some-tenant");
         TenantContext.clear();
 
-        assertNull(TenantContext.getCurrentTenant());
+        assertTrue(TenantContext.getCurrentTenant().isEmpty(), "Clearing tenant context should result in an empty Optional");
+    }
+
+    @Test
+    void testInitialStateIsEmpty() {
+        assertTrue(TenantContext.getCurrentTenant().isEmpty(), "Beginning with an empty context, getCurrentTenant should return empty");
     }
 }

@@ -8,9 +8,12 @@
 # Sensible defaults are baked in via ${VAR:-default}, so a fresh
 # checkout works without a .env file.
 #
-# Volumes are bind-mounted under ./infra/data so dev data is visible
-# on the host (easy inspect / backup / wipe). See infra/README.md for
-# the macOS permission note if postgres refuses to start.
+# Volumes:
+#   - PostgreSQL: bind-mount under ./infra/data/postgres (host-visible).
+#   - Redis: named volume (Docker-managed). The previous bind-mount to
+#     ./infra/data/redis caused recurring permission errors because the
+#     container wrote appendonlydir as UID 999, which host scanners
+#     (IDE watchers, git) couldn't traverse. See infra/README.md.
 # ============================================================
 services:
   db:
@@ -69,7 +72,10 @@ services:
     ports:
       - "6379:6379"
     volumes:
-      - ./infra/data/redis:/data
+      # Named volume instead of bind-mount: avoids UID 999 permission issues
+      # on the host (Windows/macOS/Linux). Data is still persisted across
+      # container restarts; inspect via `docker volume inspect` if needed.
+      - redis-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -96,3 +102,6 @@ services:
 networks:
   systemforge-net:
     driver: bridge
+
+volumes:
+  redis-data:

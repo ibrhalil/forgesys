@@ -37,12 +37,15 @@ public class UserProfile extends SoftDeleteAuditEntity {
 
     private String firstName;
     private String lastName;
+
+    @Column(name = "phone", length = 50)
     private String phoneNumber;
-    private String profilePictureUrl;
 
     private String address;
     private String city;
     private String country;
+
+    @Column(name = "zip", length = 20)
     private String zipCode;
 
     public String getFullName() {
