@@ -24,7 +24,7 @@ class AuditingTest {
 
     @Test
     void dateTimeProviderBeanResolvesAndReturnsNow() {
-        assertThat(dateTimeProvider).isNotNull();
+        assertThat(dateTimeProvideri).isNotNull();
         assertThat(dateTimeProvider.getNow()).isPresent();
     }
 
