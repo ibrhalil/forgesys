@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+# Aynı branch için eski run'ları iptal et (yeni push gelince)
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend (Maven + H2 tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      # Test profili H2 (MODE=PostgreSQL) kullanır -> PostgreSQL/Redis gerekmez.
+      # frontend-maven-plugin kendi Node'unu indirir; native optional deps hedef
+      # platform (linux) için kurulur. Tüm modüller (common, persistence, backend)
+      # build + test edilir.
+      - name: Build & Test
+        run: ./mvnw --no-transfer-progress clean install
+
+  frontend:
+    name: Frontend (lint + build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          # package-lock.json commit edilmez (.npmrc package-lock=false)
+          # -> cache: npm kullanmıyoruz.
+
+      # Lock file yok (proje politikası) -> npm ci değil install.
+      # --no-package-lock: aracı değiştirmesin, --include=optional: native paketler.
+      - name: Install dependencies
+        run: npm install --include=optional --no-package-lock
+
+      - name: Lint (oxlint)
+        run: npm run lint
+
+      - name: Build (tsc -b && vite build)
+        run: npm run build
