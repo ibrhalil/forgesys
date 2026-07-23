@@ -40,7 +40,7 @@ COPY --from=frontend-builder /app/frontend/dist ./backend/src/main/resources/sta
 RUN mvn clean package -pl backend -am -DskipTests
 
 # Rename jar for consistent layer extraction naming
-RUN cp backend/target/systemforge-backend.jar /app/application.jar
+RUN cp backend/target/forgesys-backend.jar /app/application.jar
 
 # Extract Spring Boot layers for efficient Docker layer caching
 RUN java -Djarmode=tools -jar /app/application.jar extract --layers --destination /app/extracted

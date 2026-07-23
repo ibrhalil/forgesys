@@ -1,6 +1,6 @@
 # Mimari
 
-SystemForge — modüler çok-kiracılı (multi-tenant) SaaS platformu. Schema-per-tenant izolasyonu, UUID PK, soft-delete + optimistic locking, Spring Data auditing. Hibrit ürün modeli: built-in modüller (Tasks/Notes/Warehouse/Logistics) + tenant custom app'leri (Notion-style App Builder). Bu doküman **mevcut Faz 1 altyapısını** belgeler; auth/RBAC/modüller [`ROADMAP.md`](ROADMAP.md)'de planlanmıştır.
+ForgeSys — modüler çok-kiracılı (multi-tenant) SaaS platformu. Schema-per-tenant izolasyonu, UUID PK, soft-delete + optimistic locking, Spring Data auditing. Hibrit ürün modeli: built-in modüller (Tasks/Notes/Warehouse/Logistics) + tenant custom app'leri (Notion-style App Builder). Bu doküman **mevcut Faz 1 altyapısını** belgeler; auth/RBAC/modüller [`ROADMAP.md`](ROADMAP.md)'de planlanmıştır.
 
 ## Sistem Bileşenleri
 
@@ -48,7 +48,7 @@ sequenceDiagram
     participant CP as SchemaPerTenantConnectionProvider
     participant DB as PostgreSQL
 
-    B->>TF: GET /api/v1/users<br/>Host: acme.systemforge.app
+    B->>TF: GET /api/v1/users<br/>Host: acme.forgesys.app
     TF->>TF: extractSubdomain(Host) → "acme"
     TF->>DB: CompanyRepository.findBySubdomain("acme")
     DB-->>TF: Company{schemaName: "tenant_acme"}

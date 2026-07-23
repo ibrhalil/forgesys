@@ -5,13 +5,13 @@
 
     <parent>
         <groupId>com.ibrhalil</groupId>
-        <artifactId>systemforge</artifactId>
-        <version>0.0.3</version>
+        <artifactId>forgesys</artifactId>
+        <version>0.0.4</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>systemforge-common</artifactId>
-    <name>systemforge-common</name>
+    <artifactId>forgesys-common</artifactId>
+    <name>forgesys-common</name>
     <description>Shared core module — TenantContext, shared exceptions, DTOs. No Spring, no JPA.</description>
 
     <dependencies>

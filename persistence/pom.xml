@@ -5,19 +5,19 @@
 
     <parent>
         <groupId>com.ibrhalil</groupId>
-        <artifactId>systemforge</artifactId>
-        <version>0.0.3</version>
+        <artifactId>forgesys</artifactId>
+        <version>0.0.4</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>systemforge-persistence</artifactId>
-    <name>systemforge-persistence</name>
+    <artifactId>forgesys-persistence</artifactId>
+    <name>forgesys-persistence</name>
     <description>JPA entities, repositories, multi-tenancy infrastructure (schema-per-tenant).</description>
 
     <dependencies>
         <dependency>
             <groupId>com.ibrhalil</groupId>
-            <artifactId>systemforge-common</artifactId>
+            <artifactId>forgesys-common</artifactId>
         </dependency>
 
         <dependency>

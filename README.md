@@ -1,11 +1,11 @@
-# systemforge
+# forgesys
 
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Java](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/projects/jdk/21/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.0-brightgreen.svg)](https://spring.io/projects/spring-boot)
 [![React](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791.svg)](https://www.postgresql.org)
-[![Version](https://img.shields.io/badge/version-0.0.3-lightgrey.svg)]()
+[![Version](https://img.shields.io/badge/version-0.0.4-lightgrey.svg)]()
 
 **Modüler çok-kiracılı (multi-tenant) SaaS platformu.** Şirketler (tenant) kayıt olur, kendi ekiplerini yönetir ve ihtiyaç duydukları **modülleri** açar (Tasks, Notes, Warehouse, Logistics) ya da kendi **custom app'lerini** (Notion-style database builder) yaratır. Hibrit model: built-in modüller (Odoo/ERPNext mantığı) + tenant custom app'leri (Notion/Airtable mantığı). Modül aktivasyonu **plan bazlıdır** (Free/Pro/Enterprise). Kullanıcılar rol-bazlı erişim kontrolü (RBAC) ile giriş yapar.
 
@@ -61,7 +61,7 @@ mvn clean install            # veya: mvn clean install -DskipTests
 # 2. PostgreSQL + Redis'i başlat (yeni checkout'ta .env gerekmez)
 docker compose up -d
 
-# 3a. Backend — SystemforgeApplication'ı IntelliJ IDEA'dan run/debug et
+# 3a. Backend — ForgeSysApplication'ı IntelliJ IDEA'dan run/debug et
 #     (varsayılan "dev" profili -> localhost:5432 / localhost:6379)
 
 # 3b. Frontend — Vite dev server http://localhost:3000
@@ -74,7 +74,7 @@ npm run dev                          # /api -> http://localhost:8080 proxy
 > Proje `package-lock.json` kullanmaz (`.npmrc`: `package-lock=false`). Doğrudan bağımlılık sürümleri `package.json` içinde tam sürüm olarak sabittir; Maven ve Docker da `npm install --include=optional --no-package-lock` çalıştırır. Böylece native optional paketler kurulumu yapan işletim sistemine göre seçilir.
 
 - Uygulama: http://localhost:8080 · Frontend: http://localhost:3000
-- Veritabanı: `localhost:5432` (default: `systemforge` / `forgeadmin` / `forgepassword`) · Redis: `localhost:6379`
+- Veritabanı: `localhost:5432` (default: `forgesys` / `forgeadmin` / `forgepassword`) · Redis: `localhost:6379`
 
 > **Build Docker gerektirmez.** Testler `test` profilinde (H2 in-memory) çalışır. Docker yalnızca dev infra'sı (db+redis) ve prod deploy için gerekli.
 
@@ -240,7 +240,7 @@ curl -X POST http://localhost:8080/api/v1/auth/company/register \
 > Mimari diyagram, HTTP request yaşam döngüsü, şema-per-tenant modeli ve entity hiyerarşisi için bkz. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ```
-systemforge/
+forgesys/
 ├── pom.xml                  # Root POM — aggregator + version management (BOM import)
 ├── common/                  # Paylaşılan çekirdek — minimal bağımlılık (Spring/JPA YOK)
 ├── persistence/             # JPA entity'ler + çok-kiracılı altyapı + Flyway migration

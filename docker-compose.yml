@@ -18,11 +18,11 @@
 services:
   db:
     image: postgres:16-alpine
-    container_name: systemforge-db
+    container_name: forgesys-db
     init: true
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-systemforge}
+      POSTGRES_DB: ${POSTGRES_DB:-forgesys}
       POSTGRES_USER: ${POSTGRES_USER:-forgeadmin}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-forgepassword}
       # Warn in container logs if no FSYNC/optimization is set (dev convenience)
@@ -39,7 +39,7 @@ services:
       # First-run init scripts (extensions etc.) — see infra/init-sql/README.md
       - ./infra/init-sql:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-forgeadmin} -d ${POSTGRES_DB:-systemforge}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-forgeadmin} -d ${POSTGRES_DB:-forgesys}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -57,7 +57,7 @@ services:
       # owned by postgres user, not the root inside the container.
       - FOWNER
     networks:
-      - systemforge-net
+      - forgesys-net
     logging:
       driver: local
       options:
@@ -66,7 +66,7 @@ services:
 
   redis:
     image: redis:7.4-alpine
-    container_name: systemforge-redis
+    container_name: forgesys-redis
     init: true
     restart: unless-stopped
     ports:
@@ -92,7 +92,7 @@ services:
       - SETGID
       - CHOWN
     networks:
-      - systemforge-net
+      - forgesys-net
     logging:
       driver: local
       options:
@@ -100,7 +100,7 @@ services:
         max-file: "3"
 
 networks:
-  systemforge-net:
+  forgesys-net:
     driver: bridge
 
 volumes:

@@ -31,7 +31,7 @@ export function LoginPage() {
             SF
           </div>
           <div>
-            <h1 className="text-2xl font-semibold text-main">SystemForge</h1>
+            <h1 className="text-2xl font-semibold text-main">ForgeSys</h1>
             <p className="mt-1 text-sm text-muted">Multi-tenant SaaS Platform</p>
           </div>
         </div>

@@ -1,6 +1,6 @@
 spring:
   application:
-    name: systemforge
+    name: forgesys
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
 
@@ -28,7 +28,7 @@ management:
     health:
       show-details: never
 
-systemforge:
+forgesys:
   multi-tenancy:
     base-domain: ${BASE_DOMAIN:localhost}
   security:
