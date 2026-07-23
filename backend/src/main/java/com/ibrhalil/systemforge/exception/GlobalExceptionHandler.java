@@ -11,64 +11,79 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-import java.util.stream.Collectors;
+import java.util.List;
 
 /**
- * Global REST exception handler to format exceptions into uniform JSON payloads.
+ * Global REST exception handler. Maps every exception to the uniform
+ * {@link ApiErrorResponse} shape with a stable {@link ErrorCode}, traceId, and
+ * sanitized field errors.
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+    private static final String REDACTED = "[REDACTED]";
+
+    @ExceptionHandler(BusinessException.class)
+    public ResponseEntity<ApiErrorResponse> handleBusiness(BusinessException ex, HttpServletRequest request) {
+        log.warn("Business exception [{}]: {} at {}", ex.errorCode().code(), ex.getMessage(), request.getRequestURI());
+        return build(ex.errorCode(), ex.getMessage(), request.getRequestURI());
+    }
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleResourceNotFound(ResourceNotFoundException ex, HttpServletRequest request) {
+        log.warn("Resource not found: {} at {}", ex.getMessage(), request.getRequestURI());
+        return build(ErrorCode.RESOURCE_NOT_FOUND, ex.getMessage(), request.getRequestURI());
+    }
+
     @ExceptionHandler(TenantNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleTenantNotFound(TenantNotFoundException ex, HttpServletRequest request) {
-        log.warn("Tenant exception: {} at path: {}", ex.getMessage(), request.getRequestURI());
-        ErrorResponse response = new ErrorResponse(
-                HttpStatus.BAD_REQUEST.value(),
-                "Bad Request",
-                ex.getMessage(),
-                request.getRequestURI()
-        );
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    public ResponseEntity<ApiErrorResponse> handleTenantNotFound(TenantNotFoundException ex, HttpServletRequest request) {
+        log.warn("Tenant not found: {} at {}", ex.getMessage(), request.getRequestURI());
+        return build(ErrorCode.TENANT_NOT_FOUND, ex.getMessage(), request.getRequestURI());
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException ex, HttpServletRequest request) {
-        log.warn("Illegal argument: {} at path: {}", ex.getMessage(), request.getRequestURI());
-        ErrorResponse response = new ErrorResponse(
-                HttpStatus.BAD_REQUEST.value(),
-                "Bad Request",
-                ex.getMessage(),
-                request.getRequestURI()
-        );
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    public ResponseEntity<ApiErrorResponse> handleIllegalArgument(IllegalArgumentException ex, HttpServletRequest request) {
+        log.warn("Illegal argument: {} at {}", ex.getMessage(), request.getRequestURI());
+        return build(ErrorCode.BUSINESS_ERROR, ex.getMessage(), request.getRequestURI());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ErrorResponse> handleValidationErrors(MethodArgumentNotValidException ex, HttpServletRequest request) {
-        String message = ex.getBindingResult().getFieldErrors().stream()
-                .map(fe -> fe.getField() + ": " + fe.getDefaultMessage())
-                .collect(Collectors.joining("; "));
-        log.warn("Validation failed: {} at path: {}", message, request.getRequestURI());
-        ErrorResponse response = new ErrorResponse(
-                HttpStatus.BAD_REQUEST.value(),
-                "Bad Request",
-                message,
-                request.getRequestURI()
+    public ResponseEntity<ApiErrorResponse> handleValidationErrors(MethodArgumentNotValidException ex, HttpServletRequest request) {
+        List<ApiFieldError> fields = ex.getBindingResult().getFieldErrors().stream()
+                .map(fe -> new ApiFieldError(fe.getField(), sanitizeRejectedValue(fe), fe.getDefaultMessage()))
+                .toList();
+        ApiErrorResponse body = ApiErrorFactory.of(
+                ErrorCode.VALIDATION_ERROR,
+                ErrorCode.VALIDATION_ERROR.defaultMessage(),
+                request.getRequestURI(),
+                fields
         );
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        log.warn("Validation failed [{}]: {} field error(s) at {}", body.traceId(), fields.size(), request.getRequestURI());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ErrorResponse> handleGeneralException(Exception ex, HttpServletRequest request) {
-        log.error("Unhandled exception occurred at path: {}", request.getRequestURI(), ex);
-        ErrorResponse response = new ErrorResponse(
-                HttpStatus.INTERNAL_SERVER_ERROR.value(),
-                "Internal Server Error",
-                "An unexpected error occurred",
-                request.getRequestURI()
-        );
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+    public ResponseEntity<ApiErrorResponse> handleGeneralException(Exception ex, HttpServletRequest request) {
+        log.error("Unhandled exception at path: {}", request.getRequestURI(), ex);
+        return build(ErrorCode.INTERNAL_ERROR, ErrorCode.INTERNAL_ERROR.defaultMessage(), request.getRequestURI());
+    }
+
+    private static ResponseEntity<ApiErrorResponse> build(ErrorCode errorCode, String message, String path) {
+        return ResponseEntity.status(errorCode.status()).body(ApiErrorFactory.of(errorCode, message, path));
+    }
+
+    /**
+     * Masks the rejected value of sensitive fields (password, token, secret,
+     * credential) so secrets are never echoed back in a validation error payload.
+     */
+    static Object sanitizeRejectedValue(FieldError fieldError) {
+        String field = fieldError.getField() == null ? "" : fieldError.getField().toLowerCase();
+        if (field.contains("password") || field.contains("token")
+                || field.contains("secret") || field.contains("credential")) {
+            return REDACTED;
+        }
+        return fieldError.getRejectedValue();
     }
 }

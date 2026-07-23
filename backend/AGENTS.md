@@ -14,13 +14,14 @@ Root package `com.ibrhalil.systemforge` (NOT a `.backend` subpackage):
 - `controller/` — REST (`/api/v1/*`). `[PHASE 3]` `modules/` subpackage.
 - `service/` — business logic incl. `TenantProvisioningService`, `TenantMigrationSupport` (shared programmatic tenant Flyway). `[PHASE 3]` `modules/` subpackage.
 - `dto/` — request/response DTOs (`record`).
-- `exception/` — `GlobalExceptionHandler`, `ErrorResponse`.
-- `config/` — `MultiTenancyJpaConfig`, `SecurityConfig`, `TenantMigrationRunner` (`ApplicationRunner`, `@Profile("!test")`).
+- `exception/` — `GlobalExceptionHandler`, uniform error shape (`ApiErrorResponse`/`ApiFieldError`/`ApiErrorFactory`), `ErrorCode` (stable wire codes), `BusinessException` -> `AuthException`/`ResourceNotFoundException` hierarchy.
+- `security/` — Spring Security adapters: `RestAuthenticationEntryPoint` (401), `RestAccessDeniedHandler` (403). JWT/UserDetails (Chunk C) land here too.
+- `config/` — `MultiTenancyJpaConfig`, `SecurityConfig` (filter chain + BCrypt + tenant-filter ordering), `CorsConfig`, `TenantMigrationRunner` (`ApplicationRunner`, `@Profile("!test")`).
 
 ## Tenant Context rules (CRITICAL)
 
 - `TenantFilter` (`OncePerRequestFilter`): Host header -> subdomain -> `CompanyRepository.findBySubdomain` -> `schemaName` -> `TenantContext`. Only `ACTIVE` Companies are resolved (`PROVISIONING`/`SUSPENDED`/`TERMINATED` are not).
-- `shouldNotFilter()` exempts `/api/v1/auth/**` and `/actuator/**` (no tenant context needed). `/api/v1/auth/company/register` MUST be exempt — the tenant is being created.
+- `shouldNotFilter()` exempts only `/api/v1/auth/company/**` (tenant creation — no tenant yet) and `/actuator/**`. Login (`/api/v1/auth/login`) and `/me` ARE tenant-specific and go through normal subdomain resolution.
 - **Do NOT validate tenant in the controller** — the filter is the single responsibility owner.
 - When tenant context is null the resolver returns `"public"` -> public-schema data (Company) is reachable.
 - Services that programmatically set the tenant (e.g. `TenantProvisioningService.provisionTenant` -> `createAdminUser`) MUST call `TenantContext.clear()` in `finally`.
@@ -31,18 +32,22 @@ Root package `com.ibrhalil.systemforge` (NOT a `.backend` subpackage):
 
 - All endpoints live under the `/api/v1/*` prefix.
 - Return a response DTO (`record`); entities MUST NOT be exposed directly. **Current exception:** `AuthController.registerCompany()` returns `ResponseEntity<Map<String,Object>>` — MapStruct + DTO refactor happens in Epic 2.1 ([ROADMAP](../docs/ROADMAP.md)).
-- Errors use the uniform `ErrorResponse` (`GlobalExceptionHandler`): `TenantNotFoundException`/`IllegalArgumentException`/validation -> 400, generic -> 500.
+- Errors use the uniform `ApiErrorResponse` (`GlobalExceptionHandler`): every error path returns `{timestamp, status, error, code, message, path, traceId, fields[]}`. `code` is a stable `ErrorCode` (lowercased enum name, e.g. `auth_bad_credentials`) — clients branch on it; message/status may evolve. Sensitive rejected values (`password`/`token`/`secret`/`credential`) are masked to `[REDACTED]` in field errors. `BusinessException` (`AuthException`/`ResourceNotFoundException`) carries an `ErrorCode`; `TenantNotFoundException` stays a plain `RuntimeException` in `common` and is translated by the handler. `traceId` comes from MDC (`RequestLoggingFilter` sets it in a later chunk; generated per-error until then).
 - Bean Validation (`@Valid` + `@NotBlank`/`@Pattern`/`@Email`).
 
-### Current endpoint
+### Current endpoints
 
 | Method | Path | Description | Auth |
 |--------|------|----------|------|
 | `POST` | `/api/v1/auth/company/register` | New tenant signup — SYNCHRONOUS: `provisionTenant` creates an `ACTIVE` Company + schema CREATE + Flyway tenant migration + admin user. | Public |
+| `POST` | `/api/v1/auth/login` | Email+password -> RS256 access token. Token is set as an httpOnly cookie (`sf_access_token`) AND returned in the body. Tenant resolved by subdomain. Bad credentials/unknown user both -> `401 auth_bad_credentials` (no enumeration oracle). | Public |
+| `GET` | `/api/v1/auth/me` | Current user (id/email/tenant/authorities) from the JWT cookie — no DB hit (principal rebuilt from claims). | Authenticated |
 
-> **A two-phase flow is planned (K-21) but NOT implemented:** create a `PROVISIONING` Company, then promote to `ACTIVE` on email verify. Details in [DECISIONS.md K-21](../docs/DECISIONS.md#k-21). It is parked in the ROADMAP as Epic 2.0.C; when implemented this section is updated.
+> **Auth stack (Faz 2.3/2.4 + 2.5 minimal — DONE):** RS256 JWT via `spring-boot-starter-oauth2-resource-server`. `JwtTokenProvider` mints tokens (sub=userId, claims: email/tenant/authorities). `JwtAuthenticationFilter` reads the cookie, decodes, rebuilds `CustomUserDetails` from claims, sets `SecurityContext` (no DB per request). `CustomUserDetailsService` (login only) resolves authorities = direct roles + active group roles -> permissions. The oauth2 auto-config filter is NOT enabled (custom filter — [RISK-14](../docs/DECISIONS.md#risk-14)). RSA keys: configured PEMs in prod, **ephemeral** in dev/test (warning logged) — never commit `certs/*.pem`.
 
-> `TenantFilter` exemption: the endpoint is under the `/api/v1/auth/**` prefix, so it is already covered by `shouldNotFilter`.
+> **Deferred to next session (Epic 2.5 rest / 2.6 / 2.9):** refresh tokens + logout (Redis blacklist), register (email-domain check), token revocation (`tokenInvalidBefore` check in the filter — column exists), brute-force lockout, `@PreAuthorize` RBAC enforcement, User/Role/Permission/Group CRUD.
+
+> **A two-phase signup flow is planned (K-21) but NOT implemented:** create a `PROVISIONING` Company, then promote to `ACTIVE` on email verify. Details in [DECISIONS.md K-21](../docs/DECISIONS.md#k-21). It is parked in the ROADMAP as Epic 2.0.C; when implemented this section is updated.
 
 ## Service layer
 
@@ -66,7 +71,8 @@ Config profiles (dev/prod/test) are the single source: [ARCHITECTURE.md - Config
 ## Gotchas
 
 - **`AuditorAware` is hardcoded to `"system"`** ([RISK-3](../docs/DECISIONS.md#risk-3)) — once auth lands it must read the real userId from SecurityContext. Signup endpoints are always audited as `"system"` (no authenticated user in the tenant-signup context) — this is expected, not a bug.
-- **`SecurityConfig`** currently defines only a `BCryptPasswordEncoder` bean (strength 10); there is NO full `SecurityFilterChain` yet. **Important:** the `spring-boot-starter-security` dependency is also ABSENT — only `spring-security-crypto` (for BCrypt). So a SecurityFilterChain cannot be set up at all; the starter is added together with the setup in a single PR in Phase 2.3 ([ROADMAP Epic 2.3](../docs/ROADMAP.md)). The signup endpoint stays open because it is exempt from `TenantFilter`.
-- BCrypt strength is 10 (target 12 — [RISK-13](../docs/DECISIONS.md#risk-13)).
-- CORS is not present yet (Phase 2.3). The Vite proxy hides it in dev; it breaks in prod.
+- **`SecurityConfig`** (Epic 2.3 — DONE): `spring-boot-starter-security` is now present. The `SecurityFilterChain` is STATELESS + CSRF-disabled, permits `/api/v1/auth/**` + actuator health/info, authenticates the rest, and wires the JSON `RestAuthenticationEntryPoint`/`RestAccessDeniedHandler`. `BCryptPasswordEncoder(12)` ([RISK-13](../docs/DECISIONS.md#risk-13) — RESOLVED; existing strength-10 hashes still validate, lazy upgrade). **Until the JWT filter lands (Chunk C) there is no way to authenticate, so every non-`auth/**` request is 401** — and Spring Boot still auto-creates the default `user` (logged password); it is removed once `CustomUserDetailsService` exists.
+- **`TenantFilter` runs before the security chain** via a `FilterRegistrationBean` at order `-101` (security is at `-100`) in `SecurityConfig`, so tenant context is resolved before the JWT auth filter executes. The registration also suppresses the bare `@Component` filter's default low-precedence auto-registration.
+- CORS is configured in `CorsConfig` (`CorsConfigurationSource`, `allowCredentials=true`, origins via `systemforge.security.cors.allowed-origins`, default Vite `http://localhost:5173`). Required because auth is cookie-based.
+- **Spring Boot 4.1 / Spring Security 7 gotchas:** test slice annotations (`@WebMvcTest`, `@AutoConfigureMockMvc`, `@DataJpaTest`) were REMOVED from the standard autoconfigure — build MockMvc via `MockMvcBuilders.webAppContextSetup(wac).addFilters(securityFilter)` or use `@SpringBootTest` + a real port. Jackson is v3: `ObjectMapper`/databind moved to package `tools.jackson.*` (annotations stayed at `com.fasterxml.jackson.annotation`). `SecurityProperties` moved to `org.springframework.boot.security.autoconfigure` and lost `DEFAULT_FILTER_ORDER` (use literal `-100`).
 - The `CompanyStatus` enum: `PROVISIONING`, `ACTIVE`, `SUSPENDED`, `TERMINATED`. **Current code only uses `ACTIVE`** (`provisionTenant` sets ACTIVE directly). `PROVISIONING` activates when K-21 (Epic 2.0.C) is implemented.

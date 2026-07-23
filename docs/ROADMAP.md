@@ -51,11 +51,11 @@ Faz 1 altyapı tamamlandı:
 ### Epic 2.0 — Foundation Refactors
 Cross-cutting iyileştirmeler. Auth işinden önce yapılmalı.
 - [x] `DateTimeProvider` bean (UTC) — RISK-15 çözüldü
-- [ ] `ApiErrorResponse`/`ApiFieldError`/`ApiErrorFactory` (uniform error shape + traceId)
-- [ ] Exception hiyerarşisi: `BusinessException` -> `AuthException`/`ResourceNotFoundException` + stable error codes
-- [ ] `sanitizeRejectedValue` (validation error'da password/token maskeleme)
-- [ ] `RequestLoggingFilter` + traceId (MDC) + `X-Request-Id` header + log pattern
-- [ ] `PasswordEncodingListener` (JPA `@PrePersist`/`@PreUpdate`, şifre otomatik encode)
+- [x] `ApiErrorResponse`/`ApiFieldError`/`ApiErrorFactory` (uniform error shape + traceId)
+- [x] Exception hiyerarşisi: `BusinessException` -> `AuthException`/`ResourceNotFoundException` + stable error codes
+- [x] `sanitizeRejectedValue` (validation error'da password/token maskeleme)
+- [ ] `RequestLoggingFilter` + traceId (MDC) + `X-Request-Id` header + log pattern — `ApiErrorFactory` MDC traceId'yi zaten okuyor (filter yoksa UUID üretir); full request logging ertelendi
+- [ ] `PasswordEncodingListener` (JPA `@PrePersist`/`@PreUpdate`, şifre otomatik encode) — ertelendi
 
 ### Epic 2.0.B — Critical Fixes
 Kod analizi sonucu keşfedilen P0 düzeltmeler. User CRUD / log'dan ÖNCE çözülmeli.
@@ -79,43 +79,44 @@ Kod analizi sonucu keşfedilen P0 düzeltmeler. User CRUD / log'dan ÖNCE çöz�
 ### Epic 2.1 — MapStruct + DTO
 `persistence/pom.xml`: mapstruct (sıralama KRİTİK), `MappingConfig` (@MapperConfig), DTO record'ları, `AuthMapper` interface, `AuthController`: `Map.of` -> DTO+mapper, MapStruct build testi.
 
-### Epic 2.3 — Spring Security Core (tek PR)
+### Epic 2.3 — Spring Security Core (tek PR) — DONE
 > `spring-boot-starter-security` tek başına default form login getirir, app'i kırar. Bu yüzden security setup tek PR'da commit edilmeli.
 
-- BCrypt migration stratejisi spike (RISK-13)
-- `pom.xml`: spring-boot-starter-security
-- `SecurityConfig`: filterChain + STATELESS + CSRF
-- `BCryptPasswordEncoder(12)`
-- `CorsConfig`: CorsConfigurationSource
-- JSON 401/403 handlers (`RestAuthenticationEntryPoint`, `RestAccessDeniedHandler`) — uniform shape + traceId
-- Security smoke test (401 + permitAll)
+- [x] BCrypt migration stratejisi spike (RISK-13) — lazy: mevcut strength-10 hash'ler BCrypt self-describing olduğu için validate olur, yenileri 12'de
+- [x] `pom.xml`: spring-boot-starter-security
+- [x] `SecurityConfig`: filterChain + STATELESS + CSRF
+- [x] `BCryptPasswordEncoder(12)`
+- [x] `CorsConfig`: CorsConfigurationSource
+- [x] JSON 401/403 handlers (`RestAuthenticationEntryPoint`, `RestAccessDeniedHandler`) — uniform shape + traceId
+- [x] Security smoke test (401 + permitAll)
+- [x] Ekstra: `TenantFilter` security zincirinden ÖNCE (`FilterRegistrationBean`, order -101) çalışacak şekilde kayıtlı
 
-### Epic 2.4 — JWT Infrastructure (oauth2-resource-server + RSA)
+### Epic 2.4 — JWT Infrastructure (oauth2-resource-server + RSA) — DONE
 > jjwt yerine `spring-boot-starter-oauth2-resource-server` (Nimbus). RSA asimetrik imzalama (RS256). RISK-14: auto-config filter AKTİF EDİLMEZ, custom `JwtAuthenticationFilter` gerekli.
 
-- `pom.xml`: oauth2-resource-server (jjwt DEĞİL)
-- `RsaKeyProperties` record + `certs/*.pem` + `.gitignore` + openssl keygen docs
-- `JwtConfig` (JwtEncoder/JwtDecoder bean, RS256) + `JwtTokenProvider` (Spring JwtClaimsSet)
-- `JwtTokenProvider` unit test (üret -> decode -> claims)
-- `CustomUserDetails` + `CustomUserDetailsService` (tenant-aware, Group -> Role -> Permission)
-- `tokenInvalidBefore` field `UserAccount`'a + Flyway tenant migration
-- `JwtAuthenticationFilter` (cookie -> decode -> Redis blacklist check + perms -> DB `tokenInvalidBefore` -> SecurityContext)
-- SecurityConfig'e filter hook (`.oauth2ResourceServer()` ÇAĞIRMA — RISK-14)
-- Filter integration test (cookie -> auth, yok -> 401, revoked -> 401)
+- [x] `pom.xml`: oauth2-resource-server (jjwt DEĞİL)
+- [x] `RsaKeyProperties` record + `certs/*.pem` `.gitignore`'da + openssl keygen doc (RsaKeyProperties javadoc'unda) + **ephemeral key fallback** (dev/test, uyarı loglu)
+- [x] `JwtConfig` (JwtEncoder/JwtDecoder bean, RS256, shared KeyPair) + `RsaKeys` (PEM parse + ephemeral) + `JwtTokenProvider` (Spring JwtClaimsSet)
+- [x] `JwtTokenProvider` unit test (üret -> decode -> claims + tampered/expired reject)
+- [x] `CustomUserDetails` + `CustomUserDetailsService` (tenant-aware, Group -> Role -> Permission) + unit test
+- [x] `tokenInvalidBefore` field `UserAccount`'a — **zaten V1 migration + entity'de mevcut** (yeni migration gerekmedi)
+- [x] `JwtAuthenticationFilter` (cookie -> decode -> SecurityContext). **NOT:** Redis blacklist + DB `tokenInvalidBefore` kontrolü ERTENDİ (ilk-çalışan-login dilimi için imza+expiry yeterli; revoke logout/refresh ile 2.5/2.6'da)
+- [x] SecurityConfig'e filter hook (`.oauth2ResourceServer()` ÇAĞIRILMAZ — RISK-14)
+- [x] Filter integration test (cookie -> /me auth, yok -> 401) — `AuthControllerLoginTest` kapsar
 
 ### Epic 2.6 — Redis
 `RedisConfig`: RedisTemplate + serializer + connection test. `TokenBlacklistService` + unit test. `PermissionCacheService` (TTL 10dk) + unit test.
 
-### Epic 2.5 — Auth Endpoints
-- `AuthService.login()` iş mantığı
-- LoginRequest/LoginResponse DTO
-- `POST /login`: Set-Cookie + RefreshToken DB
-- Login integration test
-- `POST /refresh`
-- `POST /logout`: **Redis blacklist (current access token, granular)** + RefreshToken revoke. `tokenInvalidBefore` KULLANMA (multi-device korunsun).
-- `POST /register`: email domain + User
-- `GET /me`
-- Refresh token rotation + reuse detection (ihlal -> tüm token revoke + `tokenInvalidBefore`)
+### Epic 2.5 — Auth Endpoints (kısmen DONE — ilk çalışan login)
+- [x] `AuthService.login()` iş mantığı (BCrypt doğrulama, unknown/bad-password aynı `auth_bad_credentials`)
+- [x] LoginRequest/LoginResponse DTO
+- [x] `POST /login`: Set-Cookie (httpOnly `sf_access_token`) + body'de accessToken. **NOT:** RefreshToken DB ERTENDİ
+- [x] Login integration test (valid -> cookie+200, wrong -> 401, unknown -> 401)
+- [x] `GET /me` (claim'den principal, DB'siz)
+- [ ] `POST /refresh` (Redis + RefreshToken gerekli) — ertelendi
+- [ ] `POST /logout`: **Redis blacklist (current access token, granular)** + RefreshToken revoke. `tokenInvalidBefore` KULLANMA (multi-device korunsun). — ertelendi
+- [ ] `POST /register`: email domain + User — ertelendi
+- [ ] Refresh token rotation + reuse detection (ihlal -> tüm token revoke + `tokenInvalidBefore`) — ertelendi
 - ~~JwtAuthFilter blacklist hook~~ — CANCEL (`tokenInvalidBefore` ile gereksiz)
 
 ### Epic 2.7-2.8 — Wrap-up

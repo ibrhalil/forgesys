@@ -63,7 +63,17 @@ Not source code; runtime/operational files. Details in `infra/README.md`.
 - **Cyclic dependencies between modules are FORBIDDEN.** Dependency graph: `common` <- `persistence` <- `backend`. `frontend` is independent.
 - **Versions live in the root `<properties>`** (`spring-boot.version`, `java.version`). Module poms do not pin versions.
 - **IDs are UUID everywhere** (`GenerationType.UUID`). Table names use the `t_` prefix.
-- **Code style:** package `com.ibrhalil.systemforge.*`, DTOs are `record`, centralized error handling via `@RestControllerAdvice` (`ErrorResponse`), Lombok in the backend module.
+- **Code style:** package `com.ibrhalil.systemforge.*`, DTOs are `record`, centralized error handling via `@RestControllerAdvice` (`ApiErrorResponse` + `ErrorCode`), Lombok in the backend module.
+
+## Engineering principles
+
+General engineering conduct. Project-specific rules above take precedence; the system prompt covers comments, output brevity, and conventions.
+
+- **Investigate before implementing.** Search for existing implementations, reusable components, and conventions first. Prefer improving existing code over introducing new code. State assumptions explicitly when requirements are ambiguous.
+- **No unrequested features.** Solve exactly the requested problem — no gold plating, no speculative abstractions (interfaces/factories/builders/generics) that do not solve a real problem today.
+- **Query performance.** Check for N+1 before proposing ORM solutions; favor `@EntityGraph`/`JOIN FETCH` for lazy associations. Multi-tenant queries multiply cost — every query crosses a tenant schema.
+- **Thread safety.** `TenantContext` is a `ThreadLocal` — it does NOT propagate across `@Async`/executor threads without a `TaskDecorator` ([RISK-10](docs/DECISIONS.md#risk-10)). Always `clear()` in `finally`.
+- **Backward compatibility.** Do not break endpoint contracts (`/api/v1/*`) without explicit intent. Deprecate before removing; version when behavior changes.
 
 ## Test
 

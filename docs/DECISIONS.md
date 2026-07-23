@@ -95,16 +95,16 @@ Her kayıt:
 - **Durum:** Planlandı (Faz 2.0.B).
 
 ### RISK-13
-**BCrypt strength**
+**BCrypt strength (ÇÖZÜLDÜ)**
 - **Bağlam:** Mevcut `BCryptPasswordEncoder()` default strength 10. Güvenlik standardı 12.
 - **Karar:** Faz 2.3'te `BCryptPasswordEncoder(12)`'ye geçilecek. Migration stratejisi (mevcut hash'ler) önce spike ile netleştirilecek.
-- **Durum:** Açık. Faz 2.3.
+- **Durum:** ÇÖZÜLDÜ (Epic 2.3). Spike sonucu: BCrypt self-describing (cost factor hash'e gömülü) olduğu için mevcut strength-10 hash'ler hâlâ `matches()` ile validate olur; yenileri 12'de encode edilir → lazy migration (sonraki şifre değişiminde).
 
 ### RISK-14
-**oauth2-resource-server jwt filter aktif edilmez**
+**oauth2-resource-server jwt filter aktif edilmez (UYGULANDI)**
 - **Bağlam:** `spring-boot-starter-oauth2-resource-server` (Nimbus) RSA asimetrik imzalama (RS256) için seçildi (jjwt yerine). Ama auto-config filter `tokenInvalidBefore` check yapamaz.
-- **Karar:** `.oauth2ResourceServer().jwt()` auto-config filter **AKTİF EDİLMEZ**. Custom `JwtAuthenticationFilter` yazılır (cookie->decode->Redis blacklist check->DB `tokenInvalidBefore`->SecurityContext).
-- **Durum:** Planlandı (Faz 2.4).
+- **Karar:** `.oauth2ResourceServer().jwt()` auto-config filter **AKTİF EDİLMEZ**. Custom `JwtAuthenticationFilter` yazılır (cookie->decode->SecurityContext).
+- **Durum:** UYGULANDI (Epic 2.4). **NOT:** İlk-çalışan-login diliminde filter sadece imza+expiry doğrular; Redis blacklist + DB `tokenInvalidBefore` revoke kontrolü logout/refresh ile 2.5/2.6'da gelir.
 
 ### RISK-15
 **DateTimeProvider bug (ÇÖZÜLDÜ)**

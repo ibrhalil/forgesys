@@ -94,6 +94,11 @@ infra/logs/*
 infra/ssl/*
 !infra/ssl/.gitkeep
 
+# JWT RSA signing keys — secrets, never committed (AGENTS.md "Never" rule).
+# Dev/test auto-generates an ephemeral key pair when these are absent.
+certs/*.pem
+!certs/.gitkeep
+
 # Externalized config overrides — may contain prod secrets.
 # infra/config/ stays committable for non-secret templates; if you drop
 # secrets here, gitignore them explicitly by filename.
