@@ -1,8 +1,11 @@
 package com.ibrhalil.systemforge.exception;
 
 /**
- * Base class for business/domain exceptions that carry a stable {@link ErrorCode}.
- * Subclasses are mapped to the uniform {@link ApiErrorResponse} by
+ * Business/domain exceptions that carry a stable {@link ErrorCode}. Concrete subclasses
+ * ({@link AuthException}, {@link ResourceNotFoundException}) model well-known categories,
+ * but a {@code BusinessException} may also be thrown directly with a specific
+ * {@link ErrorCode} (e.g. {@code USER_EMAIL_TAKEN}) for one-off business rule violations.
+ * All variants are mapped to the uniform {@link ApiErrorResponse} by
  * {@link GlobalExceptionHandler}.
  *
  * <p>This hierarchy lives in the {@code backend} module (not {@code common})
@@ -11,21 +14,21 @@ package com.ibrhalil.systemforge.exception;
  * {@code TenantNotFoundException} remain plain {@code RuntimeException}s and are
  * translated to an {@code ErrorCode} by the handler.
  */
-public abstract class BusinessException extends RuntimeException {
+public class BusinessException extends RuntimeException {
 
     private final ErrorCode errorCode;
 
-    protected BusinessException(ErrorCode errorCode, String message) {
+    public BusinessException(ErrorCode errorCode, String message) {
         super(message);
         this.errorCode = errorCode;
     }
 
-    protected BusinessException(ErrorCode errorCode, String message, Throwable cause) {
+    public BusinessException(ErrorCode errorCode, String message, Throwable cause) {
         super(message, cause);
         this.errorCode = errorCode;
     }
 
-    protected BusinessException(ErrorCode errorCode) {
+    public BusinessException(ErrorCode errorCode) {
         this(errorCode, errorCode.defaultMessage());
     }
 

@@ -150,6 +150,29 @@ class AuthControllerLoginTest {
                 .andExpect(jsonPath("$.code").value("auth_unauthenticated"));
     }
 
+    @Test
+    void logoutRequiresAuthentication() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/logout"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("auth_unauthenticated"));
+    }
+
+    @Test
+    void logoutExpiresAccessTokenCookie() throws Exception {
+        String token = loginAndGetToken();
+
+        mockMvc.perform(post("/api/v1/auth/logout").cookie(new Cookie(COOKIE_NAME, token)))
+                .andExpect(status().isNoContent())
+                .andExpect(result -> {
+                    String cookie = result.getResponse().getHeader(HttpHeaders.SET_COOKIE);
+                    if (cookie == null
+                            || !cookie.startsWith(COOKIE_NAME + "=")
+                            || !cookie.contains("Max-Age=0")) {
+                        throw new AssertionError("logout did not expire the access-token cookie");
+                    }
+                });
+    }
+
     /**
      * Lazy pepper migration (K-23): a user seeded with a legacy pepper-less BCrypt
      * hash (pre-K-23 format) logs in successfully, and the stored hash is then

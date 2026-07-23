@@ -82,7 +82,7 @@ public class TenantFilter extends OncePerRequestFilter {
         if (isDevProfile) {
             String headerTenant = request.getHeader(TENANT_HEADER);
             if (StringUtils.hasText(headerTenant)) {
-                return headerTenant;
+                return resolveBySubdomain(headerTenant);
             }
         }
         return null;

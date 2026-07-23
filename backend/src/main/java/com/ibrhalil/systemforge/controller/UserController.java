@@ -1,0 +1,90 @@
+package com.ibrhalil.systemforge.controller;
+
+import com.ibrhalil.systemforge.dto.AdminPasswordResetRequest;
+import com.ibrhalil.systemforge.dto.AssignGroupsRequest;
+import com.ibrhalil.systemforge.dto.AssignRolesRequest;
+import com.ibrhalil.systemforge.dto.UserCreateRequest;
+import com.ibrhalil.systemforge.dto.UserResponse;
+import com.ibrhalil.systemforge.dto.UserUpdateRequest;
+import com.ibrhalil.systemforge.service.UserService;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.UUID;
+
+@RestController
+@RequestMapping("/api/v1/users")
+@RequiredArgsConstructor
+public class UserController {
+
+    private final UserService userService;
+
+    @GetMapping
+    @PreAuthorize("hasAuthority('iam:user:read')")
+    public ResponseEntity<Page<UserResponse>> list(@PageableDefault(sort = "email") Pageable pageable) {
+        return ResponseEntity.ok(userService.findAll(pageable));
+    }
+
+    @GetMapping("/{id}")
+    @PreAuthorize("hasAuthority('iam:user:read')")
+    public ResponseEntity<UserResponse> get(@PathVariable UUID id) {
+        return ResponseEntity.ok(userService.findById(id));
+    }
+
+    @PostMapping
+    @PreAuthorize("hasAuthority('iam:user:write')")
+    public ResponseEntity<UserResponse> create(@Valid @RequestBody UserCreateRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(userService.create(request));
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('iam:user:write')")
+    public ResponseEntity<UserResponse> update(@PathVariable UUID id,
+                                               @Valid @RequestBody UserUpdateRequest request) {
+        return ResponseEntity.ok(userService.update(id, request));
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('iam:user:delete')")
+    public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        userService.delete(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/{id}/roles")
+    @PreAuthorize("hasAuthority('iam:user:write')")
+    public ResponseEntity<UserResponse> setRoles(@PathVariable UUID id,
+                                                 @Valid @RequestBody AssignRolesRequest request) {
+        return ResponseEntity.ok(userService.setRoles(id, request));
+    }
+
+    @PutMapping("/{id}/groups")
+    @PreAuthorize("hasAuthority('iam:user:write')")
+    public ResponseEntity<UserResponse> setGroups(@PathVariable UUID id,
+                                                  @Valid @RequestBody AssignGroupsRequest request) {
+        return ResponseEntity.ok(userService.setGroups(id, request));
+    }
+
+    @PatchMapping("/{id}/password")
+    @PreAuthorize("hasAuthority('iam:user:write')")
+    public ResponseEntity<Void> resetPassword(@PathVariable UUID id,
+                                              @Valid @RequestBody AdminPasswordResetRequest request) {
+        userService.resetPassword(id, request);
+        return ResponseEntity.noContent().build();
+    }
+}

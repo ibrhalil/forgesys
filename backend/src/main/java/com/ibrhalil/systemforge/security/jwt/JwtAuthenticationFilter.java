@@ -72,15 +72,24 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     private String extractToken(HttpServletRequest request) {
+        // 1. Cookie-based auth (browser sessions)
         Cookie[] cookies = request.getCookies();
-        if (cookies == null) {
-            return null;
+        if (cookies != null) {
+            String cookieToken = Arrays.stream(cookies)
+                    .filter(c -> cookieName.equals(c.getName()))
+                    .map(Cookie::getValue)
+                    .findFirst()
+                    .orElse(null);
+            if (cookieToken != null) {
+                return cookieToken;
+            }
         }
-        return Arrays.stream(cookies)
-                .filter(c -> cookieName.equals(c.getName()))
-                .map(Cookie::getValue)
-                .findFirst()
-                .orElse(null);
+        // 2. Bearer token header (API clients, cURL, jobs)
+        String bearerHeader = request.getHeader("Authorization");
+        if (StringUtils.hasText(bearerHeader) && bearerHeader.startsWith("Bearer ")) {
+            return bearerHeader.substring(7);
+        }
+        return null;
     }
 
     @SuppressWarnings("unchecked")
