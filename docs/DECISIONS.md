@@ -78,6 +78,19 @@ Her kayıt:
 - **Durum:** PLANLANDI. Katman 1 (partial index) uygulandı (RISK-17, Epic 2.0.B). Katman 2 (fiziksel schema rename + reaktivasyon onay maili) platform admin tooling / Faz 6 (Billing & Abonelik) kapsamında gelecek.
 - **Etki:** RISK-17 kapsamı açıkça `t_companies` dahil 9 index olacak şekilde tasarlandı (sadece tenant-side değil) — bu senaryoyu destekler. `CompanyStatus` yaşam döngüsü (ACTIVE → SUSPENDED → TERMINATED + reaktivasyon) Faz 6 ile netleşecek.
 
+### K-23
+**Global Password Pepper (HMAC pre-hash + BCrypt)**
+- **Bağlam:** Şifre hash'leri DB'de BCrypt(12) olarak saklanıyor (RISK-13). BCrypt salt'ı hash'e gömüyor (per-user, standart) ama DB leak senaryosunda saldırgan hash tablosunu alıp offline brute-force yapabilir — pepper (DB dışında tutulan global secret) olmadan tek başına BCrypt yetersiz. Per-tenant pepper değerlendirildi: DB leak tehdit modeli için **ek güvenlik sağlamaz** (saldırgan DB'yi okuyor, pepper DB'de değilse zaten göremiyor — per-tenant'ın ek katkısı ancak "bir tenant'ın pepper'ı bağımsız sızarsa" senaryosunda, ki bu başka tehdit). Per-tenant pepper N key yönetimi + pepper kaybında o tenant'ın tüm şifreleri kurtarılamaz riskini getirir.
+- **Karar:** **Global** pepper, BCrypt'in native pepper desteği olmadığı için **HMAC-SHA256 pre-hash** stratejisiyle (OWASP önerisi): raw şifre önce `HMAC-SHA256(pepper, password)` → Base64 (32 byte → 44 char, BCrypt 72-byte limit altında), sonra BCrypt(12). `PepperingPasswordEncoder` BCrypt'i wrap'lar. Pepper'lı hash'ler `{sf-peppered}` marker prefix'i ile işaretlenir; legacy pepper'sız BCrypt hash'ler (`$2a$12$...`) hâlâ `matches()` ile geçerli ve ilk başarılı login'de pepper'lı formata **lazy rehash** edilir (RISK-13 felsefesiyle aynı). Pepper `systemforge.security.password-pepper` / `PASSWORD_PEPPER` env var'ından; **boşsa startup fail-fast** (SecurityConfig). test/dev profilleri non-secret default sağlar; prod mutlaka gerçek secret sağlamalı.
+- **Durum:** Uygulandı.
+- **Etki:**
+  - **DB leak tek başına artık hash kırımı için yetersiz** — pepper DB dışında (env/secret manager/config overlay).
+  - **Pepper rotasyonu ŞU AN DESTEKLENMİYOR:** pepper değişirse tüm pepper'lı hash'ler geçersiz olur (legacy hash'ler hâlâ doğrulanır ama pepper'lı olanlar değil). Rotasyon gerektiğinde özel migration akışı tasarlanmalı (tüm kullanıcılar şifre sıfırlama).
+  - Pepper'ı asla logla/commit etme (AGENTS.md "Never log sensitive data" kuralı).
+  - **Per-tenant pepper** yalnızca BYOK/regülasyon (KVKK/HIPAA) gerektiğinde tekrar değerlendirilmeli — ve o zaman JWT signing key'leri de per-tenant yapılmalı (tutarlı crypto isolation).
+  - `AuthService.login` artık read-write transaction (rehash write edebilir); pepper'lı user'larda no-op.
+  - Mevcut `DelegatingPasswordEncoder`'a geçiş ertelendi (over-engineering şu an); algoritma değişimi (Argon2id) istenirse marker+wrapper yapısı taşınabilir.
+
 ---
 
 ## Risk Kayıtları (RISK-XX)

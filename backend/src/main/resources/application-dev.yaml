@@ -36,3 +36,9 @@ logging:
   # Set LOGGING_FILE_PATH env to override (e.g. when running outside the repo).
   file:
     path: ${LOGGING_FILE_PATH:infra/logs}
+
+systemforge:
+  security:
+    # Dev-only placeholder pepper (NOT a real secret). Override with PASSWORD_PEPPER
+    # when testing against real data. Prod must never use this default.
+    password-pepper: ${PASSWORD_PEPPER:dev-pepper-not-for-production}

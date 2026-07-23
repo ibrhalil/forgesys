@@ -1,19 +1,21 @@
 package com.ibrhalil.systemforge.config;
 
+import com.ibrhalil.systemforge.security.PepperingPasswordEncoder;
 import com.ibrhalil.systemforge.security.RestAccessDeniedHandler;
 import com.ibrhalil.systemforge.security.RestAuthenticationEntryPoint;
 import com.ibrhalil.systemforge.security.jwt.JwtAuthenticationFilter;
 import com.ibrhalil.systemforge.tenant.TenantFilter;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.util.StringUtils;
 
 
 /**
@@ -21,9 +23,14 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  * JWT auth (tokens arrive in Chunk C/D). {@code /api/v1/auth/**} stays public (tenant
  * signup + login); everything else requires authentication.
  *
- * <p>{@link PasswordEncoder} uses BCrypt strength 12 (RISK-13). Existing strength-10
- * hashes still validate (BCrypt is self-describing — the cost factor is embedded in the
- * hash); new encodings use 12, so migration is lazy on the next password change.
+ * <p>{@link PasswordEncoder} is a {@link PepperingPasswordEncoder}: BCrypt strength 12
+ * (RISK-13) keyed with a global pepper via HMAC-SHA256 pre-hash (K-23). The pepper
+ * defends against a standalone DB leak — the hashes are uncrackable without the
+ * pepper, which lives outside the DB (env var / secret manager). Legacy pepper-less
+ * BCrypt hashes (pre-K-23) still validate and are lazily rehashed to the peppered
+ * format on the next successful login. The pepper is read from
+ * {@code systemforge.security.password-pepper}; a blank value fails startup fast
+ * (the {@code test}/{@code dev} profiles ship a non-secret default).
  *
  * <p>{@link TenantFilter} is registered to run BEFORE the Spring Security filter chain
  * (security order -100) so that tenant context is resolved for every request before the
@@ -53,8 +60,16 @@ public class SecurityConfig {
     }
 
     @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder(12);
+    public PasswordEncoder passwordEncoder(
+            @Value("${systemforge.security.password-pepper:}") String pepper) {
+        if (!StringUtils.hasText(pepper)) {
+            throw new IllegalStateException(
+                    "systemforge.security.password-pepper is not set. " +
+                    "Provide a non-blank secret via the PASSWORD_PEPPER env var " +
+                    "(prod) or the systemforge.security.password-pepper property " +
+                    "(the test/dev profiles ship a default).");
+        }
+        return new PepperingPasswordEncoder(pepper, 12);
     }
 
     /**

@@ -27,3 +27,9 @@ management:
 systemforge:
   multi-tenancy:
     base-domain: ${BASE_DOMAIN:localhost}
+  security:
+    # Global password pepper (K-23). HMAC-SHA256 pre-hash key combined with BCrypt
+    # so a DB leak alone cannot brute-force password hashes. MUST be non-blank —
+    # a blank value fails startup (SecurityConfig). NOT for the test/dev defaults.
+    # Prod: set via PASSWORD_PEPPER env var (32+ random chars). Never log/commit.
+    password-pepper: ${PASSWORD_PEPPER:}
