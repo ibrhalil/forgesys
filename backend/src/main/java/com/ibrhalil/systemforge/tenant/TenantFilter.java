@@ -4,6 +4,9 @@ import com.ibrhalil.systemforge.common.exception.TenantNotFoundException;
 import com.ibrhalil.systemforge.common.tenant.TenantContext;
 import com.ibrhalil.systemforge.entity.Company;
 import com.ibrhalil.systemforge.entity.CompanyStatus;
+import com.ibrhalil.systemforge.exception.ApiErrorFactory;
+import com.ibrhalil.systemforge.exception.ApiErrorResponse;
+import com.ibrhalil.systemforge.exception.ErrorCode;
 import com.ibrhalil.systemforge.persistence.repository.CompanyRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -12,10 +15,12 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
+import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 
@@ -26,13 +31,16 @@ public class TenantFilter extends OncePerRequestFilter {
     private static final String TENANT_HEADER = "X-Tenant-ID";
 
     private final CompanyRepository companyRepository;
+    private final ObjectMapper objectMapper;
     private final String baseDomain;
     private final boolean isDevProfile;
 
     public TenantFilter(CompanyRepository companyRepository,
+                        ObjectMapper objectMapper,
                         @Value("${systemforge.multi-tenancy.base-domain:localhost}") String baseDomain,
                         @Value("${spring.profiles.active:dev}") String activeProfiles) {
         this.companyRepository = companyRepository;
+        this.objectMapper = objectMapper;
         this.baseDomain = baseDomain;
         this.isDevProfile = activeProfiles.contains("dev");
     }
@@ -40,7 +48,10 @@ public class TenantFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
-        return path.startsWith("/api/v1/auth/") || path.startsWith("/actuator/");
+        // Only tenant-creation endpoints lack a tenant context. Login and /me ARE
+        // tenant-specific (you authenticate against a company's schema resolved by
+        // subdomain), so they go through normal tenant resolution.
+        return path.startsWith("/api/v1/auth/company/") || path.startsWith("/actuator/");
     }
 
     @Override
@@ -53,7 +64,7 @@ public class TenantFilter extends OncePerRequestFilter {
                 TenantContext.setCurrentTenant(schemaName);
             }
         } catch (TenantNotFoundException ex) {
-            sendErrorResponse(response, HttpServletResponse.SC_BAD_REQUEST, ex.getMessage());
+            sendErrorResponse(response, request, ex.getMessage());
             return;
         }
         try {
@@ -99,10 +110,14 @@ public class TenantFilter extends OncePerRequestFilter {
                         "Tenant not found or inactive for subdomain: " + subdomain));
     }
 
-    private void sendErrorResponse(HttpServletResponse response, int status, String message) throws IOException {
-        response.setStatus(status);
+    private void sendErrorResponse(HttpServletResponse response, HttpServletRequest request, String message) throws IOException {
+        ApiErrorResponse body = ApiErrorFactory.of(
+                ErrorCode.TENANT_NOT_FOUND,
+                message,
+                request.getRequestURI()
+        );
+        response.setStatus(HttpStatus.BAD_REQUEST.value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        response.getWriter().write("""
-                {"status":%d,"error":"Bad Request","message":"%s"}""".formatted(status, message));
+        objectMapper.writeValue(response.getWriter(), body);
     }
 }

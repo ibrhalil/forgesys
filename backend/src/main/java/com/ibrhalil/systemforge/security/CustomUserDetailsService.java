@@ -1,0 +1,70 @@
+package com.ibrhalil.systemforge.security;
+
+import com.ibrhalil.systemforge.common.tenant.TenantContext;
+import com.ibrhalil.systemforge.entity.Group;
+import com.ibrhalil.systemforge.entity.Permission;
+import com.ibrhalil.systemforge.entity.Role;
+import com.ibrhalil.systemforge.entity.User;
+import com.ibrhalil.systemforge.entity.UserAccount;
+import com.ibrhalil.systemforge.persistence.repository.UserRepository;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.HashSet;
+import java.util.Set;
+
+/**
+ * Loads a user (by email, within the current tenant schema resolved by
+ * {@code TenantFilter}) and resolves its effective authorities:
+ * <strong>direct user roles</strong> + <strong>active group roles</strong>, each
+ * expanded to their permissions ({@code {module}:{resource}:{action}}).
+ *
+ * <p>This runs at login only. The JWT filter reconstructs the principal from claims
+ * on subsequent requests (no DB load), so permission changes apply on the next token.
+ */
+@Service
+public class CustomUserDetailsService implements UserDetailsService {
+
+    private final UserRepository userRepository;
+
+    public CustomUserDetailsService(UserRepository userRepository) {
+        this.userRepository = userRepository;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CustomUserDetails loadUserByUsername(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found for email: " + email));
+        UserAccount account = user.getUserAccount();
+        if (account == null) {
+            throw new UsernameNotFoundException("No account for user: " + email);
+        }
+        return CustomUserDetails.from(user, account, resolveAuthorities(user), TenantContext.getCurrentTenant().orElse(null));
+    }
+
+    static Set<GrantedAuthority> resolveAuthorities(User user) {
+        Set<GrantedAuthority> authorities = new HashSet<>();
+        for (Role role : user.getRoles()) {
+            addPermissions(authorities, role);
+        }
+        for (Group group : user.getGroups()) {
+            if (group.isActive()) {
+                for (Role role : group.getRoles()) {
+                    addPermissions(authorities, role);
+                }
+            }
+        }
+        return authorities;
+    }
+
+    private static void addPermissions(Set<GrantedAuthority> authorities, Role role) {
+        for (Permission permission : role.getPermissions()) {
+            authorities.add(new SimpleGrantedAuthority(permission.getName()));
+        }
+    }
+}

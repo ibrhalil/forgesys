@@ -19,7 +19,7 @@
 - Flyway per-schema migration (public auto-config + tenant programmatik)
 - Tenant signup endpoint: `POST /api/v1/auth/company/register` — Company + schema + admin user oluşturur
 - Entity hiyerarşisi: UUID, soft delete, optimistic locking, Spring Data auditing
-- BCrypt password encoding, Bean Validation, merkezi hata yönetimi (`ErrorResponse`)
+- BCrypt password encoding, Bean Validation, merkezi hata yönetimi (`ApiErrorResponse` + `ErrorCode`)
 - Docker: PostgreSQL + Redis + app (non-root), layered jars, actuator health
 
 **Planlanan (kararlar kilitlendi — yol haritası [`docs/ROADMAP.md`](docs/ROADMAP.md)):**
@@ -203,7 +203,7 @@ npm run dev                      # http://localhost:3000 (/api -> :8080 proxy)
 
 ## API Endpoint'leri
 
-Tüm endpoint'ler `/api/v1/*` prefix'i altında. Hata yanıtları tek tip `ErrorResponse` formatında (`GlobalExceptionHandler`).
+Tüm endpoint'ler `/api/v1/*` prefix'i altında. Hata yanıtları tek tip `ApiErrorResponse` formatındadır (`code` + `traceId` + `fields[]`, `GlobalExceptionHandler`).
 
 | Method | Path | Açıklama | Auth |
 |--------|------|----------|------|
