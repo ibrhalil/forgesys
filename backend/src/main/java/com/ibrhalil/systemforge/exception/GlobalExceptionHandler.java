@@ -6,10 +6,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 
 import java.util.List;
 
@@ -47,6 +49,29 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleIllegalArgument(IllegalArgumentException ex, HttpServletRequest request) {
         log.warn("Illegal argument: {} at {}", ex.getMessage(), request.getRequestURI());
         return build(ErrorCode.BUSINESS_ERROR, ex.getMessage(), request.getRequestURI());
+    }
+
+    /**
+     * Method-level {@code @PreAuthorize} denials throw {@code AuthorizationDeniedException}
+     * (a subclass of {@link AccessDeniedException}) from the controller method, so they
+     * surface at the MVC layer and are caught here rather than by the filter-chain
+     * {@code RestAccessDeniedHandler}. Mapped to 403 to match the wire contract.
+     */
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiErrorResponse> handleAccessDenied(AccessDeniedException ex, HttpServletRequest request) {
+        log.warn("Access denied at {}: {}", request.getRequestURI(), ex.getMessage());
+        return build(ErrorCode.AUTH_ACCESS_DENIED, ErrorCode.AUTH_ACCESS_DENIED.defaultMessage(), request.getRequestURI());
+    }
+
+    /**
+     * Malformed JSON body (e.g. an unparseable/invalid enum value like
+     * {@code {"status":"FOO"}}). Without this the catch-all maps it to 500; the body is
+     * a client error, so it maps to {@code validation_error} (400).
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiErrorResponse> handleMalformedBody(HttpMessageNotReadableException ex, HttpServletRequest request) {
+        log.warn("Malformed request body at {}: {}", request.getRequestURI(), ex.getMessage());
+        return build(ErrorCode.VALIDATION_ERROR, "Malformed request body", request.getRequestURI());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

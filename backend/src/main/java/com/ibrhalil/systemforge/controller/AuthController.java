@@ -70,6 +70,19 @@ public class AuthController {
         return ResponseEntity.ok(new MeResponse(user.getUserId(), user.getEmail(), user.getTenantSchema(), authorities));
     }
 
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout(HttpServletResponse response) {
+        ResponseCookie expiredCookie = ResponseCookie.from(cookieName, "")
+                .httpOnly(true)
+                .secure(cookieSecure)
+                .sameSite(cookieSameSite)
+                .path("/")
+                .maxAge(0)
+                .build();
+        response.addHeader(HttpHeaders.SET_COOKIE, expiredCookie.toString());
+        return ResponseEntity.noContent().build();
+    }
+
     private String buildAccessTokenCookie(String token, long expiresInSeconds) {
         return ResponseCookie.from(cookieName, token)
                 .httpOnly(true)

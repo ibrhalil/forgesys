@@ -1,6 +1,7 @@
 package com.ibrhalil.systemforge.service;
 
 import com.ibrhalil.systemforge.common.tenant.TenantContext;
+import com.ibrhalil.systemforge.config.RbacSeeder;
 import com.ibrhalil.systemforge.dto.CompanyRegisterRequest;
 import com.ibrhalil.systemforge.entity.Company;
 import com.ibrhalil.systemforge.entity.CompanyStatus;
@@ -11,6 +12,7 @@ import com.ibrhalil.systemforge.persistence.repository.CompanyRepository;
 import com.ibrhalil.systemforge.persistence.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -30,6 +32,8 @@ public class TenantProvisioningService {
     private final PasswordEncoder passwordEncoder;
     private final DataSource dataSource;
     private final TenantMigrationSupport tenantMigrationSupport;
+    // Optional: RbacSeeder is @Profile("!test") — absent in tests, which never exercise provisioning.
+    private final ObjectProvider<RbacSeeder> rbacSeederProvider;
 
     public Company provisionTenant(CompanyRegisterRequest request) {
         log.info("Provisioning new tenant: {}", request.subdomain());
@@ -104,6 +108,9 @@ public class TenantProvisioningService {
             user.setUserProfile(profile);
 
             userRepository.save(user);
+            // Seed RBAC (permission catalog + Admin role) and grant Admin to the new
+            // (role-less) user — runs in the tenant context set above. No-op in tests.
+            rbacSeederProvider.ifAvailable(RbacSeeder::seedForCurrentTenant);
             log.info("Admin user created for tenant schema: {}", schemaName);
         } finally {
             TenantContext.clear();
