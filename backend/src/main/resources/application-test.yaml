@@ -16,3 +16,9 @@ spring:
     console:
       enabled: false
 
+systemforge:
+  security:
+    # Non-secret placeholder pepper for the test profile only. Lets the
+    # PepperingPasswordEncoder bean load without a PASSWORD_PEPPER env var.
+    password-pepper: test-pepper-not-a-real-secret
+

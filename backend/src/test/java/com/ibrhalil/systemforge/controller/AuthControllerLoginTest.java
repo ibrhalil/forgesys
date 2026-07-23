@@ -16,6 +16,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -29,6 +30,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * End-to-end login slice (Epic 2.5 minimal): credentials -> RS256 access token in an
@@ -146,6 +148,46 @@ class AuthControllerLoginTest {
         mockMvc.perform(get("/api/v1/auth/me"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("auth_unauthenticated"));
+    }
+
+    /**
+     * Lazy pepper migration (K-23): a user seeded with a legacy pepper-less BCrypt
+     * hash (pre-K-23 format) logs in successfully, and the stored hash is then
+     * rehashed to the peppered format on the next successful login.
+     */
+    @Test
+    void legacyHashIsUpgradedToPepperedOnSuccessfulLogin() throws Exception {
+        String legacyEmail = "legacy@acme.com";
+        String legacyPassword = "legacy-pass-123";
+
+        User legacyUser = new User();
+        legacyUser.setUsername("legacy");
+        legacyUser.setEmail(legacyEmail);
+        legacyUser.setPassword(new BCryptPasswordEncoder(12).encode(legacyPassword));
+        legacyUser.setEmailVerified(true);
+
+        UserAccount legacyAccount = new UserAccount();
+        legacyAccount.setUser(legacyUser);
+        legacyAccount.setEnabled(true);
+        legacyUser.setUserAccount(legacyAccount);
+        userRepository.save(legacyUser);
+        entityManager.flush();
+        entityManager.clear();
+
+        String storedBefore = userRepository.findByEmail(legacyEmail).orElseThrow().getPassword();
+        assertThat(storedBefore).startsWith("$2a$12$");
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"legacy@acme.com","password":"legacy-pass-123"}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value(legacyEmail));
+
+        String storedAfter = userRepository.findByEmail(legacyEmail).orElseThrow().getPassword();
+        assertThat(storedAfter).startsWith("{sf-peppered}");
+        assertThat(passwordEncoder.upgradeEncoding(storedAfter)).isFalse();
+        assertThat(storedAfter).isNotEqualTo(storedBefore);
     }
 
     private String loginAndGetToken() throws Exception {
