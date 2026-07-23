@@ -4,13 +4,13 @@
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>com.ibrhalil</groupId>
-        <artifactId>systemforge</artifactId>
-        <version>0.0.3</version>
+        <artifactId>forgesys</artifactId>
+        <version>0.0.4</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
     <artifactId>frontend</artifactId>
     <name>frontend</name>
-    <description>Frontend module for SystemForge SaaS platform</description>
+    <description>Frontend module for ForgeSys SaaS platform</description>
     <packaging>pom</packaging>
 
     <properties>

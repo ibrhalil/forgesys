@@ -35,7 +35,7 @@ management:
 
 logging:
   level:
-    com.ibrhalil.systemforge: INFO
+    com.ibrhalil.forgesys: INFO
     org.hibernate.SQL: WARN
   # File appender — destination provided via env (default /app/logs in container).
   # Spring Boot writes spring.log under this directory with built-in rotation

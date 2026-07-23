@@ -53,7 +53,7 @@ src/main/resources/db/migration/
 
 ## Repository
 
-Package `com.ibrhalil.systemforge.persistence.repository`. Extends `JpaRepository`. Current:
+Package `com.ibrhalil.forgesys.persistence.repository`. Extends `JpaRepository`. Current:
 - `CompanyRepository` (`findBySubdomain`, `findByEmailDomain`, `findBySchemaName`)
 - `UserRepository` (`findByEmail`, `findByUsername`)
 - `RefreshTokenRepository` (`findByToken`)
@@ -63,6 +63,6 @@ Package `com.ibrhalil.systemforge.persistence.repository`. Extends `JpaRepositor
 ## Gotchas
 
 - **`ddl-auto=none` is MANDATORY** (NEVER `validate`). Schema-per-tenant + lazy tenant schema means `validate` at startup tries to verify every entity against the `public` schema -> `missing table` crash. The schema lives entirely in Flyway. (Test profile exception: `create-drop` + `flyway.enabled=false`.)
-- **`@EntityScan("com.ibrhalil.systemforge.entity")`** (entities live in the `entity` package, NOT `persistence.entity`). Repositories live in `com.ibrhalil.systemforge.persistence.repository`. This split is wired by an explicit scan in `MultiTenancyJpaConfig` (in backend).
+- **`@EntityScan("com.ibrhalil.forgesys.entity")`** (entities live in the `entity` package, NOT `persistence.entity`). Repositories live in `com.ibrhalil.forgesys.persistence.repository`. This split is wired by an explicit scan in `MultiTenancyJpaConfig` (in backend).
 - **`hashCode()` ([DEBT-7](../docs/DECISIONS.md#debt-7) — RESOLVED):** `BaseEntity`/`GeneratedIdAuditEntity` use `id == null ? System.identityHashCode(this) : id.hashCode()` (ID-based). Do NOT put a transient (pre-persist) entity into a `HashSet`/`HashMap` key and look it up after persist — the ID flips `null→UUID` and the hash changes. Entities loaded from the DB are fine.
 - **Soft-delete + UNIQUE ([RISK-17](../docs/DECISIONS.md#risk-17) — RESOLVED):** DB-level UNIQUE conflicts with soft delete (deleted row remains). Partial index required: `CREATE UNIQUE INDEX ... WHERE is_deleted = false`. Applied in `public/V2` + `tenant/V2` for all `SoftDeleteAuditEntity` subclasses — public `t_companies` (name/subdomain/email_domain/schema_name) + tenant `t_users`(username,email)/`t_roles`/`t_permissions`/`t_groups`(name). `GeneratedIdAuditEntity` subclasses (`RefreshToken`) and join tables keep normal UNIQUE.

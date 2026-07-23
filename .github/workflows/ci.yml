@@ -34,7 +34,7 @@ jobs:
       # Sadece backend + upstream (common, persistence) build edilir. frontend
       # modülü atlanır çünkü paralel "frontend" job'ında lint+build koşar; böylece
       # npm install/build iki kez çalışmaz. backend testleri static resource'lara
-      # bağımlı değil (AuditingTest, SystemforgeApplicationTests).
+      # bağımlı değil (AuditingTest, ForgeSysApplicationTests).
       - name: Build & Test
         run: ./mvnw --no-transfer-progress clean install -pl backend -am
 

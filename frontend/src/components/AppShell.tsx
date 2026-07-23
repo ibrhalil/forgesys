@@ -30,7 +30,7 @@ export function AppShell() {
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-accent to-accent-blue text-lg font-bold text-white shadow-lg shadow-accent/40">
             SF
           </div>
-          <h2 className="m-0 text-xl font-semibold tracking-tight text-white">SystemForge</h2>
+          <h2 className="m-0 text-xl font-semibold tracking-tight text-white">ForgeSys</h2>
         </div>
 
         <nav className="flex flex-1 flex-col gap-2">

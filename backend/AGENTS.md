@@ -2,14 +2,14 @@
 
 ## Module
 
-Spring Boot application — controller/service/security/config. Depends on `common` + `persistence`. Only this module produces an executable jar (`systemforge-backend.jar`). General rules from the root AGENTS.md apply.
+Spring Boot application — controller/service/security/config. Depends on `common` + `persistence`. Only this module produces an executable jar (`forgesys-backend.jar`). General rules from the root AGENTS.md apply.
 
 For commands see [README](../README.md#build-komutları). Backend summary: `./mvnw -pl backend spring-boot:run` (NOT from root, always `-pl backend`), `./mvnw -pl backend test -Dtest=ClassName#method`.
 
 ## Package layout
 
-Root package `com.ibrhalil.systemforge` (NOT a `.backend` subpackage):
-- `SystemforgeApplication` — main.
+Root package `com.ibrhalil.forgesys` (NOT a `.backend` subpackage):
+- `ForgeSysApplication` — main.
 - `tenant/` — `TenantFilter` (subdomain resolution).
 - `controller/` — REST (`/api/v1/*`). `[PHASE 3]` `modules/` subpackage.
 - `service/` — business logic incl. `TenantProvisioningService`, `TenantMigrationSupport` (shared programmatic tenant Flyway). `[PHASE 3]` `modules/` subpackage.
@@ -66,13 +66,13 @@ Root package `com.ibrhalil.systemforge` (NOT a `.backend` subpackage):
 Config profiles (dev/prod/test) are the single source: [ARCHITECTURE.md - Configuration Profiles](../docs/ARCHITECTURE.md#konfigürasyon-profilleri).
 
 - `application.yaml` (base) + `application-dev.yaml` + `application-prod.yaml` + `application-test.yaml`. Active profile via `SPRING_PROFILES_ACTIVE` (default `dev`).
-- `MultiTenancyJpaConfig`: `@EntityScan("com.ibrhalil.systemforge.entity")` + `@EnableJpaRepositories("com.ibrhalil.systemforge.persistence.repository")` + `@EnableJpaAuditing` + Hibernate multi-tenancy beans + `DateTimeProvider` (UTC, [RISK-15](../docs/DECISIONS.md#risk-15)) + `AuditorAware` (hardcoded `"system"`).
+- `MultiTenancyJpaConfig`: `@EntityScan("com.ibrhalil.forgesys.entity")` + `@EnableJpaRepositories("com.ibrhalil.forgesys.persistence.repository")` + `@EnableJpaAuditing` + Hibernate multi-tenancy beans + `DateTimeProvider` (UTC, [RISK-15](../docs/DECISIONS.md#risk-15)) + `AuditorAware` (hardcoded `"system"`).
 
 ## Gotchas
 
 - **`AuditorAware` is hardcoded to `"system"`** ([RISK-3](../docs/DECISIONS.md#risk-3)) — once auth lands it must read the real userId from SecurityContext. Signup endpoints are always audited as `"system"` (no authenticated user in the tenant-signup context) — this is expected, not a bug.
-- **`SecurityConfig`** (Epic 2.3 — DONE): `spring-boot-starter-security` is now present. The `SecurityFilterChain` is STATELESS + CSRF-disabled, permits `/api/v1/auth/**` + actuator health/info, authenticates the rest, and wires the JSON `RestAuthenticationEntryPoint`/`RestAccessDeniedHandler`. The password encoder is a `PepperingPasswordEncoder` ([K-23](../docs/DECISIONS.md#k-23)): BCrypt strength 12 (RISK-13) keyed with a global pepper via HMAC-SHA256 pre-hash so a DB leak alone cannot brute-force hashes. The pepper is read from `systemforge.security.password-pepper` / `PASSWORD_PEPPER` env var; a blank value fails startup fast (the `test`/`dev` profiles ship a non-secret default). Legacy pepper-less BCrypt hashes (pre-K-23) still validate and are lazily rehashed to the peppered format (`{sf-peppered}` marker) on the next successful login (`AuthService.upgradeHashIfNeeded`). **Until the JWT filter lands (Chunk C) there is no way to authenticate, so every non-`auth/**` request is 401** — and Spring Boot still auto-creates the default `user` (logged password); it is removed once `CustomUserDetailsService` exists.
+- **`SecurityConfig`** (Epic 2.3 — DONE): `spring-boot-starter-security` is now present. The `SecurityFilterChain` is STATELESS + CSRF-disabled, permits `/api/v1/auth/**` + actuator health/info, authenticates the rest, and wires the JSON `RestAuthenticationEntryPoint`/`RestAccessDeniedHandler`. The password encoder is a `PepperingPasswordEncoder` ([K-23](../docs/DECISIONS.md#k-23)): BCrypt strength 12 (RISK-13) keyed with a global pepper via HMAC-SHA256 pre-hash so a DB leak alone cannot brute-force hashes. The pepper is read from `forgesys.security.password-pepper` / `PASSWORD_PEPPER` env var; a blank value fails startup fast (the `test`/`dev` profiles ship a non-secret default). Legacy pepper-less BCrypt hashes (pre-K-23) still validate and are lazily rehashed to the peppered format (`{sf-peppered}` marker) on the next successful login (`AuthService.upgradeHashIfNeeded`). **Until the JWT filter lands (Chunk C) there is no way to authenticate, so every non-`auth/**` request is 401** — and Spring Boot still auto-creates the default `user` (logged password); it is removed once `CustomUserDetailsService` exists.
 - **`TenantFilter` runs before the security chain** via a `FilterRegistrationBean` at order `-101` (security is at `-100`) in `SecurityConfig`, so tenant context is resolved before the JWT auth filter executes. The registration also suppresses the bare `@Component` filter's default low-precedence auto-registration.
-- CORS is configured in `CorsConfig` (`CorsConfigurationSource`, `allowCredentials=true`, origins via `systemforge.security.cors.allowed-origins`, default Vite `http://localhost:5173`). Required because auth is cookie-based.
+- CORS is configured in `CorsConfig` (`CorsConfigurationSource`, `allowCredentials=true`, origins via `forgesys.security.cors.allowed-origins`, default Vite `http://localhost:5173`). Required because auth is cookie-based.
 - **Spring Boot 4.1 / Spring Security 7 gotchas:** test slice annotations (`@WebMvcTest`, `@AutoConfigureMockMvc`, `@DataJpaTest`) were REMOVED from the standard autoconfigure — build MockMvc via `MockMvcBuilders.webAppContextSetup(wac).addFilters(securityFilter)` or use `@SpringBootTest` + a real port. Jackson is v3: `ObjectMapper`/databind moved to package `tools.jackson.*` (annotations stayed at `com.fasterxml.jackson.annotation`). `SecurityProperties` moved to `org.springframework.boot.security.autoconfigure` and lost `DEFAULT_FILTER_ORDER` (use literal `-100`).
 - The `CompanyStatus` enum: `PROVISIONING`, `ACTIVE`, `SUSPENDED`, `TERMINATED`. **Current code only uses `ACTIVE`** (`provisionTenant` sets ACTIVE directly). `PROVISIONING` activates when K-21 (Epic 2.0.C) is implemented.

@@ -4,11 +4,11 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.ibrhalil</groupId>
-    <artifactId>systemforge</artifactId>
-    <version>0.0.3</version>
+    <artifactId>forgesys</artifactId>
+    <version>0.0.4</version>
 
-    <name>systemforge</name>
-    <description>SystemForge — Multi-tenant SaaS platform</description>
+    <name>forgesys</name>
+    <description>ForgeSys — Multi-tenant SaaS platform</description>
 
     <packaging>pom</packaging>
 
@@ -39,13 +39,13 @@
 
             <dependency>
                 <groupId>com.ibrhalil</groupId>
-                <artifactId>systemforge-common</artifactId>
+                <artifactId>forgesys-common</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <dependency>
                 <groupId>com.ibrhalil</groupId>
-                <artifactId>systemforge-persistence</artifactId>
+                <artifactId>forgesys-persistence</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>

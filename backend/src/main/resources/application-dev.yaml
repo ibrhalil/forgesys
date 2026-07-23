@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/systemforge}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/forgesys}
     username: ${SPRING_DATASOURCE_USERNAME:forgeadmin}
     password: ${SPRING_DATASOURCE_PASSWORD:forgepassword}
     driver-class-name: org.postgresql.Driver
@@ -36,27 +36,27 @@ management:
 
 logging:
   level:
-    com.ibrhalil.systemforge: DEBUG
+    com.ibrhalil.forgesys: DEBUG
     org.hibernate.SQL: DEBUG
   # Human-readable logs written to ./infra/logs/spring.log (project-relative).
   # Set LOGGING_FILE_PATH env to override (e.g. when running outside the repo).
   file:
     path: ${LOGGING_FILE_PATH:infra/logs}
 
-systemforge:
+forgesys:
   security:
     cors:
-      allowed-origins: ${SYSTEMFORGE_SECURITY_CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
+      allowed-origins: ${FORGESYS_SECURITY_CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
     # Dev-only placeholder pepper (NOT a real secret). Override with PASSWORD_PEPPER
     # when testing against real data. Prod must never use this default.
     password-pepper: ${PASSWORD_PEPPER:dev-pepper-not-for-production}
   bootstrap:
     system-admin:
-      enabled: ${SYSTEMFORGE_BOOTSTRAP_SYSTEM_ADMIN_ENABLED:true}
-      company-name: ${SYSTEMFORGE_BOOTSTRAP_SYSTEM_ADMIN_COMPANY_NAME:SystemForge System}
-      subdomain: ${SYSTEMFORGE_BOOTSTRAP_SYSTEM_ADMIN_SUBDOMAIN:system}
-      email-domain: ${SYSTEMFORGE_BOOTSTRAP_SYSTEM_ADMIN_EMAIL_DOMAIN:systemforge.local}
-      email: ${SYSTEMFORGE_BOOTSTRAP_SYSTEM_ADMIN_EMAIL:admin@systemforge.local}
-      password: ${SYSTEMFORGE_BOOTSTRAP_SYSTEM_ADMIN_PASSWORD:change-me-system-admin}
-      first-name: ${SYSTEMFORGE_BOOTSTRAP_SYSTEM_ADMIN_FIRST_NAME:System}
-      last-name: ${SYSTEMFORGE_BOOTSTRAP_SYSTEM_ADMIN_LAST_NAME:Administrator}
+      enabled: ${FORGESYS_BOOTSTRAP_SYSTEM_ADMIN_ENABLED:true}
+      company-name: ${FORGESYS_BOOTSTRAP_SYSTEM_ADMIN_COMPANY_NAME:forgesys System}
+      subdomain: ${FORGESYS_BOOTSTRAP_SYSTEM_ADMIN_SUBDOMAIN:system}
+      email-domain: ${FORGESYS_BOOTSTRAP_SYSTEM_ADMIN_EMAIL_DOMAIN:forgesys.local}
+      email: ${FORGESYS_BOOTSTRAP_SYSTEM_ADMIN_EMAIL:admin@forgesys.local}
+      password: ${FORGESYS_BOOTSTRAP_SYSTEM_ADMIN_PASSWORD:change-me-system-admin}
+      first-name: ${FORGESYS_BOOTSTRAP_SYSTEM_ADMIN_FIRST_NAME:System}
+      last-name: ${FORGESYS_BOOTSTRAP_SYSTEM_ADMIN_LAST_NAME:Administrator}

@@ -2,7 +2,7 @@
 
 ## Project
 
-**SystemForge** — modular multi-tenant SaaS platform. Java 21 + Spring Boot 4.1, PostgreSQL 16, Redis 7.4, Flyway. Hybrid model: built-in modules (Tasks/Notes/Warehouse/Logistics — Odoo/ERPNext style) + tenant custom apps (Notion/Airtable style, JSONB EAV). **Schema-per-tenant** isolation; **user-per-tenant** (no global users); RBAC (User-Role + Group-Role + Role-Permission).
+**ForgeSys** — modular multi-tenant SaaS platform. Java 21 + Spring Boot 4.1, PostgreSQL 16, Redis 7.4, Flyway. Hybrid model: built-in modules (Tasks/Notes/Warehouse/Logistics — Odoo/ERPNext style) + tenant custom apps (Notion/Airtable style, JSONB EAV). **Schema-per-tenant** isolation; **user-per-tenant** (no global users); RBAC (User-Role + Group-Role + Role-Permission).
 
 ## Language Policy (token optimization)
 
@@ -28,7 +28,7 @@ Full detail and all commands live in `README.md`. Summary:
 ```bash
 mvn clean install          # all modules (tests run on H2, no Docker required)
 docker compose up -d       # db + redis (dev infra)
-# backend: run/debug SystemforgeApplication from the IDE (dev profile)
+# backend: run/debug ForgeSysApplication from the IDE (dev profile)
 # frontend: cd frontend && npm install --include=optional && npm run dev
 ```
 
@@ -63,7 +63,7 @@ Not source code; runtime/operational files. Details in `infra/README.md`.
 - **Cyclic dependencies between modules are FORBIDDEN.** Dependency graph: `common` <- `persistence` <- `backend`. `frontend` is independent.
 - **Versions live in the root `<properties>`** (`spring-boot.version`, `java.version`). Module poms do not pin versions.
 - **IDs are UUID everywhere** (`GenerationType.UUID`). Table names use the `t_` prefix.
-- **Code style:** package `com.ibrhalil.systemforge.*`, DTOs are `record`, centralized error handling via `@RestControllerAdvice` (`ApiErrorResponse` + `ErrorCode`), Lombok in the backend module.
+- **Code style:** package `com.ibrhalil.forgesys.*`, DTOs are `record`, centralized error handling via `@RestControllerAdvice` (`ApiErrorResponse` + `ErrorCode`), Lombok in the backend module.
 
 ## Engineering principles
 
