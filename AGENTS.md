@@ -88,9 +88,11 @@ Kapsamlı 4-katmanlı review (service/security/persistence/test) + Spring Boot 4
 
 > Faz A'nın 4 maddesi (19/22/23/24) uygulandı (2026-07-24), 118 test yeşil (H2). RISK-21 (filter'da `tokenInvalidBefore` DB lookup + logout/change/reset noktaları) açık — Redis cache (Epic 2.6) ile veya tek başına ele alınacak. RISK-22 lockout login'de tam çalışır; kilitlenen hesabın eldeki token'ı (≤ TTL) RISK-21 gelene kadar geçerli kalır. Gerçek çapraz-tenant izolasyon doğrulaması Faz B (RISK-20, Testcontainers) ile.
 
-### Faz B — Test Altyapısı (kullanıcı erteledi, kritik)
-- [ ] **[P0 RISK-20]** Testcontainers + PostgreSQL ile iki gerçek tenant şeması isolation test altyapısı. RISK-19 ve RISK-26 doğrulamasının ön koşulu.
-- [ ] **[P1 RISK-31]** K-21 endpoint HTTP testleri (`/register` 202, `/verify`, `/suggest-subdomain`) + DELETE/{id}/PUT için 401/403 testleri.
+### Faz B — Test Altyapısı (UYGULANDI 2026-07-24)
+- [x] **[P0 RISK-20]** Testcontainers + PostgreSQL ile iki gerçek tenant şeması isolation test altyapısı. RISK-19 ve RISK-26 doğrulamasının ön koşulu.
+- [x] **[P1 RISK-31]** K-21 endpoint HTTP testleri (`/register` 202, `/verify`, `/suggest-subdomain`) + DELETE/{id}/PUT için 401/403 testleri.
+
+> Faz B uygulandı (2026-07-24). `CrossTenantIsolationTest` (Testcontainers, `postgres:16-alpine`) gerçek PG'de iki tenant şeması provision edip `SET search_path` izolasyonunu + RISK-26 (mid-tx context switch) doğruladı — **Docker ile yeşil**. `-Dforgesys.pg.it=true` gate'i ile varsayılan build Docker'SIZ kalır (136 test, 2 skip). RISK-31: `AuthCompanyControllerTest` (register 202/validation, suggest-subdomain fold) + DELETE 401 testleri (3 controller). 136 test yeşil (H2).
 
 ### Faz C — K-21 Sağlamlaştırma (Faz B sonrası, gerçek PG test gerekli)
 - [ ] **[P1 RISK-25]** Token consumption race — `findByTokenForUpdate` (PESSIMISTIC_WRITE) veya conditional UPDATE.

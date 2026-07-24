@@ -37,6 +37,13 @@ class GroupControllerTest extends AbstractRbacWebTest {
     }
 
     @Test
+    void deleteRequiresAuthentication() throws Exception {
+        mockMvc.perform(delete("/api/v1/groups/11111111-1111-1111-1111-111111111111"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("auth_unauthenticated"));
+    }
+
+    @Test
     void listForbiddenWithoutReadPermission() throws Exception {
         mockMvc.perform(get("/api/v1/groups").cookie(auth("nop@tenant.test")))
                 .andExpect(status().isForbidden())

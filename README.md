@@ -81,7 +81,7 @@ npm run dev                          # /api -> http://localhost:8080 proxy
 - Uygulama: http://localhost:8080 · Frontend: http://localhost:3000
 - Veritabanı: `localhost:5432` (default: `forgesys` / `forgeadmin` / `forgepassword`) · Redis: `localhost:6379`
 
-> **Build Docker gerektirmez.** Testler `test` profilinde (H2 in-memory) çalışır. Docker yalnızca dev infra'sı (db+redis) ve prod deploy için gerekli.
+> **Build Docker gerektirmez.** Testler `test` profilinde (H2 in-memory) çalışır. Docker yalnızca dev infra'sı (db+redis), prod deploy ve **opsiyonel** gerçek-PG isolation testi (`CrossTenantIsolationTest`, `-Dforgesys.pg.it=true` gate'i ile) için gerekli.
 
 ## Konfigürasyon
 
@@ -166,6 +166,11 @@ Hızlı başlangıç yukarıda. Bu bölüm **geliştirme/referans** için tüm y
 # Tek test sınıfı / tek metod
 ./mvnw -pl backend test -Dtest=AuditingTest
 ./mvnw -pl backend test -Dtest=AuditingTest#shouldAudit
+
+# Gerçek PostgreSQL cross-tenant isolation testi (Testcontainers — Docker GEREKLİ).
+# Varsayılan build Docker'SIZ kalır (gate: -Dforgesys.pg.it=true). Schema-per-tenant
+# SET search_path izolasyonunu + RISK-26 (mid-tx context switch) gerçek PG'de doğrular.
+./mvnw -pl backend -am test -Dtest=CrossTenantIsolationTest -Dforgesys.pg.it=true -Dsurefire.failIfNoSpecifiedTests=false
 
 # Backend'i terminalden çalıştır (IDE yerine)
 ./mvnw -pl backend spring-boot:run
