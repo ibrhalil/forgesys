@@ -34,7 +34,6 @@ class AuditingTest {
         Company company = new Company();
         company.setName("Test Co");
         company.setSubdomain("test");
-        company.setEmailDomain("test.com");
         company.setSchemaName("tenant_test");
         company.setStatus(CompanyStatus.ACTIVE);
 

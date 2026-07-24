@@ -76,7 +76,6 @@ public class PlatformCompanyService {
                 company.getId(),
                 company.getName(),
                 company.getSubdomain(),
-                company.getEmailDomain(),
                 company.getSchemaName(),
                 company.getDbRole(),
                 company.getStatus()

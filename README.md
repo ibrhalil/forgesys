@@ -13,21 +13,26 @@
 
 ## Özellikler
 
-**Mevcut (Faz 1 tamamlandı):**
+**Mevcut (Faz 2.9 backend — DONE):**
 - Multi-module Maven yapısı (`common` <- `persistence` <- `backend` + `frontend`)
 - Schema-per-tenant multi-tenancy: subdomain çözümleme + Hibernate `SCHEMA` stratejisi
 - Flyway per-schema migration (public auto-config + tenant programmatik)
-- Tenant signup endpoint: `POST /api/v1/auth/company/register` — Company + schema + admin user oluşturur
+- **Kimlik doğrulurma:** Spring Security + JWT (RS256, httpOnly cookie) + BCrypt(12) pepper'lı (K-23)
+- **RBAC:** User/Role/Permission/Group CRUD + `@PreAuthorize` method-level yetkilendirme (K-26)
+- **Self-service:** `/users/me/**` (profil + şifre değiştirme) — her authenticated user kendi hesabını yönetir
+- **Platform admin:** `/platform/companies` cross-tenant yönetim (K-25) + rezerve `system` tenant bootstrap (K-24)
+- Tenant signup endpoint: `POST /api/v1/auth/company/register` — Company + schema + admin user oluşturur (tek-fazlı; iki fazlı K-21 ile planlandı)
 - Entity hiyerarşisi: UUID, soft delete, optimistic locking, Spring Data auditing
-- BCrypt password encoding, Bean Validation, merkezi hata yönetimi (`ApiErrorResponse` + `ErrorCode`)
+- Merkezi hata yönetimi (`ApiErrorResponse` + `ErrorCode` — stable wire codes)
 - Docker: PostgreSQL + Redis + app (non-root), layered jars, actuator health
 
 **Planlanan (kararlar kilitlendi — yol haritası [`docs/ROADMAP.md`](docs/ROADMAP.md)):**
-- Spring Security + JWT (login/refresh/logout, httpOnly cookie) + RBAC yönetimi
+- K-21: iki fazlı tenant signup (PROVISIONING → mail doğrulama → ACTIVE)
+- Refresh token + Redis blacklist (logout/token revoke)
 - 3 katmanlı log (audit + giriş geçmişi + request/trace)
 - **Built-in modüller:** Tasks, Notes, Warehouse, Logistics (plan bazlı aktivasyon)
 - **Custom App Builder** (Notion-style, JSONB EAV)
-- Billing (Stripe/iyzico), Nginx gateway, CI/CD
+- Billing (Stripe/iyzico), Nginx gateway, CI/CD, LDAP/SSO
 
 ## Teknoloji Stack'i
 
@@ -203,37 +208,45 @@ npm run dev                      # http://localhost:3000 (/api -> :8080 proxy)
 
 ## API Endpoint'leri
 
-Tüm endpoint'ler `/api/v1/*` prefix'i altında. Hata yanıtları tek tip `ApiErrorResponse` formatındadır (`code` + `traceId` + `fields[]`, `GlobalExceptionHandler`).
+Tüm endpoint'ler `/api/v1/*` prefix'i altında. Hata yanıtları tek tip `ApiErrorResponse` formatındadır (`code` + `traceId` + `fields[]`, `GlobalExceptionHandler`). Tam endpoint kataloğu için bkz. [`backend/AGENTS.md`](backend/AGENTS.md).
 
-| Method | Path | Açıklama | Auth |
-|--------|------|----------|------|
-| `POST` | `/api/v1/auth/company/register` | Yeni tenant signup + admin user oluşturma | Public |
+**Public (auth yok):**
 
-**Örnek istek:**
+| Method | Path | Açıklama |
+|--------|------|----------|
+| `POST` | `/api/v1/auth/company/register` | K-21 faz 1 — `PROVISIONING` Company + doğrulama token'ı yaratır, linki mail ile gönderir (202 Accepted) |
+| `POST` | `/api/v1/auth/company/verify` | K-21 faz 2 — token'ı consume eder, senkron şema + Flyway + admin user → `ACTIVE` (200 OK) |
+| `POST` | `/api/v1/auth/company/suggest-subdomain` | K-21 — org adından slug önerileri (Türkçe karakter normalize) |
+| `POST` | `/api/v1/auth/login` | Email+şifre → JWT (cookie + body) |
+
+**Tenant signup örneği (K-21 iki fazlı):**
 
 ```bash
+# Faz 1 — PROVISIONING Company + doğrulama maili
 curl -X POST http://localhost:8080/api/v1/auth/company/register \
   -H "Content-Type: application/json" \
   -d '{
-    "companyName": "Acme Corp",
-    "subdomain": "acme",
-    "emailDomain": "acme.com",
-    "adminEmail": "admin@acme.com",
+    "companyName": "Gebze Klübü",
+    "subdomain": "geba-klubu",
+    "adminEmail": "ali@gmail.com",
     "adminPassword": "secure-password-123",
-    "adminFirstName": "John",
-    "adminLastName": "Doe"
+    "adminFirstName": "Ali",
+    "adminLastName": "Yılmaz"
   }'
+
+# 202 Accepted
+# { "companyId": "...", "status": "PROVISIONING", "message": "Doğrulama bağlantısı admin e-postasına gönderildi." }
+
+# Faz 2 — admin mailindeki linki tıklar (frontend /verify-tenant sayfası → POST)
+curl -X POST http://localhost:8080/api/v1/auth/company/verify \
+  -H "Content-Type: application/json" \
+  -d '{ "token": "token-from-email-link" }'
+
+# 200 OK
+# { "status": "ACTIVE", "message": "Organizasyon etkinleştirildi. Giriş yapabilirsiniz." }
 ```
 
-**Başarılı yanıt (201):**
-
-```json
-{ "id": "uuid...", "name": "Acme Corp", "subdomain": "acme", "schemaName": "tenant_acme" }
-```
-
-> Bu endpoint `TenantFilter`'dan muaf tutulur (`shouldNotFilter`) — zaten tenant'ı oluşturuyor.
-
-**Planlanan endpoint grupları** ([`docs/ROADMAP.md`](docs/ROADMAP.md)): Auth (`/auth/login` · `/refresh` · `/logout` · `/register` · `/me`), User CRUD (`/users`), RBAC (`/roles` · `/permissions` · `/groups`), Log (`/audit-logs` · `/login-history` · `/request-logs`), Modules (`/modules`), Custom Apps (`/apps`).
+> `/register` ve `/verify` `TenantFilter`'dan muaf (`shouldNotFilter` — `/api/v1/auth/company/**`). Login tenant'a özgü (subdomain çözümleme).
 
 ## Proje Yapısı
 

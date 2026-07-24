@@ -5,6 +5,8 @@ import { useAuthStore } from './store/authStore';
 import { AppShell } from './components/AppShell';
 import { RequireAuth } from './components/RequireAuth';
 import { LoginPage } from './pages/LoginPage';
+import { RegisterPage } from './pages/RegisterPage';
+import { VerifyTenantPage } from './pages/VerifyTenantPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { UsersPage } from './pages/UsersPage';
 import { RolesPage } from './pages/RolesPage';
@@ -48,6 +50,8 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/verify-tenant" element={<VerifyTenantPage />} />
 
           <Route
             path="/"

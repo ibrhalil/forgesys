@@ -18,7 +18,7 @@ AuditEntity (@MappedSuperclass — createdDate/updatedDate+by, OffsetDateTime, t
   └ GeneratedIdAuditEntity (UUID id, no soft delete)  <- RefreshToken
 ```
 
-> Java field is `createdDate` (column `created_at`). The `TenantVerificationToken` entity does NOT exist yet — it arrives with K-21 (Epic 2.0.C), not yet implemented.
+> Java field is `createdDate` (column `created_at`). The K-21 entities (`TenantVerificationToken`, `OrganizationDomain`) now exist and live in the `public` schema.
 
 Rules:
 - All IDs are `UUID` (`@GeneratedValue(strategy = GenerationType.UUID)`, `columnDefinition="uuid"`).
@@ -26,7 +26,7 @@ Rules:
 - `@SQLDelete` is separate on each concrete entity (table-specific SQL, `version = version + 1`).
 - `@SQLRestriction("is_deleted = false")` on `SoftDeleteAuditEntity` -> inherited by all subclasses.
 - Spring Data auditing (`@CreatedDate`/`@LastModifiedDate`/`@CreatedBy`/`@LastModifiedBy`) -> `OffsetDateTime` + `timestamptz`.
-- **Non-soft-delete entities** extend `GeneratedIdAuditEntity` (only auditing fields, no `is_deleted`/`version`). Example: `RefreshToken` (short-lived, revoked).
+- **Non-soft-delete entities** extend `GeneratedIdAuditEntity` (only auditing fields, no `is_deleted`/`version`). Examples: `RefreshToken` (short-lived, revoked), `TenantVerificationToken` (K-21 — single-use, `usedAt` invalidation).
 
 ## Multi-Tenancy (Schema-per-Tenant)
 
@@ -34,10 +34,10 @@ Strategy, request lifecycle and schema-table mapping detail are the single sourc
 
 - `SchemaPerTenantConnectionProvider` (`persistence/tenant/`) — validates the schema name with the regex `^[a-z0-9_]+$` (SQL injection defense); runs `SET search_path` on `getConnection`, resets on `releaseConnection`.
 - `TenantIdentifierResolver` — reads `TenantContext.getCurrentTenant()`, returns `"public"` when null/blank.
-- **Master schema (`public`):** `Company` (name, subdomain, emailDomain, schemaName, dbRole, status). `TenantVerificationToken` lands here after K-21 (not yet present).
+- **Master schema (`public`):** `Company` (name, subdomain, schemaName, dbRole, status — `emailDomain` removed by K-32), `OrganizationDomain` (K-32, 1:N company-owned email domains, optional, `verified` boolean), `TenantVerificationToken` (K-21, single-use signup tokens carrying pre-hashed admin credentials).
 - **Tenant schema (`tenant_xxx`):** User/Role/Permission/Group + join tables. Each tenant owns its data.
 - **Tenant schema name:** `tenant_<subdomain>` (lowercase, dashes to `_`).
-- **CompanyStatus** enum: `PROVISIONING`, `ACTIVE`, `SUSPENDED`, `TERMINATED`. **Current code only uses `ACTIVE`** (`provisionTenant` sets ACTIVE directly, single-phase sync). The other states are reserved for later phases.
+- **CompanyStatus** enum: `PROVISIONING`, `ACTIVE`, `SUSPENDED`, `TERMINATED`. K-21 activates `PROVISIONING` (phase 1 → phase 2 promotes to `ACTIVE`).
 
 ## Flyway Migration
 
@@ -54,15 +54,18 @@ src/main/resources/db/migration/
 ## Repository
 
 Package `com.ibrhalil.forgesys.persistence.repository`. Extends `JpaRepository`. Current:
-- `CompanyRepository` (`findBySubdomain`, `findByEmailDomain`, `findBySchemaName`)
-- `UserRepository` (`findByEmail`, `findByUsername`)
-- `RefreshTokenRepository` (`findByToken`)
-
-> `TenantVerificationTokenRepository` arrives with K-21 (Epic 2.0.C) — not yet present.
+- `CompanyRepository` (`findBySubdomain`, `findBySchemaName`) — public şema
+- `TenantVerificationTokenRepository` (`findByToken`, `findByCompanyId`) — public şema (K-21)
+- `OrganizationDomainRepository` (`findByDomain`, `findByCompanyId`, `findByCompanyIdAndVerifiedTrue`, `existsByDomain`) — public şema (K-32)
+- `UserRepository` (`findByEmail`, `findByUsername`, `findByRolesEmpty`) — tenant şeması
+- `RefreshTokenRepository` (`findByToken`) — tenant şeması
+- `RoleRepository` (`findByName`) — tenant şeması
+- `PermissionRepository` (`findByName`) — tenant şeması
+- `GroupRepository` (`findByName`) — tenant şeması
 
 ## Gotchas
 
 - **`ddl-auto=none` is MANDATORY** (NEVER `validate`). Schema-per-tenant + lazy tenant schema means `validate` at startup tries to verify every entity against the `public` schema -> `missing table` crash. The schema lives entirely in Flyway. (Test profile exception: `create-drop` + `flyway.enabled=false`.)
 - **`@EntityScan("com.ibrhalil.forgesys.entity")`** (entities live in the `entity` package, NOT `persistence.entity`). Repositories live in `com.ibrhalil.forgesys.persistence.repository`. This split is wired by an explicit scan in `MultiTenancyJpaConfig` (in backend).
 - **`hashCode()` ([DEBT-7](../docs/DECISIONS.md#debt-7) — RESOLVED):** `BaseEntity`/`GeneratedIdAuditEntity` use `id == null ? System.identityHashCode(this) : id.hashCode()` (ID-based). Do NOT put a transient (pre-persist) entity into a `HashSet`/`HashMap` key and look it up after persist — the ID flips `null→UUID` and the hash changes. Entities loaded from the DB are fine.
-- **Soft-delete + UNIQUE ([RISK-17](../docs/DECISIONS.md#risk-17) — RESOLVED):** DB-level UNIQUE conflicts with soft delete (deleted row remains). Partial index required: `CREATE UNIQUE INDEX ... WHERE is_deleted = false`. Applied in `public/V2` + `tenant/V2` for all `SoftDeleteAuditEntity` subclasses — public `t_companies` (name/subdomain/email_domain/schema_name) + tenant `t_users`(username,email)/`t_roles`/`t_permissions`/`t_groups`(name). `GeneratedIdAuditEntity` subclasses (`RefreshToken`) and join tables keep normal UNIQUE.
+- **Soft-delete + UNIQUE ([RISK-17](../docs/DECISIONS.md#risk-17) — RESOLVED):** DB-level UNIQUE conflicts with soft delete (deleted row remains). Partial index required: `CREATE UNIQUE INDEX ... WHERE is_deleted = false`. Applied in `public/V2` + `public/V3` (K-32 `t_organization_domains.domain`) + `tenant/V2` for all `SoftDeleteAuditEntity` subclasses — public `t_companies` (name/subdomain/schema_name; `email_domain` dropped by K-32) + tenant `t_users`(username,email)/`t_roles`/`t_permissions`/`t_groups`(name). `GeneratedIdAuditEntity` subclasses (`RefreshToken`, `TenantVerificationToken`) and join tables keep normal UNIQUE.

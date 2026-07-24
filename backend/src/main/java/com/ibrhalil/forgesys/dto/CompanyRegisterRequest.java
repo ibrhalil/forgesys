@@ -15,12 +15,6 @@ public record CompanyRegisterRequest(
                 message = "Subdomain must be 1-100 chars: lowercase alphanumeric and hyphens, not starting/ending with hyphen")
         String subdomain,
 
-        @NotBlank(message = "Email domain is required")
-        @Pattern(regexp = "^[a-z0-9]([a-z0-9.-]*[a-z0-9])?\\.[a-z]{2,}$",
-                message = "Invalid email domain format")
-        @Size(max = 150)
-        String emailDomain,
-
         @NotBlank(message = "Admin email is required")
         @Email(message = "Invalid admin email format")
         @Size(max = 150)
@@ -31,6 +25,7 @@ public record CompanyRegisterRequest(
         String adminPassword,
 
         @Size(max = 100) String adminFirstName,
+
         @Size(max = 100) String adminLastName
 ) {
 }

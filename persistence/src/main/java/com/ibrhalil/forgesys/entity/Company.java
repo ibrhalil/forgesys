@@ -23,13 +23,11 @@ import lombok.ToString;
         name = "t_companies",
         schema = "public",
         indexes = {
-                @Index(name = "idx_company_subdomain", columnList = "subdomain"),
-                @Index(name = "idx_company_email_domain", columnList = "email_domain")
+                @Index(name = "idx_company_subdomain", columnList = "subdomain")
         },
         uniqueConstraints = {
                 @UniqueConstraint(name = "uk_companies_name", columnNames = "name"),
                 @UniqueConstraint(name = "uk_companies_subdomain", columnNames = "subdomain"),
-                @UniqueConstraint(name = "uk_companies_email_domain", columnNames = "email_domain"),
                 @UniqueConstraint(name = "uk_companies_schema_name", columnNames = "schema_name")
         }
 )
@@ -41,9 +39,6 @@ public class Company extends BaseEntity {
 
     @Column(name = "subdomain", nullable = false, length = 100)
     private String subdomain;
-
-    @Column(name = "email_domain", nullable = false, length = 150)
-    private String emailDomain;
 
     @Column(name = "schema_name", nullable = false, length = 100)
     private String schemaName;

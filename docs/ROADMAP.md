@@ -10,9 +10,11 @@
 - `[BLOCKED]` — engelli (notu ile)
 - `CANCEL` — iptal (gerekçe ile)
 
-## Mevcut Durum (Faz 1 — DONE)
+## Mevcut Durum (Faz 2.9 backend + K-21 — DONE)
 
-Faz 1 altyapı tamamlandı:
+Backend altyapısı + auth/RBAC/platform management + iki-fazlı tenant signup tamamlandı:
+
+**Faz 1 (DONE) — altyapı:**
 - [x] Multi-module Maven yapısı (`common` <- `persistence` <- `backend` + `frontend`)
 - [x] Schema-per-tenant multi-tenancy: subdomain çözümleme + Hibernate `SCHEMA` stratejisi
 - [x] Flyway per-schema migration (public auto-config + tenant programmatik)
@@ -20,6 +22,38 @@ Faz 1 altyapı tamamlandı:
 - [x] Entity hiyerarşisi: UUID, soft delete, optimistic locking, Spring Data auditing
 - [x] BCrypt password encoding, Bean Validation, merkezi hata yönetimi (`ErrorResponse`)
 - [x] Docker: PostgreSQL + Redis + app (non-root), layered jars, actuator health
+
+**Faz 2.0.C (DONE) — K-21 iki fazlı tenant signup:**
+- [x] `createPendingCompany` (PROVISIONING + token + verify maili) + `verifyAndProvision` (senkron schema + Flyway + admin user → ACTIVE)
+- [x] `SubdomainSuggestionService` (slug önerisi, Türkçe karakter normalize)
+- [x] K-32: `email_domain` kaldırıldı, `t_organization_domains` (1:N, opsiyonel, `verified=false` default)
+- [x] `provisionSystemTenant` (K-24 bootstrap auto-verify)
+
+**Faz 2.0 (DONE) — Foundation + critical fixes:**
+- [x] DateTimeProvider (UTC, RISK-15), uniform error shape, exception hiyerarşisi
+- [x] `TenantMigrationRunner` (RISK-16), partial index UNIQUE (RISK-17), hashCode fix (DEBT-7)
+
+**Faz 2.3/2.4 (DONE) — Security + JWT:**
+- [x] Spring Security (STATELESS + CSRF off + JSON 401/403 handlers)
+- [x] `PepperingPasswordEncoder` (K-23, BCrypt(12) + HMAC-SHA256 pepper)
+- [x] `JwtTokenProvider` (RS256, oauth2-resource-server) + `JwtAuthenticationFilter` (cookie→SecurityContext)
+- [x] `CustomUserDetails(Service)` — authorities = direct roles + active group roles → permissions
+
+**Faz 2.5 (kısmen DONE) — Auth endpoints:**
+- [x] `POST /auth/login` (cookie + body access token), `GET /auth/me`, `POST /auth/logout` (cookie expire)
+- [ ] Refresh token + Redis blacklist (Epic 2.6 ile)
+
+**Faz 2.7-2.8 (kısmen DONE) — Wrap-up:**
+- [x] `SystemAdminBootstrapRunner` + `RbacSeeder` + `PermissionCatalog` (K-24, K-25)
+- [ ] `AuditorAware` SecurityContext userId (RISK-3 — hala `"system"`), springdoc-openapi
+
+**Faz 2.9 (DONE) — User & RBAC + Platform management:**
+- [x] User/Role/Permission/Group CRUD + assign/revoke + DTO (`@Transactional`, soft-delete)
+- [x] `@EnableMethodSecurity` + `@PreAuthorize` enforcement (K-26)
+- [x] Self-service (`/users/me/**`): profile update + password change + me
+- [x] Platform admin namespace (K-25): `/platform/companies` list/get/status
+- [x] Admin password reset (`PATCH /users/{id}/password`)
+- [ ] Tenant içi user email doğrulama + password reset akış (entity field'ları hazır, flow yok)
 
 ---
 
@@ -64,16 +98,19 @@ Kod analizi sonucu keşfedilen P0 düzeltmeler. User CRUD / log'dan ÖNCE çöz�
 - [x] `hashCode()` düzelt — hem `BaseEntity` hem `GeneratedIdAuditEntity` (ID-bazlı, DEBT-7 — ÇÖZÜLDÜ). RBAC'dan ÖNCE.
 - [ ] `TaskDecorator` — TenantContext + SecurityContext propagation (`@Async`, RISK-10). **Ertelendi:** ileriye dönük altyapı; şu an `@Async` tüketici yok. İlk async iş (audit/email) ortaya çıkınca, Faz 2.3 auth sonrasına bırakıldı.
 
-### Epic 2.0.C — Hibrit Tenant Signup Verification (K-21)
-> K-21 kararı — PLANLANDI, uygulanmadı. Detay: [DECISIONS.md K-21](DECISIONS.md#k-21).
+### Epic 2.0.C — Hibrit Tenant Signup Verification (K-21) — DONE
+> K-21 kararı — UYGULANDI. Detay: [DECISIONS.md K-21](DECISIONS.md#k-21). K-32 (organizasyon/domain refactor) ile birlikte uygulandı.
 
 İki fazlı signup akışı:
-- `TenantVerificationToken` entity (`public` şema, `GeneratedIdAuditEntity`) + `public/V2__tenant_verification_tokens.sql` migration + repository
-- `VerificationSender` interface + `InMemoryVerificationSender` (`test`) + `LogVerificationSender` (`dev`) — mail bağımlılığı YOK
-- `TenantProvisioningService` bölünür: `createPendingCompany()` (PROVISIONING, `@Transactional`, DEBT-10 kapsar) + `verifyAndProvision(token)` (ACTIVE, `@Transactional`, senkron)
-- DTO (`CompanyRegisterResponse`, `CompanyVerifyRequest`, `CompanyVerifyResponse`) + `AuthController` refactor: `register` PROVISIONING döner + `POST /api/v1/auth/company/verify` endpoint
-- Servis testi (Mockito + InMemoryVerificationSender ile register->verify + token expire + zaten-used senaryoları)
-- (Opsiyonel) Scheduled cleanup job — expired token + bağlı PROVISIONING Company'leri sil
+- [x] `TenantVerificationToken` entity (`public` şema, `GeneratedIdAuditEntity`) + `public/V3__organization_domains_and_verification_tokens.sql` migration + `TenantVerificationTokenRepository`
+- [x] `VerificationSender` interface + `InMemoryVerificationSender` (`test`) + `LogVerificationSender` (`!test`) — mail bağımlılığı YOK (prod mail Faz 5)
+- [x] `TenantProvisioningService` bölündü: `createPendingCompany()` (PROVISIONING, `@Transactional`) + `verifyAndProvision(token)` (ACTIVE, `@Transactional`, senkron) + `provisionSystemTenant()` (K-24 bootstrap auto-verify)
+- [x] DTO (`CompanyRegisterResponse`, `CompanyVerifyRequest`, `CompanyVerifyResponse`, `SubdomainSuggestionRequest/Response`) + `AuthController`: `register` 202 PROVISIONING + `POST /api/v1/auth/company/verify` + `POST /api/v1/auth/company/suggest-subdomain`
+- [x] `SubdomainSuggestionService` (slug üretimi + Türkçe karakter normalize + uniqueness)
+- [x] Service testi (`TenantProvisioningServiceTest` — register→verify + token expire/used/invalid + bootstrap auto-verify; `SubdomainSuggestionServiceTest` — slugify + suggest)
+- [x] K-32: `email_domain` kolonu/field/index DROP + `t_organization_domains` (1:N, `verified` boolean — custom domain doğrulama Faz 5)
+- [x] `ErrorCode` extension: `COMPANY_SUBDOMAIN_TAKEN`, `TENANT_TOKEN_INVALID/EXPIRED/ALREADY_USED`
+- (Ertelendi) Scheduled cleanup job — expired token + bağlı PROVISIONING Company'leri sil
 - (Ertelendi, Faz 5) `MailVerificationSender` (`prod`) + `spring-boot-starter-mail` pom'a + SMTP config
 
 ### Epic 2.1 — MapStruct + DTO
@@ -107,48 +144,77 @@ Kod analizi sonucu keşfedilen P0 düzeltmeler. User CRUD / log'dan ÖNCE çöz�
 ### Epic 2.6 — Redis
 `RedisConfig`: RedisTemplate + serializer + connection test. `TokenBlacklistService` + unit test. `PermissionCacheService` (TTL 10dk) + unit test.
 
+> **Durum:** Bağlantı altyapısı (`spring.data.redis.*` config) hazır, `application-dev.yaml`'da `repositories.enabled=false`. Gerçek `TokenBlacklistService` / `PermissionCacheService` bean'leri henüz YOK — Epic 2.5 refresh/logout ve token revoke ile birlikte gelir.
+
 ### Epic 2.5 — Auth Endpoints (kısmen DONE — ilk çalışan login)
 - [x] `AuthService.login()` iş mantığı (BCrypt doğrulama, unknown/bad-password aynı `auth_bad_credentials`)
 - [x] LoginRequest/LoginResponse DTO
-- [x] `POST /login`: Set-Cookie (httpOnly `sf_access_token`) + body'de accessToken. **NOT:** RefreshToken DB ERTENDİ
+- [x] `POST /api/v1/auth/login`: Set-Cookie (httpOnly `sf_access_token`) + body'de accessToken. **NOT:** RefreshToken DB ERTENDİ
 - [x] Login integration test (valid -> cookie+200, wrong -> 401, unknown -> 401)
-- [x] `GET /me` (claim'den principal, DB'siz)
+- [x] `GET /api/v1/auth/me` (claim'den principal, DB'siz) — **not:** `/auth/me` yerine `/users/me` (UserProfileController) tercih edildi; `/auth/me` halen mevcut
 - [ ] `POST /refresh` (Redis + RefreshToken gerekli) — ertelendi
 - [ ] `POST /logout`: **Redis blacklist (current access token, granular)** + RefreshToken revoke. `tokenInvalidBefore` KULLANMA (multi-device korunsun). — ertelendi
-- [ ] `POST /register`: email domain + User — ertelendi
 - [ ] Refresh token rotation + reuse detection (ihlal -> tüm token revoke + `tokenInvalidBefore`) — ertelendi
 - ~~JwtAuthFilter blacklist hook~~ — CANCEL (`tokenInvalidBefore` ile gereksiz)
 
 ### Epic 2.7-2.8 — Wrap-up
-- `AuditorAware` SecurityContext userId (RISK-3)
-- Bootstrap data initializer (rol/permission/group seed, idempotent, diff-based)
-- springdoc-openapi dep + Swagger scheme doc (profile gating)
+- [ ] `AuditorAware` SecurityContext userId (RISK-3) — hala hardcoded `"system"` (`MultiTenancyJpaConfig`)
+- [x] Bootstrap data initializer (rol/permission/group seed, idempotent, diff-based) — **K-24** (`SystemAdminBootstrapRunner` + `RbacSeeder` + `PermissionCatalog`)
+- [ ] springdoc-openapi dep + Swagger scheme doc (profile gating) — pom'da dependency YOK, erteli
 
-### Epic 2.9 — User & RBAC Management (K-18)
-> User CRUD + yetki atama/silme + user page + rol-bazlı panel. Backend kısmı (frontend karşılığı Epic 4.0.B). `@EnableMethodSecurity` + `@PreAuthorize` method-level yetkilendirme. Permission namespace `{module}:{resource}:{action}`.
+### Epic 2.9 — User & RBAC Management (K-18, K-26) — DONE
+> User CRUD + yetki atama/silme + user page + rol-bazlı panel. `@EnableMethodSecurity` + `@PreAuthorize` method-level yetkilendirme (K-26 — uygulandı). Permission namespace `{module}:{resource}:{action}`.
 
-- `UserController` (`/api/v1/users`: sayfalı list / GET{id} / POST / PUT{id} / DELETE{id}) + DTO
-- `UserService` (`@Transactional`, soft-delete, account+profile cascade)
-- `UserProfileController` (`PUT /users/me/profile`) — firstName/phone/adres
-- Email doğrulama akışı (tenant **içi** mevcut user — K-21'den ayrı)
-- Password reset akışı
-- `GET /auth/me` (mevcut kullanıcı + permission/rol listesi)
-- `RoleController` (`/api/v1/roles`: CRUD + `/roles/{id}/permissions`)
-- `PermissionController` (`/api/v1/permissions`: list/CRUD)
-- `GroupController` (`/api/v1/groups`: CRUD + `/groups/{id}/roles`)
-- User-role/group atama (`/users/{id}/roles`, `/users/{id}/groups`) + `PermissionCacheService` evict
-- `@PreAuthorize` tüm admin endpoint'lerine (örn. `hasAuthority('iam:user:write')`)
-- User & RBAC integration test (CRUD + rol atama + tenant izolasyonu + permission red)
+- [x] `UserController` (`/api/v1/users`: sayfalı list / GET{id} / POST / PUT{id} / DELETE{id}) + DTO
+- [x] `UserService` (`@Transactional`, soft-delete, account+profile cascade)
+- [x] `UserProfileController` (`PUT /users/me/profile`, `PUT /users/me/password`, `GET /users/me`) — self-service, `@PreAuthorize`'süz authenticated
+- [ ] Email doğrulama akışı (tenant **içi** mevcut user — entity field'ları hazır: `emailVerificationToken`/`ExpiresAt`)
+- [ ] Password reset akışı (entity field'ları hazır: `passwordResetToken`/`ExpiresAt`)
+- [x] `GET /users/me` (mevcut kullanıcı + permission/rol listesi) — UserProfileController
+- [x] `RoleController` (`/api/v1/roles`: CRUD + `/roles/{id}/permissions`)
+- [x] `PermissionController` (`/api/v1/permissions`: list — CRUD yok, katalog seed-bazlı)
+- [x] `GroupController` (`/api/v1/groups`: CRUD + `/groups/{id}/roles` + `/groups/{id}/members`)
+- [x] User-role/group atama (`PUT /users/{id}/roles`, `PUT /users/{id}/groups`)
+- [x] `@PreAuthorize` tüm admin endpoint'lerine (K-26 — uygulandı)
+- [x] User & RBAC integration test (CRUD + rol atama + tenant izolasyonu + permission red)
+- [x] **Ekstra:** `PlatformCompanyController` (`/api/v1/platform/companies` — list/get/status) — K-25 platform admin namespace
+- [x] **Ekstra:** admin şifre sıfırlama (`PATCH /users/{id}/password`)
 
-### Epic 2.10 — Audit & Logging (K-19, 3 katmanlı log)
-> K-19 kararı. Audit log + giriş geçmişi + request/trace log. Her birinin kendi tablosu + endpoint'i. Request/trace altyapısı Epic 2.0 ile gelir; burada görüntüleme/arama eklenir. Yeni tenant migration `tenant/V2__audit_login_history.sql`.
+### Epic 2.10 — Audit & Logging (K-19 + K-27/K-28/K-29/K-30 genişletmesi)
+> K-19 temel 3 katmanlı log (audit + login history + request/trace). K-27/K-28/K-29/K-30 genişletmeleriyle: başarısız login loglama, high-risk body loglama, anomaly detection, approval workflow, session management, notification subsystem, activity feed.
 
-- `t_audit_logs` (actor/action/entity/old-new JSONB/ip/trace_id) + `t_login_history` (user/success/ip/user_agent/reason)
+**K-19 çekirdek (3 katmanlı log):**
+- `t_audit_logs` (actor/action/entity/old-new JSONB/request_body JSONB/ip/trace_id) + `t_login_history` (user/success/ip/user_agent/reason enum) — `tenant/V3__audit_login_history.sql`
 - `AuditLog` + `LoginHistory` entity + repository (tenant şeması)
 - `AuditService` + AOP `@AuditLog` annotation (admin aksiyonları otomatik yakala)
-- Login history yazımı — login/refresh/register/logout'ta success+failure
+- Login history yazımı — login/refresh/register/logout **+ başarısız denemeler** (K-27)
 - Görüntüleme endpoint'leri: `GET /audit-logs`, `GET /login-history`, `GET /request-logs` (admin `@PreAuthorize`, sayfalı + filtre)
 - Request log arama — traceId ile lookup
+
+**K-27 genişletme (audit/log/security hardening):**
+- High-risk endpoint (create/delete/admin `iam:*`/`platform:*`) request body loglama (maskeli: şifre/token `[REDACTED]`) — config-driven high-risk list
+- `t_pending_actions` tablosu + approval workflow (`@ApprovalRequired` veya servis çağrısı) — user/role delete default olarak çift onay
+- Anomaly detection passif (rate limit + unusual pattern → K-29 alert, block değil)
+
+**K-28 session management (Epic 2.5/2.6 bağımlı):**
+- Redis active sessions (`session:{userId}:{sessionId}` → device/ip/user_agent/loginAt/lastSeen, TTL = refresh token)
+- `t_sessions_log` tablosu (tenant) — LOGIN/LOGOUT/SESSION_REVOKED/EXPIRED event'leri (kalıcı audit)
+- Endpoint: `/api/v1/users/me/sessions` (self) + `/api/v1/users/{id}/sessions` (admin, `iam:user:write`) + `DELETE .../sessions/{sessionId}` (remote revoke)
+
+**K-29 notification subsystem:**
+- `t_notifications` (tenant) + `t_notification_preferences` (user bazlı kanal tercihleri)
+- `NotificationService.send(userId, type, payload)` — iki kanal: in-app (polling, WebSocket Faz 5+) + mail (`MailNotificationSender` Faz 5 bağımlı)
+- Notification type catalog (SUSPICIOUS_LOGIN, NEW_DEVICE_LOGIN, FAILED_LOGIN_SPIKE, PASSWORD_CHANGED, ROLE_ASSIGNED, BULK_DELETE_ALERT, APPROVAL_REQUESTED, ...)
+- Template'ler `infra/templates/` (TR/EN i18n)
+- `/api/v1/notifications` (list + mark-read)
+
+**K-30 activity feed:**
+- Materialized activity view (audit log üstünden sorgu türetme önerilen, ayrı tablo erteli)
+- Activity text generation — `{action}_{entity}` template map (i18n): "Ali 'Tasarım Ekibi' grubunu oluşturdu"
+- `/api/v1/activities` (sayfalı, filtreli, visibility scope: public/team/private)
+- UI (Faz 4) — activity feed ekranı admin panel'e (K-20) eklenir
+
+> **Sıralama:** K-19 çekirdek önce → K-27 genişletme → K-28 (Epic 2.5/2.6 sonrası) → K-29 notification (audit + anomaly'den beslenir) → K-30 activity (audit log'un user-friendly görselleştirmesi, UI Faz 4).
 
 ---
 

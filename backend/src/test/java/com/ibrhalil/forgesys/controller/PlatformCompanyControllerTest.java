@@ -144,7 +144,6 @@ class PlatformCompanyControllerTest extends AbstractRbacWebTest {
         Company company = new Company();
         company.setName(name);
         company.setSubdomain(name + "sub");
-        company.setEmailDomain(name + ".com");
         company.setSchemaName("tenant_" + name);
         company.setDbRole("role_" + name);
         company.setStatus(status);

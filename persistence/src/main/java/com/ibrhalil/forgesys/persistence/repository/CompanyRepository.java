@@ -10,7 +10,5 @@ public interface CompanyRepository extends JpaRepository<Company, UUID> {
 
     Optional<Company> findBySubdomain(String subdomain);
 
-    Optional<Company> findByEmailDomain(String emailDomain);
-
     Optional<Company> findBySchemaName(String schemaName);
 }

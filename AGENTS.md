@@ -75,6 +75,63 @@ General engineering conduct. Project-specific rules above take precedence; the s
 - **Thread safety.** `TenantContext` is a `ThreadLocal` — it does NOT propagate across `@Async`/executor threads without a `TaskDecorator` ([RISK-10](docs/DECISIONS.md#risk-10)). Always `clear()` in `finally`.
 - **Backward compatibility.** Do not break endpoint contracts (`/api/v1/*`) without explicit intent. Deprecate before removing; version when behavior changes.
 
+## Refactor Roadmap (2026-07-24 review)
+
+Kapsamlı 4-katmanlı review (service/security/persistence/test) + Spring Boot 4.0 / Security 7 resmi migration kaynakları. Bulgular önem sırasına göre fazlara bölünmüş. Detay ve dosya:ref'ler: [`docs/DECISIONS.md`](docs/DECISIONS.md) RISK-19..RISK-34. Tüm fazlar uygulanacak (kullanıcı kararı), önem sırasıyla.
+
+### Faz A — Kritik Güvenlik (önce)
+- [ ] **[P0 RISK-19]** JWT tenant binding — `JwtAuthenticationFilter`'da token tenant claim == request tenant (TenantContext) kontrolü; mismatch → SecurityContext temizle. Cross-tenant escalation kapatır.
+- [ ] **[P1 RISK-21]** `tokenInvalidBefore` filter kontrolü + `changePassword`/`resetPassword`/`logout`'ta `tokenInvalidBefore = now()` set.
+- [ ] **[P1 RISK-22]** Brute-force lockout (`failedLoginAttempts`/`lockedUntil` kullan + rate-limit IP/tenant/email bazlı).
+- [ ] **[P1 RISK-23]** RSA key prod fail-fast (`RsaKeys.resolve` prod profilinde key yoksa `IllegalStateException`).
+- [ ] **[P1 RISK-24]** Access token cookie `Secure: true` (`application-prod.yaml`).
+
+### Faz B — Test Altyapısı (kullanıcı erteledi, kritik)
+- [ ] **[P0 RISK-20]** Testcontainers + PostgreSQL ile iki gerçek tenant şeması isolation test altyapısı. RISK-19 ve RISK-26 doğrulamasının ön koşulu.
+- [ ] **[P1 RISK-31]** K-21 endpoint HTTP testleri (`/register` 202, `/verify`, `/suggest-subdomain`) + DELETE/{id}/PUT için 401/403 testleri.
+
+### Faz C — K-21 Sağlamlaştırma (Faz B sonrası, gerçek PG test gerekli)
+- [ ] **[P1 RISK-25]** Token consumption race — `findByTokenForUpdate` (PESSIMISTIC_WRITE) veya conditional UPDATE.
+- [x] **[P1 RISK-26]** Mid-tx TenantContext switch — ÇÖZÜLDÜ (2026-07-24). `createAdminUser` `@Transactional(REQUIRES_NEW)` + self-proxy; `setCurrentTenant` caller'da (`verifyAndProvision`) `self.getObject().createAdminUser(...)` çağrısından ÖNCE (resolver session açılışında okur). Gerçek PG ile doğrulandı.
+
+### Faz D — Hata Yönetimi + Performans
+- [ ] **[P1 RISK-29]** `MethodArgumentTypeMismatchException` (+ `ConstraintViolationException`, `MissingServletRequestParameterException`) → 400 handler `GlobalExceptionHandler`'a.
+- [ ] **[P1 RISK-27]** N+1 `findAll` — `UserRepository` EntityGraph'a `userProfile`/`userAccount` ekle.
+- [ ] **[P2 RISK-28]** TOCTOU uniqueness — `DataIntegrityViolationException` handler + constraint name → `ErrorCode` map.
+
+### Faz E — P2 Toplu Temizlik
+- [ ] [RISK-30] Verification token hash-at-rest (SHA-256) + purge job + `adminPasswordHash` consume sonrası null.
+- [ ] [RISK-32] `PlatformCompanyService.updateStatus` state-machine (`CompanyStatus.canTransitionTo`).
+- [ ] [RISK-33] AuditorAware SecurityContext userId (RISK-3'ü kapatır).
+- [ ] [RISK-34] Deprecated SB4 starter'lar: `oauth2-resource-server`→`security-oauth2-resource-server`, `web`→`webmvc`, Flyway→`spring-boot-starter-flyway`.
+- [ ] AuthService timing enumeration (dummy bcrypt sabit-zamanlı compare).
+- [ ] GroupService.setMembers N+1 + bulk update; `findGroupMembers` `@EntityGraph`.
+- [ ] JWT `iss`/`aud` validation; security headers/CSP explicit customizer.
+- [ ] `t_user_groups(group_id)` reverse index; redundant UNIQUE=PK cleanup (4 join tablosu).
+- [ ] `ErrorCode.AUTH_TOKEN_*` wire or remove (dead code — üretilmiyor).
+- [ ] `CompanyResponse` `schemaName`/`dbRole` kaldır (internal sızıntı).
+- [ ] `GlobalExceptionHandler` sensitive-value masking → exception message'lara da uygula.
+
+### Faz F — P3 Polisaj
+- N+1 `findById` EntityGraph'lar (UserService/RoleService).
+- `resolveRoles`/`resolveGroups` duplicate-id `HashSet` dedupe.
+- `@ToString` token/hash/userProfile/userAccount exclude (`TenantVerificationToken`, `RefreshToken`, `User`).
+- `version BIGINT` → `NOT NULL DEFAULT 0` (migration).
+- `RefreshToken` ölü kod + `t_refresh_tokens` tablosu kaldır (Epic 2.5 gelince ekle).
+- Subdomain pattern constant (DTO + service DRY).
+- Password complexity policy (`@Pattern` mixed case/digit/symbol).
+- `Assign*Request` `@Size(max=...)` bound.
+- `IllegalArgumentException`/`RuntimeException` → `BusinessException`/`ErrorCode` convention.
+- Test dummy BCrypt hash'leri düzelt; forbidden test'leri `$.code == auth_access_denied` assert.
+- `Map<String,Object>` → `@ConfigurationProperties` (`jwt.*` cookie properties).
+- `provisionSystemTenant` self-invocation `@Transactional` no-op (proxy düzelt).
+
+### Doğrulanan (uyumlu, aksiyon yok)
+- Jackson 3 (`tools.jackson.*`), yeni `@EntityScan` paketi, `@EnableMethodSecurity`, `authorizeHttpRequests`+`requestMatchers`, literal `-100` filter order, `GenerationType.UUID`, `@SQLRestriction` (deprecated `@Where` değil), `TIMESTAMPTZ` uzun form.
+- `PepperingPasswordEncoder` (K-23) sound — HMAC-SHA256 pre-hash + BCrypt(12), pepper log'lanmıyor, lazy rehash doğru.
+- `TenantFilter` ordering (-101, security öncesi) doğru; SQL injection defense (schema regex `^[a-z0-9_]+$`) defense-in-depth.
+- Soft-delete masking (`sanitizeRejectedValue` field errors), `ddl-auto=none` her yerde, `tokenInvalidBefore` gap doğrulandı (belgeli).
+
 ## Test
 
 - Config profiles (dev/prod/test, H2, ddl-auto, flyway.enabled) are the single source: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#konfigürasyon-profilleri).

@@ -37,3 +37,8 @@ forgesys:
     # a blank value fails startup (SecurityConfig). NOT for the test/dev defaults.
     # Prod: set via PASSWORD_PEPPER env var (32+ random chars). Never log/commit.
     password-pepper: ${PASSWORD_PEPPER:}
+    # K-21 tenant signup. App base URL used to build the verification link emailed
+    # to the admin; in dev this points at the Vite frontend (which POSTs the token
+    # back to /api/v1/auth/company/verify). Token lifetime in hours.
+    app-base-url: ${APP_BASE_URL:http://localhost:3000}
+    verification-token-ttl-hours: ${VERIFICATION_TOKEN_TTL_HOURS:24}

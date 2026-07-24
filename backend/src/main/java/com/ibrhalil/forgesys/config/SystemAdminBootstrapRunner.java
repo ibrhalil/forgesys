@@ -13,9 +13,10 @@ import org.springframework.stereotype.Component;
 
 /**
  * Provisions the reserved {@code system} tenant + its admin user at startup, so
- * the platform has a stable privileged identity without a manual signup. Reuses
- * {@link TenantProvisioningService#provisionTenant(CompanyRegisterRequest)} and
- * is therefore subject to the same non-transactional caveat ([DEBT-10]).
+ * the platform has a stable privileged identity without a manual signup. Calls
+ * {@link TenantProvisioningService#provisionSystemTenant(CompanyRegisterRequest)},
+ * which runs the K-21 two-phase flow back-to-back with verification mail suppressed
+ * (bootstrap must not depend on an email loop).
  *
  * <p>Idempotent: if a company with the configured subdomain already exists the
  * runner does nothing. Failures are logged and swallowed so a bootstrap error
@@ -55,13 +56,14 @@ public class SystemAdminBootstrapRunner implements ApplicationRunner {
             CompanyRegisterRequest request = new CompanyRegisterRequest(
                     properties.companyName(),
                     properties.subdomain(),
-                    properties.emailDomain(),
                     properties.email(),
                     properties.password(),
                     properties.firstName(),
                     properties.lastName()
             );
-            tenantProvisioningService.provisionTenant(request);
+            // Auto-verify path (K-24): createPendingCompany + verifyAndProvision in one call,
+            // verification mail suppressed — bootstrap must not depend on an email loop.
+            tenantProvisioningService.provisionSystemTenant(request);
             log.info("System tenant provisioned (subdomain={}, email={})", properties.subdomain(), properties.email());
         } catch (Exception e) {
             log.error("Failed to provision system tenant (subdomain={})", properties.subdomain(), e);
@@ -71,7 +73,6 @@ public class SystemAdminBootstrapRunner implements ApplicationRunner {
     private boolean isConfigured() {
         return notBlank(properties.companyName())
                 && notBlank(properties.subdomain())
-                && notBlank(properties.emailDomain())
                 && notBlank(properties.email())
                 && notBlank(properties.password());
     }
