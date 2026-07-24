@@ -2,18 +2,25 @@ package com.ibrhalil.forgesys.exception;
 
 import com.ibrhalil.forgesys.common.exception.TenantNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.ConstraintViolationException;
+import jakarta.validation.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Global REST exception handler. Maps every exception to the uniform
@@ -89,6 +96,73 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
 
+    /**
+     * Malformed path/query parameter that cannot be converted to its target type
+     * (e.g. {@code GET /api/v1/users/not-a-uuid}). Without this the catch-all maps it
+     * to 500; it is a client error, so it maps to {@code validation_error} (400).
+     * [RISK-29]
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex, HttpServletRequest request) {
+        String param = ex.getName();
+        Class<?> required = ex.getRequiredType();
+        String expected = required != null ? required.getSimpleName() : "the expected type";
+        String message = (param != null && !param.isBlank())
+                ? "Malformed request parameter '" + param + "': expected " + expected
+                : "Malformed request parameter: expected " + expected;
+        log.warn("Type mismatch at {}: {}", request.getRequestURI(), ex.getMessage());
+        return build(ErrorCode.VALIDATION_ERROR, message, request.getRequestURI());
+    }
+
+    /**
+     * Missing required {@code @RequestParam} (e.g. {@code GET /api/v1/users?}). [RISK-29]
+     */
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ApiErrorResponse> handleMissingParam(MissingServletRequestParameterException ex, HttpServletRequest request) {
+        String message = "Missing required request parameter: '" + ex.getParameterName() + "'";
+        log.warn("Missing parameter at {}: {}", request.getRequestURI(), ex.getMessage());
+        return build(ErrorCode.VALIDATION_ERROR, message, request.getRequestURI());
+    }
+
+    /**
+     * Bean Validation violations on method parameters (service-layer {@code @Validated}
+     * beans, or a future controller {@code @Validated}). Currently nothing triggers this —
+     * controllers use {@code @Valid} on {@code @RequestBody} which yields
+     * {@link MethodArgumentNotValidException}; kept as a defensive, forward-compatible
+     * 400 path. Sensitive rejected values are masked. [RISK-29]
+     */
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ApiErrorResponse> handleConstraintViolation(ConstraintViolationException ex, HttpServletRequest request) {
+        List<ApiFieldError> fields = ex.getConstraintViolations().stream()
+                .map(v -> new ApiFieldError(leafProperty(v.getPropertyPath()), maskIfSensitive(leafProperty(v.getPropertyPath()), v.getInvalidValue()), v.getMessage()))
+                .toList();
+        ApiErrorResponse body = ApiErrorFactory.of(
+                ErrorCode.VALIDATION_ERROR,
+                ErrorCode.VALIDATION_ERROR.defaultMessage(),
+                request.getRequestURI(),
+                fields);
+        log.warn("Constraint violations [{}]: {} field error(s) at {}", body.traceId(), fields.size(), request.getRequestURI());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
+
+    /**
+     * Concurrent uniqueness race (TOCTOU): two requests pass the service-level
+     * {@code existsBy*} check and one hits the DB unique constraint. Without this it
+     * surfaces as a generic 500; mapped to 400 with the precise {@code *_TAKEN} code
+     * when the constraint name is recognized (PostgreSQL partial-unique index names),
+     * otherwise {@code business_error}. The service checks stay (defense-in-depth);
+     * this covers the race. [RISK-28]
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiErrorResponse> handleDataIntegrity(DataIntegrityViolationException ex, HttpServletRequest request) {
+        ErrorCode code = resolveDuplicateCode(ex);
+        String message = code == ErrorCode.BUSINESS_ERROR
+                ? "A record with these values already exists"
+                : code.defaultMessage();
+        log.warn("Data integrity violation [{}] at {}: {}", code.code(), request.getRequestURI(), ex.getMostSpecificCause().getMessage());
+        return build(code, message, request.getRequestURI());
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiErrorResponse> handleGeneralException(Exception ex, HttpServletRequest request) {
         log.error("Unhandled exception at path: {}", request.getRequestURI(), ex);
@@ -104,11 +178,68 @@ public class GlobalExceptionHandler {
      * credential) so secrets are never echoed back in a validation error payload.
      */
     static Object sanitizeRejectedValue(FieldError fieldError) {
-        String field = fieldError.getField() == null ? "" : fieldError.getField().toLowerCase();
+        return maskIfSensitive(fieldError.getField(), fieldError.getRejectedValue());
+    }
+
+    /**
+     * Shared sensitive-value masking for both {@code @RequestBody} field errors and
+     * {@code ConstraintViolation} invalid values.
+     */
+    private static Object maskIfSensitive(String fieldName, Object value) {
+        String field = fieldName == null ? "" : fieldName.toLowerCase(Locale.ROOT);
         if (field.contains("password") || field.contains("token")
                 || field.contains("secret") || field.contains("credential")) {
             return REDACTED;
         }
-        return fieldError.getRejectedValue();
+        return value;
+    }
+
+    /** Leaf property name of a Bean Validation path (e.g. {@code doIt.arg0} -> {@code arg0}). */
+    private static String leafProperty(Path path) {
+        String leaf = null;
+        if (path != null) {
+            for (Path.Node node : path) {
+                leaf = node.getName();
+            }
+        }
+        return leaf == null ? "" : leaf;
+    }
+
+    /**
+     * Maps a unique-constraint violation to a precise {@code *_TAKEN} {@link ErrorCode}
+     * by substring-matching the constraint/index name. Substring matching is portable
+     * across PostgreSQL (named partial-unique indexes {@code uk_users_email} etc.) and
+     * tolerates H2/PG name divergence; unknown constraints fall back to
+     * {@link ErrorCode#BUSINESS_ERROR} (still 400, never 500).
+     */
+    private ErrorCode resolveDuplicateCode(DataIntegrityViolationException ex) {
+        String constraintName = extractConstraintName(ex);
+        if (constraintName == null) {
+            return ErrorCode.BUSINESS_ERROR;
+        }
+        String lower = constraintName.toLowerCase(Locale.ROOT);
+        if (lower.contains("users_email")) return ErrorCode.USER_EMAIL_TAKEN;
+        if (lower.contains("users_username")) return ErrorCode.USER_USERNAME_TAKEN;
+        if (lower.contains("roles_name")) return ErrorCode.ROLE_NAME_TAKEN;
+        if (lower.contains("groups_name")) return ErrorCode.GROUP_NAME_TAKEN;
+        if (lower.contains("companies_subdomain") || lower.contains("companies_schema_name")) {
+            return ErrorCode.COMPANY_SUBDOMAIN_TAKEN;
+        }
+        return ErrorCode.BUSINESS_ERROR;
+    }
+
+    /** Unwraps the Hibernate constraint name from the exception cause chain. */
+    private String extractConstraintName(DataIntegrityViolationException ex) {
+        Throwable cause = ex;
+        while (cause != null) {
+            if (cause instanceof org.hibernate.exception.ConstraintViolationException hibernate) {
+                String name = hibernate.getConstraintName();
+                if (name != null && !name.isBlank()) {
+                    return name;
+                }
+            }
+            cause = cause.getCause();
+        }
+        return null;
     }
 }

@@ -97,9 +97,11 @@ Kapsamlı 4-katmanlı review (service/security/persistence/test) + Spring Boot 4
 - [x] **[P1 RISK-26]** Mid-tx TenantContext switch — ÇÖZÜLDÜ (2026-07-24). `createAdminUser` `@Transactional(REQUIRES_NEW)` + self-proxy; `setCurrentTenant` caller'da (`verifyAndProvision`) `self.getObject().createAdminUser(...)` çağrısından ÖNCE (resolver session açılışında okur). Gerçek PG ile doğrulandı.
 
 ### Faz D — Hata Yönetimi + Performans
-- [ ] **[P1 RISK-29]** `MethodArgumentTypeMismatchException` (+ `ConstraintViolationException`, `MissingServletRequestParameterException`) → 400 handler `GlobalExceptionHandler`'a.
-- [ ] **[P1 RISK-27]** N+1 `findAll` — `UserRepository` EntityGraph'a `userProfile`/`userAccount` ekle.
-- [ ] **[P2 RISK-28]** TOCTOU uniqueness — `DataIntegrityViolationException` handler + constraint name → `ErrorCode` map.
+- [x] **[P1 RISK-29]** `MethodArgumentTypeMismatchException` (+ `ConstraintViolationException`, `MissingServletRequestParameterException`) → 400 handler `GlobalExceptionHandler`'a.
+- [x] **[P1 RISK-27]** N+1 `findAll` — `UserRepository` EntityGraph'a `userProfile`/`userAccount` ekle.
+- [x] **[P2 RISK-28]** TOCTOU uniqueness — `DataIntegrityViolationException` handler + constraint name → `ErrorCode` map.
+
+> Faz D uygulandı (2026-07-24), 124 test yeşil (H2). Malformed UUID/artık parametre artık 400 (`validation_error`), N+1 (`findAll`) kapatıldı (EntityGraph), concurrent duplicate uniqueness artık 500 değil 400 (`*_TAKEN` / `business_error`).
 
 ### Faz E — P2 Toplu Temizlik
 - [ ] [RISK-30] Verification token hash-at-rest (SHA-256) + purge job + `adminPasswordHash` consume sonrası null.
