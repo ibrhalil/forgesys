@@ -262,7 +262,7 @@ Her kayıt:
 **Cross-tenant isolation testi yok (P0)**
 - **Bağlam:** Tüm test suite'i tek H2 `public` şemasında, `TenantContext` unset → resolver hep `"public"` döner → `SET search_path` mekanizması (izolasyonun omurgası) **hiç test edilmemiş**. RISK-19 dahil tüm tenant-scoped yolların izolasyonu doğrulanmamış. AGENTS.md "tenant verisi sızdırma en kritik bug sınıfı" diyor ama test yok.
 - **Karar:** Testcontainers + PostgreSQL ile iki gerçek tenant şeması yaratan isolation test altyapısı (ROADMAP Faz 3.X'ten öne çekilir). Seed user tenant-A'da, `TenantContext` tenant-B'ye set, `GET /users/{id}` → 404 assert.
-- **Durum:** Açık. Refactor Faz B (kullanıcı tarafından ertelendi).
+- **Durum:** ÇÖZÜLDÜ (2026-07-24). Refactor Faz B. `CrossTenantIsolationTest` (`postgres:16-alpine`, `@ServiceConnection`) iki tenant şeması provision edip (tenant_a `provisionSystemTenant` ile — RISK-26 da doğrulandı; tenant_b manuel CREATE SCHEMA+migrate) çapraz-tenant `SET search_path` izolasyonunu kanıtlar: tenant_a verisi tenant_b'de görünmez, tersi de. `-Dforgesys.pg.it=true` gate'i → varsayılan `mvn clean install` Docker'SIZ yeşil; IT gerçek PG 16.11'de geçti. Testcontainers deps (BOM-managed, `testcontainers-postgresql` 2.x + `spring-boot-testcontainers`) backend test scope'a eklendi.
 
 ### RISK-21
 **`tokenInvalidBefore` kontrol edilmiyor (P1)**
@@ -331,7 +331,7 @@ Her kayıt:
 **K-21 + DELETE endpoint test coverage (P1)**
 - **Bağlam:** `/api/v1/auth/company/register` (202), `/verify`, `/suggest-subdomain` için HTTP-level test yok — sadece `TenantProvisioningServiceTest` (pure Mockito). `@Pattern`, response contract, 202/200 distinction doğrulanmamış. DELETE endpoint'leri dahil çoğu `{id}/PUT` için 401/403 test eksik (sadece `deleteReturns204` happy path var).
 - **Karar:** Controller integration testleri (Faz B test altyapısıyla birlikte).
-- **Durum:** Açık. Refactor Faz B.
+- **Durum:** ÇÖZÜLDÜ (2026-07-24). Refactor Faz B. `AuthCompanyControllerTest`: `POST /company/register` (202 + contract + `@Pattern` subdomain validation), `POST /company/suggest-subdomain` (200 + Türkçe fold). DELETE 401 testleri (user/role/group controllers). `verify` mutlu-yolu gerçek PG gerektirdiğinden `CrossTenantIsolationTest` ile; token-error kodları `TenantProvisioningServiceTest` ile kapsanır.
 
 ### RISK-32
 **`PlatformCompanyService.updateStatus` state-machine'siz (P2)**
