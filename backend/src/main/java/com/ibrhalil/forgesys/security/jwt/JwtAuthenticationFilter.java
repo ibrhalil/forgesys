@@ -1,6 +1,7 @@
 package com.ibrhalil.forgesys.security.jwt;
 
 import com.ibrhalil.forgesys.common.tenant.TenantContext;
+import com.ibrhalil.forgesys.persistence.repository.UserRepository;
 import com.ibrhalil.forgesys.security.CustomUserDetails;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -23,8 +24,12 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -45,9 +50,14 @@ import java.util.stream.Collectors;
  * and the request proceeds unauthenticated; protected routes then get a uniform 401
  * from {@code RestAuthenticationEntryPoint}.
  *
- * <p>Revocation (DB {@code tokenInvalidBefore} + Redis blacklist) is still deferred
- * to the logout/refresh work ([ROADMAP Epic 2.5/2.6](../../../../../../docs/ROADMAP.md))
- * — this filter validates signature + expiry + tenant binding only ([RISK-21] open).
+ * <p><strong>Revocation ([RISK-21](../../../../../../docs/DECISIONS.md#risk-21)):</strong>
+ * after the tenant binding check, the filter reads {@code UserAccount.tokenInvalidBefore}
+ * from the tenant schema (single-column projection — no JOIN, no lazy proxy). A token
+ * whose {@code iat} predates {@code tokenInvalidBefore} was issued before the user
+ * changed/reset their password or logged out, so it is rejected by clearing the
+ * context (→ 401). Redis-backed access-token blacklist (granular revoke) is still
+ * deferred to Epic 2.6; until then revocation is user-scoped (all of the user's
+ * outstanding tokens) and per-request cost is one small indexed query.
  */
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
@@ -55,11 +65,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final Logger log = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
 
     private final JwtDecoder jwtDecoder;
+    private final UserRepository userRepository;
     private final String cookieName;
 
     public JwtAuthenticationFilter(JwtDecoder jwtDecoder,
+                                   UserRepository userRepository,
                                    @Value("${jwt.cookie-name:sf_access_token}") String cookieName) {
         this.jwtDecoder = jwtDecoder;
+        this.userRepository = userRepository;
         this.cookieName = cookieName;
     }
 
@@ -85,6 +98,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
      * from {@link TenantContext}). A mismatch clears the context so the request
      * proceeds unauthenticated (→ 401). The principal's {@code tenantSchema} is taken
      * from the context, never the claim.
+     *
+     * <p>[RISK-21] After the tenant check, {@code tokenInvalidBefore} is consulted: a
+     * token issued before that timestamp (password change/reset, logout, brute-force
+     * lockout by a future extension) is rejected by clearing the context (→ 401).
      */
     private void authenticateIfTenantMatches(Jwt jwt) {
         if (!hasValidIssuerAndAudience(jwt)) {
@@ -101,7 +118,52 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             SecurityContextHolder.clearContext();
             return;
         }
+        if (isRevokedByTokenInvalidBefore(jwt)) {
+            SecurityContextHolder.clearContext();
+            return;
+        }
         SecurityContextHolder.getContext().setAuthentication(toAuthentication(jwt, ctxTenant));
+    }
+
+    /**
+     * [RISK-21] Reads {@code UserAccount.tokenInvalidBefore} for the token subject from
+     * the request's tenant schema and rejects tokens minted before it. Returns
+     * {@code false} (accept) when the account row is absent, the column is null, or the
+     * JWT lacks an {@code iat} claim — the narrow reject case is a present
+     * {@code tokenInvalidBefore} strictly after the token's issued-at instant.
+     *
+     * <p>Resolution note: JWT {@code iat} is a NumericDate (seconds), while
+     * {@code tokenInvalidBefore} is a {@code timestamptz} (sub-second). A naive
+     * {@code iat < tokenInvalidBefore} would reject a token minted in the same second
+     * as a password change/logout (iat floors to the second, the timestamp keeps its
+     * nanos), which would also break a fast re-login. {@code tokenInvalidBefore} is
+     * floored to the second before the compare, so only a token whose iat second is
+     * strictly earlier than the revoke second is rejected.
+     */
+    private boolean isRevokedByTokenInvalidBefore(Jwt jwt) {
+        UUID userId;
+        try {
+            userId = UUID.fromString(jwt.getSubject());
+        } catch (IllegalArgumentException ex) {
+            // Malformed subject cannot match a user account — let it pass as anonymous
+            // here; the downstream @PreAuthorize layer rejects unknown users.
+            return false;
+        }
+        Optional<OffsetDateTime> maybeInvalidBefore = userRepository.findTokenInvalidBefore(userId);
+        if (maybeInvalidBefore.isEmpty()) {
+            return false;
+        }
+        Instant issuedAt = jwt.getIssuedAt();
+        if (issuedAt == null) {
+            return false;
+        }
+        Instant invalidBefore = maybeInvalidBefore.get().toInstant().truncatedTo(ChronoUnit.SECONDS);
+        boolean revoked = issuedAt.isBefore(invalidBefore);
+        if (revoked) {
+            log.debug("JWT for user {} issued at {} predates tokenInvalidBefore {}; rejecting",
+                    userId, issuedAt, invalidBefore);
+        }
+        return revoked;
     }
 
     /**

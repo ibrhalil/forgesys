@@ -10,13 +10,14 @@ import com.ibrhalil.forgesys.dto.MeResponse;
 import com.ibrhalil.forgesys.dto.SubdomainSuggestionRequest;
 import com.ibrhalil.forgesys.dto.SubdomainSuggestionResponse;
 import com.ibrhalil.forgesys.security.CustomUserDetails;
+import com.ibrhalil.forgesys.security.jwt.JwtCookieProperties;
 import com.ibrhalil.forgesys.service.AuthService;
 import com.ibrhalil.forgesys.service.SubdomainSuggestionService;
 import com.ibrhalil.forgesys.service.TenantProvisioningService;
+import com.ibrhalil.forgesys.service.UserService;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
@@ -38,16 +39,9 @@ public class AuthController {
 
     private final TenantProvisioningService tenantProvisioningService;
     private final AuthService authService;
+    private final UserService userService;
     private final SubdomainSuggestionService subdomainSuggestionService;
-
-    @Value("${jwt.cookie-name:sf_access_token}")
-    private String cookieName;
-
-    @Value("${jwt.cookie-secure:false}")
-    private boolean cookieSecure;
-
-    @Value("${jwt.cookie-same-site:Lax}")
-    private String cookieSameSite;
+    private final JwtCookieProperties cookieProperties;
 
     @PostMapping("/company/register")
     public ResponseEntity<CompanyRegisterResponse> registerCompany(@Valid @RequestBody CompanyRegisterRequest request) {
@@ -88,11 +82,18 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<Void> logout(HttpServletResponse response) {
-        ResponseCookie expiredCookie = ResponseCookie.from(cookieName, "")
+    public ResponseEntity<Void> logout(@AuthenticationPrincipal CustomUserDetails principal,
+                                       HttpServletResponse response) {
+        // [RISK-21] Stamp tokenInvalidBefore so outstanding access tokens stop
+        // authenticating (multi-device logout — granular revoke is Epic 2.6). The
+        // cookie is also expired client-side below so the browser drops it.
+        if (principal != null && principal.getUserId() != null) {
+            userService.revokeTokens(principal.getUserId());
+        }
+        ResponseCookie expiredCookie = ResponseCookie.from(cookieProperties.effectiveCookieName(), "")
                 .httpOnly(true)
-                .secure(cookieSecure)
-                .sameSite(cookieSameSite)
+                .secure(cookieProperties.effectiveCookieSecure())
+                .sameSite(cookieProperties.effectiveCookieSameSite())
                 .path("/")
                 .maxAge(0)
                 .build();
@@ -101,10 +102,10 @@ public class AuthController {
     }
 
     private String buildAccessTokenCookie(String token, long expiresInSeconds) {
-        return ResponseCookie.from(cookieName, token)
+        return ResponseCookie.from(cookieProperties.effectiveCookieName(), token)
                 .httpOnly(true)
-                .secure(cookieSecure)
-                .sameSite(cookieSameSite)
+                .secure(cookieProperties.effectiveCookieSecure())
+                .sameSite(cookieProperties.effectiveCookieSameSite())
                 .path("/")
                 .maxAge(expiresInSeconds)
                 .build()

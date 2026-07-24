@@ -3,6 +3,7 @@ package com.ibrhalil.forgesys.controller;
 import com.ibrhalil.forgesys.entity.User;
 import com.ibrhalil.forgesys.entity.UserAccount;
 import com.ibrhalil.forgesys.entity.UserProfile;
+import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -75,21 +76,65 @@ class UserProfileControllerTest extends AbstractRbacWebTest {
         User user = seedUser("pw@tenant.test", "pwuser", OLD_PASSWORD);
         entityManager.flush();
 
+        Cookie preChangeCookie = auth(user.getId(), user.getEmail());
+
         mockMvc.perform(put("/api/v1/users/me/password")
                         .contentType(JSON)
-                        .cookie(auth(user.getId(), user.getEmail()))
+                        .cookie(preChangeCookie)
                         .content("""
                                 {"currentPassword":"%s","newPassword":"%s"}""".formatted(OLD_PASSWORD, NEW_PASSWORD)))
                 .andExpect(status().isNoContent());
 
-        // The old password no longer verifies after the change.
+        // [RISK-21] The old password no longer verifies after the change. The original
+        // cookie was revoked too (tokenInvalidBefore stamped) — mint a fresh one to
+        // represent a new post-change login, then assert that the OLD password is
+        // rejected while the NEW one works.
+        Cookie freshCookie = auth(user.getId(), user.getEmail());
         mockMvc.perform(put("/api/v1/users/me/password")
                         .contentType(JSON)
-                        .cookie(auth(user.getId(), user.getEmail()))
+                        .cookie(freshCookie)
                         .content("""
                                 {"currentPassword":"%s","newPassword":"%s"}""".formatted(OLD_PASSWORD, NEW_PASSWORD)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("user_password_incorrect"));
+    }
+
+    /**
+     * [RISK-21] After a successful password change, the access token issued BEFORE the
+     * change (in {@code preChangeCookie}) must be rejected by {@code JwtAuthenticationFilter}
+     * — {@code tokenInvalidBefore} is stamped to {@code now()} inside {@code changePassword}
+     * and the filter compares {@code iat < tokenInvalidBefore} (both floored to the
+     * second). The cookie itself is irrelevant; the signed token is what carries the
+     * {@code iat} claim.
+     *
+     * <p>A 1.1s sleep between mint and change guarantees the token's iat second is
+     * strictly earlier than the {@code tokenInvalidBefore} second (the JWT spec's
+     * NumericDate has 1s resolution).
+     */
+    @Test
+    void changePasswordRevokesPreviouslyIssuedAccessToken() throws Exception {
+        User user = seedUser("revoke@tenant.test", "revokeuser", OLD_PASSWORD);
+        entityManager.flush();
+
+        Cookie preChangeCookie = auth(user.getId(), user.getEmail());
+
+        // Sanity: the cookie authenticated fine BEFORE the password change.
+        mockMvc.perform(get("/api/v1/users/me").cookie(preChangeCookie))
+                .andExpect(status().isOk());
+
+        // Force the next now() call to land in a later second than the token's iat.
+        Thread.sleep(1100);
+
+        mockMvc.perform(put("/api/v1/users/me/password")
+                        .contentType(JSON)
+                        .cookie(preChangeCookie)
+                        .content("""
+                                {"currentPassword":"%s","newPassword":"%s"}""".formatted(OLD_PASSWORD, NEW_PASSWORD)))
+                .andExpect(status().isNoContent());
+
+        // The SAME cookie/token now yields 401 — pre-change token revoked.
+        mockMvc.perform(get("/api/v1/users/me").cookie(preChangeCookie))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

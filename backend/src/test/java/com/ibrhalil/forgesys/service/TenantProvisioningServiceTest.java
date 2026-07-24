@@ -35,6 +35,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -127,9 +128,10 @@ class TenantProvisioningServiceTest {
         Company company = companyWithStatus(CompanyStatus.PROVISIONING);
         TenantVerificationToken token = validToken(company);
         when(tokenRepository.findByToken("good-token")).thenReturn(Optional.of(token));
+        // [RISK-25] atomic claim returns 1 (caller wins the race).
+        when(tokenRepository.claimToken(eq("good-token"), any(OffsetDateTime.class))).thenReturn(1);
         stubCreateSchema();
         when(companyRepository.save(any(Company.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(tokenRepository.save(any(TenantVerificationToken.class))).thenAnswer(inv -> inv.getArgument(0));
 
         CompanyVerifyResponse response = service.verifyAndProvision("good-token");
 
@@ -140,6 +142,9 @@ class TenantProvisioningServiceTest {
         verify(tenantMigrationSupport).migrateSchema(SCHEMA_NAME);
         verify(userRepository).save(any());
         verify(rbacSeederProvider).ifAvailable(any());
+        // [RISK-25] the claim UPDATE persists used_at; the service no longer re-saves the
+        // token afterwards.
+        verify(tokenRepository, never()).save(any(TenantVerificationToken.class));
     }
 
     @Test
@@ -164,6 +169,29 @@ class TenantProvisioningServiceTest {
                 .extracting("errorCode").isEqualTo(ErrorCode.TENANT_TOKEN_ALREADY_USED);
 
         verify(tenantMigrationSupport, never()).migrateSchema(anyString());
+        // [RISK-25] the SELECT-time isUsed() check short-circuits before the atomic claim.
+        verify(tokenRepository, never()).claimToken(anyString(), any(OffsetDateTime.class));
+    }
+
+    /**
+     * [RISK-25] Race loser: another concurrent verify request claimed the token between
+     * our SELECT (saw {@code used_at = null}) and our UPDATE. The conditional claim
+     * returns 0 and the service maps that to {@code TENANT_TOKEN_ALREADY_USED} — the
+     * tenant is not double-provisioned (no CREATE SCHEMA, no admin user, no status flip).
+     */
+    @Test
+    void verifyAndProvision_concurrentClaimLost_throwsAlreadyUsed() throws Exception {
+        TenantVerificationToken token = validToken(companyWithStatus(CompanyStatus.PROVISIONING));
+        when(tokenRepository.findByToken("contended")).thenReturn(Optional.of(token));
+        when(tokenRepository.claimToken(eq("contended"), any(OffsetDateTime.class))).thenReturn(0);
+
+        assertThatThrownBy(() -> service.verifyAndProvision("contended"))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.TENANT_TOKEN_ALREADY_USED);
+
+        verify(tenantMigrationSupport, never()).migrateSchema(anyString());
+        verify(userRepository, never()).save(any());
+        verify(companyRepository, never()).save(any(Company.class));
     }
 
     @Test
@@ -192,6 +220,8 @@ class TenantProvisioningServiceTest {
         when(tokenRepository.save(any(TenantVerificationToken.class))).thenAnswer(inv -> withTokenId(inv.getArgument(0)));
         when(tokenRepository.findByCompanyId(any(UUID.class))).thenReturn(Optional.of(token));
         when(tokenRepository.findByToken(token.getToken())).thenReturn(Optional.of(token));
+        // [RISK-25] the auto-verify path also goes through the atomic claim.
+        when(tokenRepository.claimToken(eq(token.getToken()), any(OffsetDateTime.class))).thenReturn(1);
         stubCreateSchema();
         when(companyRepository.findById(any(UUID.class)))
                 .thenAnswer(inv -> Optional.of(companyWithStatus(CompanyStatus.ACTIVE)));

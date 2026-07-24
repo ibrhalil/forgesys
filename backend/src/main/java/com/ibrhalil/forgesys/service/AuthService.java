@@ -40,10 +40,12 @@ import java.util.Optional;
  * hash is a legacy pepper-less BCrypt hash is silently rehashed to the peppered format
  * and persisted inline (the user is already loaded, no extra round-trip).
  *
- * <p>Deferred: refresh tokens, logout (Redis blacklist), token revocation
- * ({@code tokenInvalidBefore} check in the filter — [RISK-21] open), login-history write.
- * Note that a locked account's already-issued access token stays valid until it expires
- * (≤ TTL); immediate session kill arrives with [RISK-21].
+ * <p>Deferred: refresh tokens, logout (Redis blacklist — granular per-session revoke),
+ * login-history write. Immediate session kill is now in place: changing/resetting the
+ * password or logging out stamps {@code tokenInvalidBefore} and the
+ * {@code JwtAuthenticationFilter} rejects tokens minted before that ([RISK-21]
+ * resolved — user-scoped revoke, multi-device); granular single-session revoke is
+ * Epic 2.6 (Redis access-token blacklist).
  */
 @Slf4j
 @Service

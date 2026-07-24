@@ -28,7 +28,7 @@ import java.security.interfaces.RSAPublicKey;
  * revocation (tokenInvalidBefore / Redis blacklist) can be layered on later.
  */
 @Configuration
-@EnableConfigurationProperties(RsaKeyProperties.class)
+@EnableConfigurationProperties({RsaKeyProperties.class, JwtCookieProperties.class})
 public class JwtConfig {
 
     public static final String KEY_ID = "forgesys-rs256";

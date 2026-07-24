@@ -81,12 +81,12 @@ Kapsamlı 4-katmanlı review (service/security/persistence/test) + Spring Boot 4
 
 ### Faz A — Kritik Güvenlik (önce)
 - [x] **[P0 RISK-19]** JWT tenant binding — `JwtAuthenticationFilter`'da token tenant claim == request tenant (TenantContext) kontrolü; mismatch → SecurityContext temizle. Cross-tenant escalation kapatır.
-- [ ] **[P1 RISK-21]** `tokenInvalidBefore` filter kontrolü + `changePassword`/`resetPassword`/`logout`'ta `tokenInvalidBefore = now()` set.
+- [x] **[P1 RISK-21]** `tokenInvalidBefore` filter kontrolü + `changePassword`/`resetPassword`/`logout`'ta `tokenInvalidBefore = now()` set. (2026-07-24)
 - [x] **[P1 RISK-22]** Brute-force lockout — `failedLoginAttempts`/`lockedUntil` + `AuthService.login`'de 5 deneme/15dk backoff, `auth_account_locked` (423). **Login-scoped** (filter DB lookup RISK-21 ile). IP/tenant/email rate-limit Redis (Epic 2.6) sonrası.
 - [x] **[P1 RISK-23]** RSA key prod fail-fast (`RsaKeys.resolve` prod profilinde key yoksa `IllegalStateException`).
 - [x] **[P1 RISK-24]** Access token cookie `Secure: true` (`application-prod.yaml`).
 
-> Faz A'nın 4 maddesi (19/22/23/24) uygulandı (2026-07-24), 118 test yeşil (H2). RISK-21 (filter'da `tokenInvalidBefore` DB lookup + logout/change/reset noktaları) açık — Redis cache (Epic 2.6) ile veya tek başına ele alınacak. RISK-22 lockout login'de tam çalışır; kilitlenen hesabın eldeki token'ı (≤ TTL) RISK-21 gelene kadar geçerli kalır. Gerçek çapraz-tenant izolasyon doğrulaması Faz B (RISK-20, Testcontainers) ile.
+> Faz A'nın 5 maddesi (19/21/22/23/24) uygulandı (2026-07-24), 139 test yeşil (H2). RISK-21: `UserRepository.findTokenInvalidBefore` tek-kolon projection + filter DB lookup (her authenticated request ekstra 1 indexed sorgu — Redis cache Epic 2.6 ile), `iat < tokenInvalidBefore` (saniyeye floor — hızlı re-login korunur), set noktaları `UserService.changePassword`/`resetPassword`/`revokeTokens` + `AuthController.logout`. **Kapsam:** user-scoped revoke (multi-device logout); granular tek-token revoke Epic 2.6. RISK-22 lockout `tokenInvalidBefore` set ETMEZ (kilitlenen hesabın elindeki token TTL'ince geçerli — lockout-anında-revoke erteli). Gerçek çapraz-tenant izolasyon doğrulaması Faz B (RISK-20, Testcontainers) ile.
 
 ### Faz B — Test Altyapısı (UYGULANDI 2026-07-24)
 - [x] **[P0 RISK-20]** Testcontainers + PostgreSQL ile iki gerçek tenant şeması isolation test altyapısı. RISK-19 ve RISK-26 doğrulamasının ön koşulu.
@@ -95,8 +95,10 @@ Kapsamlı 4-katmanlı review (service/security/persistence/test) + Spring Boot 4
 > Faz B uygulandı (2026-07-24). `CrossTenantIsolationTest` (Testcontainers, `postgres:16-alpine`) gerçek PG'de iki tenant şeması provision edip `SET search_path` izolasyonunu + RISK-26 (mid-tx context switch) doğruladı — **Docker ile yeşil**. `-Dforgesys.pg.it=true` gate'i ile varsayılan build Docker'SIZ kalır (136 test, 2 skip). RISK-31: `AuthCompanyControllerTest` (register 202/validation, suggest-subdomain fold) + DELETE 401 testleri (3 controller). 136 test yeşil (H2).
 
 ### Faz C — K-21 Sağlamlaştırma (Faz B sonrası, gerçek PG test gerekli)
-- [ ] **[P1 RISK-25]** Token consumption race — `findByTokenForUpdate` (PESSIMISTIC_WRITE) veya conditional UPDATE.
+- [x] **[P1 RISK-25]** Token consumption race — conditional UPDATE (`claimToken` `@Modifying`).
 - [x] **[P1 RISK-26]** Mid-tx TenantContext switch — ÇÖZÜLDÜ (2026-07-24). `createAdminUser` `@Transactional(REQUIRES_NEW)` + self-proxy; `setCurrentTenant` caller'da (`verifyAndProvision`) `self.getObject().createAdminUser(...)` çağrısından ÖNCE (resolver session açılışında okur). Gerçek PG ile doğrulandı.
+
+> Faz C tamamlandı (2026-07-24). RISK-25: `TenantVerificationTokenRepository.claimToken` `@Modifying` conditional UPDATE (`SET usedAt=:now WHERE token=:token AND usedAt IS NULL`) — H2+PG portable, PESSIMISTIC_WRITE yerine tercih edildi. `verifyAndProvision` SELECT-validate → claim → 0 row = `TENANT_TOKEN_ALREADY_USED` (çift verify tıkı kapanır). Gerçek concurrent race Testcontainers (RISK-20) ile ayrıca doğrulanabilir; atomic UPDATE DB-invariant'ı yeterli. 140 test yeşil (H2).
 
 ### Faz D — Hata Yönetimi + Performans
 - [x] **[P1 RISK-29]** `MethodArgumentTypeMismatchException` (+ `ConstraintViolationException`, `MissingServletRequestParameterException`) → 400 handler `GlobalExceptionHandler`'a.
@@ -119,7 +121,7 @@ Kapsamlı 4-katmanlı review (service/security/persistence/test) + Spring Boot 4
 - [ ] `GlobalExceptionHandler` sensitive-value masking → exception message'lara da uygula. *(erteledi: mesajlarda gerçek secret leak yok; geniş masking debug'ı zorlaştırır)*
 
 ### Faz F — P3 Polisaj
-- [ ] N+1 `findById` EntityGraph'lar (UserService/RoleService). *(erteledi: düşük değer)*
+- [x] N+1 `findById` EntityGraph'lar (UserService/RoleService/GroupService — `UserRepository.findById` roles+groups+profile+account, `RoleRepository.findById` permissions, `GroupRepository.findById` roles).
 - [x] `resolveRoles`/`resolveGroups` duplicate-id `HashSet` dedupe.
 - [x] `@ToString` token/hash/userProfile/userAccount exclude (`TenantVerificationToken`, `RefreshToken`, `User`).
 - [ ] `version BIGINT` → `NOT NULL DEFAULT 0` (migration). *(erteledi: tenant migration)*
@@ -129,7 +131,7 @@ Kapsamlı 4-katmanlı review (service/security/persistence/test) + Spring Boot 4
 - [x] `Assign*Request` `@Size(max=...)` bound.
 - [ ] `IllegalArgumentException`/`RuntimeException` → `BusinessException`/`ErrorCode` convention. *(erteledi: geniş service-layer denetimi)*
 - [~] Test dummy BCrypt hash'leri düzelt; forbidden test'leri `$.code == auth_access_denied` assert. *(forbidden asserts done — 10 yer; dummy hash kozmetik bırakıldı)*
-- [ ] `Map<String,Object>` → `@ConfigurationProperties` (`jwt.*` cookie properties).
+- [x] `Map<String,Object>` → `@ConfigurationProperties` (`jwt.*` cookie properties — `JwtCookieProperties` record, AuthController `@Value` x3 kaldırıldı).
 - [ ] `provisionSystemTenant` self-invocation `@Transactional` no-op (proxy düzelt). *(cosmetic no-op — verifyAndProvision REQUIRED, outer tx zaten kapsıyor)*
 
 > Faz E/F toplu temizlik (2026-07-24): yapılandırılabilir/mekanik kalemlerin çoğu uygulandı — AUTH_TOKEN ölü kod, CompanyResponse internal sızıntı, @ToString secret exclude, subdomain pattern DRY (`SubdomainRules`), Assign* `@Size`, id dedupe, AuthService timing, JWT iss/aud + security headers/CSP, CompanyStatus state-machine (RISK-32), findGroupMembers EntityGraph, forbidden `$.code` assert'leri. **126 test yeşil (H2).** Ertenlenenler: RISK-30 (provisioning + migration), RISK-34 (build-risk), password complexity (ürün kararı), tenant migration'ları (version DEFAULT / reverse index / UNIQUE=PK — "ask first"). Gerçek PG doğrulaması Faz B (RISK-20) ile.
