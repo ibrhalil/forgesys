@@ -26,4 +26,14 @@ public interface RoleRepository extends JpaRepository<Role, UUID> {
     @Override
     @EntityGraph(attributePaths = "permissions")
     Page<Role> findAll(Pageable pageable);
+
+    /**
+     * Same {@link EntityGraph} as {@link #findAll(Pageable)} for the single-row lookup.
+     * {@code RoleService.findById}/{@code getRoleOrThrow} resolve a {@code Role} and then
+     * read {@code permissions} when building {@code RoleResponse}; without this override
+     * that accessor fires an extra SELECT on the tenant schema.
+     */
+    @Override
+    @EntityGraph(attributePaths = "permissions")
+    Optional<Role> findById(UUID id);
 }

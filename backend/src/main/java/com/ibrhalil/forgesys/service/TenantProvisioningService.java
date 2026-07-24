@@ -111,6 +111,14 @@ public class TenantProvisioningService {
     /**
      * Phase 2 — promotes a {@code PROVISIONING} Company to {@code ACTIVE}: creates the
      * tenant schema, runs Flyway, creates the admin user, consumes the token.
+     *
+     * <p>[RISK-25] Token consumption is an atomic conditional UPDATE
+     * ({@link TenantVerificationTokenRepository#claimToken}) rather than the previous
+     * read-modify-write, so two concurrent verify requests sharing the same link cannot
+     * both pass the {@code isUsed()} check and double-provision the tenant. The first
+     * caller wins (claim returns 1); the second sees 0 and gets
+     * {@code TENANT_TOKEN_ALREADY_USED}. Validity/expiry are still checked by SELECT
+     * beforehand so the precise error code is preserved.
      */
     @Transactional
     public CompanyVerifyResponse verifyAndProvision(String token) {
@@ -128,6 +136,17 @@ public class TenantProvisioningService {
             // Token exists but the Company already moved past PROVISIONING — reject defensively.
             throw new BusinessException(ErrorCode.TENANT_TOKEN_ALREADY_USED);
         }
+
+        // [RISK-25] Atomic claim: only one concurrent caller wins. A 0 count means
+        // another verify request already stamped used_at between our SELECT and UPDATE.
+        OffsetDateTime claimedAt = OffsetDateTime.now(ZoneOffset.UTC);
+        int claimedRows = tokenRepository.claimToken(token, claimedAt);
+        if (claimedRows == 0) {
+            throw new BusinessException(ErrorCode.TENANT_TOKEN_ALREADY_USED);
+        }
+        // Keep the managed entity in sync with the row the UPDATE just wrote (avoids a
+        // redundant second UPDATE; claimToken already persisted used_at).
+        verification.setUsedAt(claimedAt);
 
         log.info("Verifying tenant: subdomain={}, companyId={}", company.getSubdomain(), company.getId());
 
@@ -147,8 +166,6 @@ public class TenantProvisioningService {
 
         company.setStatus(CompanyStatus.ACTIVE);
         Company saved = companyRepository.save(company);
-        verification.setUsedAt(OffsetDateTime.now(ZoneOffset.UTC));
-        tokenRepository.save(verification);
 
         log.info("Tenant verified and provisioned: subdomain={}", saved.getSubdomain());
         return new CompanyVerifyResponse(

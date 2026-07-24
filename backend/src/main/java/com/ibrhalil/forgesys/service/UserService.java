@@ -28,6 +28,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.OffsetDateTime;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -148,8 +149,11 @@ public class UserService {
 
     /**
      * Self-service password change. Verifies the current password before applying the
-     * new one. Note: session invalidation ({@code tokenInvalidBefore}) is intentionally
-     * not set here — token revocation is deferred to Epic 2.5/2.6 (Redis blacklist).
+     * new one, then stamps {@code tokenInvalidBefore = now()} so every access token
+     * issued before this change is rejected by {@code JwtAuthenticationFilter}
+     * ([RISK-21]). Multi-device logout side effect: ALL of the user's outstanding
+     * sessions are killed, not just the current one. Granular (single-session) revoke
+     * arrives with Redis-backed blacklist (Epic 2.6).
      */
     @Transactional
     public void changePassword(UUID userId, PasswordChangeRequest request) {
@@ -158,18 +162,46 @@ public class UserService {
             throw new BusinessException(ErrorCode.USER_PASSWORD_INCORRECT);
         }
         user.setPassword(passwordEncoder.encode(request.newPassword()));
+        invalidateTokens(user);
         userRepository.save(user);
     }
 
     /**
      * Admin-issued password reset. No current password is verified — the caller already
-     * holds {@code iam:user:write}.
+     * holds {@code iam:user:write}. {@code tokenInvalidBefore = now()} stamps the reset
+     * time so the user's previous tokens (if any) no longer authenticate
+     * ([RISK-21] — same multi-device logout note as {@link #changePassword}).
      */
     @Transactional
     public void resetPassword(UUID userId, AdminPasswordResetRequest request) {
         User user = getUserOrThrow(userId);
         user.setPassword(passwordEncoder.encode(request.newPassword()));
+        invalidateTokens(user);
         userRepository.save(user);
+    }
+
+    /**
+     * [RISK-21] Logout hook: stamps {@code tokenInvalidBefore = now()} for the user.
+     * Called by {@code AuthController.logout} with the authenticated principal's id.
+     * Revokes every outstanding access token for the user (multi-device logout);
+     * granular per-session revoke is deferred to Epic 2.6 (Redis blacklist). The cookie
+     * is also expired client-side by the controller so the browser drops it.
+     */
+    @Transactional
+    public void revokeTokens(UUID userId) {
+        User user = getUserOrThrow(userId);
+        invalidateTokens(user);
+        userRepository.save(user);
+    }
+
+    private void invalidateTokens(User user) {
+        UserAccount account = user.getUserAccount();
+        if (account == null) {
+            // Defensive: a password write on an account-less user shouldn't happen
+            // (login requires an account), but we don't want to NPE here.
+            return;
+        }
+        account.setTokenInvalidBefore(OffsetDateTime.now());
     }
 
     private List<Role> resolveRoles(List<UUID> roleIds) {

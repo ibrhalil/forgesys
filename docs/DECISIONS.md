@@ -32,8 +32,26 @@ Her kayıt:
 **Nginx ertelendi, Faz 2 önceli (2026-07-09)**
 - **Bağlam:** Orijinal plan Faz 1.5'te 3-container full separation + Nginx dev'de aktif idi. Kullanıcı Faz 3 öncesi tam RBAC platformu istiyor (user CRUD, yetki atama, login/token, 3 katmanlı log, admin/user frontend).
 - **Karar:** Faz 1.5 (Nginx topology) Faz 2 sonrasına ertelendi. Doğrudan Faz 2'ye geçildi. Backend-önceli sıralama: tüm Faz 2 backend bitince Faz 4.0.B frontend gelir.
-- **Durum:** Uygulandı (erteleme).
-- **Etki:** Vite proxy dev'de Nginx'in görevini görüyor; prod tek app container. Faz 1.5 ticketları (toplamda sayılır) pasif.
+- **Durum:** Uygulandı (erteleme). **Güncelleme (2026-07-25, K-33):** Erteleme, Nginx topology planı netleştirilerek (K-33) **proje %90 tamamlanana kadar** uzatıldı. Karar gerekçesi hâlâ geçerli (backend-öncelik + Vite proxy dev'i karşılıyor).
+- **Etki:** Vite proxy dev'de Nginx'in görevini görüyor; prod tek app container (`:8080` expose). Faz 1.5 ticketları (toplamda sayılır) pasif; K-33 topology'si ile birlikte uygulanacak.
+
+### K-33
+**Nginx Gateway Topology — Planlandı (uygulama %90 sonrasına erteli, 2026-07-25)**
+- **Bağlam:** [K-18](#k-18) Faz 1.5'i ertelemişti; "VPS içinde Docker, birden fazla proje farklı portlarda, global Nginx tarafından yönetilen" shared-gateway topology'si isteniyor. Bu repo (ForgeSys) + ileride oluşturulacak diğer projeler aynı VPS'te host edilecek. Cloudflare gibi managed kolaylıklar **kullanılmayacak** (projenin kendini kanıtlama amacı taşıması). ForgeSys subdomain-based multi-tenancy (`*.forgesys.app`) wildcard TLS gerektiriyor.
+- **Karar:** Aşağıdaki topology + TLS stratejisi **planlandı**; uygulama **proje %90 tamamlandıktan sonrasına erteli** (K-18 extension). Plan hazır, sadece execute bekliyor.
+  1. **Topoloji — shared gateway, ayrı repo:** VPS'te `~/nginx-gateway/` ayrı bir git repo'da tek Nginx container. **External Docker network** (`gateway-net`) üzerinden tüm projelerin servislerine erişir. Her proje (ForgeSys dahil) compose'unda `ports:` → `expose:` (host port kapalı), `gateway-net`'e join, sabit container name. Yeni proje eklemek: compose'a network eklemek + gateway'e `conf.d/proje.conf` atmak.
+  2. **TLS — Let's Encrypt + certbot, wildcard DNS-01:** Cloudflare yok. Wildcard `*.forgesys.app` için **DNS-01 challenge** (HTTP-01 wildcard desteklemez; dinamik tenant subdomain'leri tek-tek issue edilemez). Certbot DNS plugin (Cloudflare/Route53/DigitalOcean/Namecheap/Gandi — kullanılan DNS sağlayıcıya göre) + renewal cron. Certificate `infra/ssl/`'e (ForgeSys) veya Nginx container'ına konur. **Açık uç:** DNS sağlayıcı henüz net değil (K-33 uygulama anında netleştirilecek).
+  3. **ForgeSys route (gateway'e kurulacak `infra/nginx/forgesys.conf`):** `server_name *.forgesys.app forgesys.app; proxy_pass http://forgesys-app:8080; proxy_set_header Host $host;` (Host header korunur — `TenantFilter` Host'tan subdomain çözümler). `/actuator/health` allow (healthcheck). Rate limit `/api/v1/auth/login` sıkı (RISK-22 ek katman).
+  4. **Rate limit — ikisi birden:** Nginx `limit_req` (IP/path-bazlı) + varsa Cloudflare-like başka bir katman. Gerçek IP için Nginx `set_real_ip_from` + `real_ip_header` (Cloudflare yok, direkt client IP).
+  5. **Security headers (Nginx):** HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy. **CSP Nginx'te değil** — backend `SecurityConfig`'te zaten var, duplicate/conflict önlenir.
+  6. **HTTP→HTTPS redirect + HSTS:** Nginx `:80` → `:443` redirect (Cloudflare "Always Use HTTPS" gibi kolaylık yok, Nginx kendi yapar).
+- **Durum:** PLANLANDI (uygulama %90 sonrası). K-18 ertelemesini detaylandırır + topology/TLS kararlarını sabitler.
+- **Etki:**
+  - Bu repo'da **şu an hiçbir dosya değişikliği yok** — plan notu olarak kaydedildi.
+  - `docker-compose-prod.yml` `ports: "8080:8080"` geçici olarak expose'da kalır; K-33 uygulama anında `expose:` + `gateway-net`'e geçilir.
+  - **Açık uçlar (uygulama anında netleşecek):** DNS sağlayıcı (certbot plugin seçimi), `nginx-gateway/` repo'su oluşturma, `infra/nginx/` şablonları, `infra/ssl/` cert yönetimi (renewal sonrası reload hook).
+  - K-33 uygulandığında `infra/nginx/` altına: `nginx.conf` (gzip, rate-limit zone, real_ip), `snippets/proxy-common.conf`, `snippets/security-headers.conf`, `conf.d/_template.conf` gelecek.
+  - `%90` ölçütü: Faz 2 (audit/log dahil) + Faz 3 (modüler platform + app builder backend) + Faz 4 (frontend) ana akışları; Faz 5 (TLS/CI/CD/observability) + Faz 6 (billing) hâlâ bekliyor olabilir.
 
 ### K-19
 **3 Katmanlı Log**
@@ -268,7 +286,12 @@ Her kayıt:
 **`tokenInvalidBefore` kontrol edilmiyor (P1)**
 - **Bağlam:** `UserAccount.tokenInvalidBefore` alanı var ama **hiçbir filter/service kontrol etmiyor** (grep doğruladı — sadece entity/Javadoc/docs). Logout sadece cookie expire, JWT geçerli kalır (15 dk). `changePassword`/`resetPassword` token invalidate etmiyor → çalınan token, şifre değiştirilse bile çalışmaya devam eder.
 - **Karar:** `JwtAuthenticationFilter`'a `tokenInvalidBefore` kontrolü (issue sonrası Redis cache; ilk dilimde DB lookup) + `changePassword`/`resetPassword`/`logout`'ta `tokenInvalidBefore = now()` set. Epic 2.5/2.6 (Redis blacklist) ile tamamlanır.
-- **Durum:** Açık. Refactor Faz A.
+- **Durum:** ÇÖZÜLDÜ (2026-07-24). Refactor Faz A. `UserRepository.findTokenInvalidBefore(userId)` tek-kolon JPQL projection (UserAccount `@MapsId` shared-PK — JOIN/lazy-proxy yok); `JwtAuthenticationFilter.isRevokedByTokenInvalidBefore` her authenticated request'te bunu çağırır, `iat < tokenInvalidBefore` (her ikisi saniyeye floor) → `clearContext` (→ 401). **Set noktaları:** `UserService.changePassword` + `resetPassword` + `revokeTokens(userId)` (yeni) → `account.setTokenInvalidBefore(OffsetDateTime.now())`; `AuthController.logout` principal'dan userId alıp `userService.revokeTokens` çağırır. **Tradeoff:** Redis cache (Epic 2.6) yok → her authenticated request ekstra 1 küçük indexed sorgu (tolere edilebilir; user_account küçük + index'li). Saniyeye floor: JWT `iat` NumericDate saniye çözünürlükte, naive nano compare → aynı saniyede mint+revoke token'ı reject ederdi; floor ile "aynı saniyede mint, revoke kararı belirsiz → accept" garantisi (hızlı re-login korunur). **Kapsam:** user-scoped revoke (kullanıcının tüm outstanding token'ı); granular per-session (tek token) revoke Epic 2.6 (Redis access-token blacklist). **RISK-22 kapatılması:** brute-force lockout (`AuthService.login`'de `lockedUntil` set) `tokenInvalidBefore` set ETMEZ — kilitlenen hesabın elindeki token'ı TTL süreince hâlâ geçerli; lockout anında da revoke etmek istenirse `AuthService.login`'e `invalidateTokens` çağrısı eklenebilir (kasıtlı olarak eklenmedi — her failed attempt'ta DB yazısı + RISK-22 scope'undan dışarı). Test: `BearerTokenAuthTest.tokenInvalidBeforeRevokesPreviouslyIssuedToken` / `tokenInvalidBeforeDoesNotAffectNewerToken` (filter-side); `UserProfileControllerTest.changePasswordRevokesPreviouslyIssuedAccessToken` (e2e changePassword → eski cookie reject); `changePasswordSucceedsAndInvalidatesOldPassword` (post-change fresh login → old password reject).
+- **Etki:**
+  - Çalınan token, kullanıcı şifre değiştirince / logout yapınca / admin reset edince anında geçersiz (TTL bekleme yok).
+  - Çok-cihazlı logout yan etkisi: tek cihazdan logout → tüm cihazlardan logout (user-scoped). Granular çözüm Epic 2.6.
+  - Filter artık DB-bağımlı — önceki DB'siz stateless principal reconstruction pattern'dan sapma; performans maliyeti Redis ile azaltılacak.
+  - Frontend tarafında changePassword/resetPassword/logout sonrası otomatik re-login akışı (401 → login redirect) doğru çalışmalı.
 
 ### RISK-22
 **Brute-force / lockout koruması yok (P1)**
@@ -292,7 +315,7 @@ Her kayıt:
 **Token consumption race condition (P1)**
 - **Bağlam:** `TenantProvisioningService.verifyAndProvision` token'ı read-modify-write; iki eşzamanlı istek aynı token'la → ikisi de `isUsed()` kontrolünden geçer. `TenantVerificationToken` `GeneratedIdAuditEntity`'den → `@Version`/optimistic lock yok, pessimistic lock yok. Biri admin user insert'te unique constraint patlar ama `CREATE SCHEMA` + Flyway zaten implicit commit oldu → PROVISIONING Company yarım kalır.
 - **Karar:** Repository'ye `@Lock(LockModeType.PESSIMISTIC_WRITE) Optional<TenantVerificationToken> findByTokenForUpdate(String)` veya conditional UPDATE (`UPDATE ... SET used_at=now() WHERE token=? AND used_at IS NULL`, etkilenen satır 0 → `TENANT_TOKEN_ALREADY_USED`).
-- **Durum:** Açık. Refactor Faz C (RISK-20 test altyapısından sonra doğrulanmalı).
+- **Durum:** ÇÖZÜLDÜ (2026-07-24). Refactor Faz C. Conditional UPDATE seçildi (`PESSIMISTIC_WRITE` yerine — H2 + PG portable, lock-timeout tuning yok, single-column write read-modify-write window barındırmaz). `TenantVerificationTokenRepository.claimToken(token, now)` `@Modifying @Query("UPDATE ... SET usedAt = :now WHERE token = :token AND usedAt IS NULL")` → `int` row count. `verifyAndProvision` akışı: SELECT validate (exists/expired/company-status) → `claimToken` → 0 row → `TENANT_TOKEN_ALREADY_USED` (geçerli kodların — `INVALID`/`EXPIRED` — korunması için claim öncesi SELECT şart). In-memory entity sync için `verification.setUsedAt(claimedAt)`; eski `tokenRepository.save(verification)` kaldırıldı (claim zaten DB'ye yazdı). **Test:** `TenantProvisioningServiceTest.verifyAndProvision_concurrentClaimLost_throwsAlreadyUsed` (claimToken 0 döner → ALREADY_USED, hiç provisioning adımı çalışmaz); mevcut `validToken`/`usedToken`/`expiredToken`/`provisionSystemTenant` test'leri claimToken stub'ı ile uyumlandı. **Doğrulama kapsamı:** unit (Mockito) — gerçek concurrent race davranışı Testcontainers (RISK-20 altyapısı) ile ayrı doğrulanabilir; şimdilik atomic UPDATE'in DB-semantiği (single-row conditional write) invariant'ı yeterli.
 
 ### RISK-26
 **Mid-transaction TenantContext switch (ÇÖZÜLDÜ)**

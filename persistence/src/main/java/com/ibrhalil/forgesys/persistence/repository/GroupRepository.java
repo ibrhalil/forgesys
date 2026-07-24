@@ -28,6 +28,16 @@ public interface GroupRepository extends JpaRepository<Group, UUID> {
     @EntityGraph(attributePaths = "roles")
     Page<Group> findAll(Pageable pageable);
 
+    /**
+     * Same {@link EntityGraph} as {@link #findAll(Pageable)} for the single-row lookup.
+     * {@code GroupService.findById}/{@code getGroupOrThrow} resolve a {@code Group} and
+     * then read {@code roles} when building {@code GroupResponse}; without this override
+     * that accessor fires an extra SELECT on the tenant schema.
+     */
+    @Override
+    @EntityGraph(attributePaths = "roles")
+    Optional<Group> findById(UUID id);
+
     @Query(value = "select count(*) from t_user_groups where group_id = :groupId", nativeQuery = true)
     long countMembers(@Param("groupId") UUID groupId);
 }
