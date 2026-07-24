@@ -35,7 +35,7 @@ import lombok.ToString;
 })
 @SQLDelete(sql = "UPDATE t_users SET is_deleted = true, deleted_at = now(), version = version + 1 WHERE id = ? AND version = ?")
 @EntityListeners(AuditingEntityListener.class)
-@ToString(exclude = {"password", "groups", "roles"})
+@ToString(exclude = {"password", "groups", "roles", "emailVerificationToken", "passwordResetToken", "userProfile", "userAccount"})
 public class User extends BaseEntity {
 
     @Column(nullable = false, length = 70, unique = true)

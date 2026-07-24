@@ -29,7 +29,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -174,8 +176,9 @@ public class UserService {
         if (roleIds == null || roleIds.isEmpty()) {
             return List.of();
         }
-        List<Role> roles = roleRepository.findAllById(roleIds);
-        if (roles.size() != roleIds.size()) {
+        Set<UUID> distinctIds = new LinkedHashSet<>(roleIds);
+        List<Role> roles = roleRepository.findAllById(distinctIds);
+        if (roles.size() != distinctIds.size()) {
             throw new ResourceNotFoundException("One or more roles not found");
         }
         return roles;
@@ -185,8 +188,9 @@ public class UserService {
         if (groupIds == null || groupIds.isEmpty()) {
             return List.of();
         }
-        List<Group> groups = groupRepository.findAllById(groupIds);
-        if (groups.size() != groupIds.size()) {
+        Set<UUID> distinctIds = new LinkedHashSet<>(groupIds);
+        List<Group> groups = groupRepository.findAllById(distinctIds);
+        if (groups.size() != distinctIds.size()) {
             throw new ResourceNotFoundException("One or more groups not found");
         }
         return groups;

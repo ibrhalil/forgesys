@@ -39,7 +39,8 @@ class GroupControllerTest extends AbstractRbacWebTest {
     @Test
     void listForbiddenWithoutReadPermission() throws Exception {
         mockMvc.perform(get("/api/v1/groups").cookie(auth("nop@tenant.test")))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("auth_access_denied"));
     }
 
     /* ── list ── */
@@ -90,7 +91,8 @@ class GroupControllerTest extends AbstractRbacWebTest {
                         .cookie(auth("reader@tenant.test", "iam:group:read"))
                         .content("""
                                 {"name":"backend"}"""))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("auth_access_denied"));
     }
 
     @Test

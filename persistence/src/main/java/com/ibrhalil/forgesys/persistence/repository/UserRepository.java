@@ -37,6 +37,7 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     @EntityGraph(attributePaths = {"roles", "groups", "userProfile", "userAccount"})
     Page<User> findAll(Pageable pageable);
 
+    @EntityGraph(attributePaths = {"groups"})
     @Query("select u from User u join u.groups g where g.id = :groupId")
     List<User> findGroupMembers(@Param("groupId") UUID groupId);
 }

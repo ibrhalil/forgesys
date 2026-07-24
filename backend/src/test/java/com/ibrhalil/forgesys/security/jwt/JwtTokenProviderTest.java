@@ -57,6 +57,7 @@ class JwtTokenProviderTest {
         assertThat(jwt.getClaimAsStringList(JwtTokenProvider.CLAIM_AUTHORITIES))
                 .containsExactlyInAnyOrder("iam:user:write", "iam:user:read");
         assertThat(jwt.getIssuer().toString()).isEqualTo(JwtTokenProvider.ISSUER);
+        assertThat(jwt.getAudience()).containsExactly(JwtTokenProvider.AUDIENCE);
         assertThat(jwt.getIssuedAt()).isNotNull();
         assertThat(jwt.getExpiresAt()).isNotNull();
         assertThat(jwt.getExpiresAt()).isAfter(jwt.getIssuedAt());

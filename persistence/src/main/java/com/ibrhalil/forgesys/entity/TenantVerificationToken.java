@@ -30,7 +30,7 @@ import lombok.ToString;
 @Getter
 @Setter
 @NoArgsConstructor
-@ToString(exclude = "company")
+@ToString(exclude = {"company", "token", "adminPasswordHash"})
 @Table(
         name = "t_tenant_verification_tokens",
         schema = "public",

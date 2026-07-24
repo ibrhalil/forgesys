@@ -34,7 +34,8 @@ class RoleControllerTest extends AbstractRbacWebTest {
     @Test
     void listForbiddenWithoutReadPermission() throws Exception {
         mockMvc.perform(get("/api/v1/roles").cookie(auth("nop@tenant.test")))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("auth_access_denied"));
     }
 
     @Test
@@ -74,7 +75,8 @@ class RoleControllerTest extends AbstractRbacWebTest {
                         .cookie(auth("reader@tenant.test", "iam:role:read"))
                         .content("""
                                 {"name":"viewer"}"""))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("auth_access_denied"));
     }
 
     @Test

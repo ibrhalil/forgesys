@@ -40,7 +40,8 @@ class UserControllerTest extends AbstractRbacWebTest {
     @Test
     void listForbiddenWithoutReadPermission() throws Exception {
         mockMvc.perform(get("/api/v1/users").cookie(auth("nop@tenant.test")))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("auth_access_denied"));
     }
 
     /* ── list ── */
@@ -95,7 +96,8 @@ class UserControllerTest extends AbstractRbacWebTest {
                         .cookie(auth("reader@tenant.test", "iam:user:read"))
                         .content("""
                                 {"email":"bob@tenant.test","password":"Secret123!"}"""))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("auth_access_denied"));
     }
 
     @Test
@@ -245,7 +247,8 @@ class UserControllerTest extends AbstractRbacWebTest {
                         .cookie(auth("reader@tenant.test", "iam:user:read"))
                         .content("""
                                 {"newPassword":"BrandNew123!"}"""))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("auth_access_denied"));
     }
 
     /* ── helpers ── */

@@ -207,7 +207,7 @@ Her kayıt:
 **AuditorAware hardcoded "system"**
 - **Bağlam:** JPA auditing için `AuditorAware` şu an her zaman `"system"` döndürüyor. Kimliği doğrulanmış kullanıcı yok.
 - **Karar:** Auth kurulunca SecurityContext'ten gerçek userId alınacak. **Ancak** tenant signup endpoint'leri her zaman `"system"` ile audit edilir (tenant signup context'inde kimliği doğrulanmış kullanıcı yok) — bu beklenen durum.
-- **Durum:** Açık. Faz 2 auth sonrası düzeltilecek.
+- **Durum:** ÇÖZÜLDÜ (2026-07-24, [RISK-33](#risk-33) ile). `AuditorAware` artık SecurityContext'ten authenticated user'ın `userId`'sini okuyor; signup/provisioning/startup (kimliği doğrulanmış kullanıcı yok) hâlâ `"system"` fallback'ine düşüyor — bu beklenen durum.
 
 ### RISK-10
 **@Async thread'lerde TenantContext taşınmaz**
@@ -337,13 +337,13 @@ Her kayıt:
 **`PlatformCompanyService.updateStatus` state-machine'siz (P2)**
 - **Bağlam:** Her `CompanyStatus` → her `CompanyStatus` geçişi mümkün (TERMINATED→ACTIVE yeniden canlandırma, ACTIVE→PROVISIONING geri alma, PROVISIONING→ACTIVE schema/admin olmadan — login kırılır).
 - **Karar:** `CompanyStatus.canTransitionTo()` veya `EnumSet` allowed-transitions; `updateStatus` doğrula, geçersizse `BUSINESS_ERROR`.
-- **Durum:** Açık. Refactor Faz E.
+- **Durum:** ÇÖZÜLDÜ (2026-07-24). Refactor Faz E. `CompanyStatus.canTransitionTo` `EnumSet` tablosuyla: ACTIVE→{SUSPENDED,TERMINATED}, SUSPENDED→{ACTIVE,TERMINATED}; PROVISIONING/TERMINATED terminal (PROVISIONING sadece verify akışıyla biter). `PlatformCompanyService.updateStatus` geçersiz geçişi `business_error` (400) ile reddeder. `PlatformCompanyControllerTest.illegalStatusTransitionReturns400` doğrular.
 
 ### RISK-33
 **AuditorAware hardcoded "system" authenticated yazımlarda (P2)**
 - **Bağlam:** RISK-3 aynı sorun, ama authenticated admin işlemlerinde (`UserService`, `RoleService`, `GroupService`, `changePassword`) gerçek `userId` kullanılmıyor. Signup/provisioning için beklenir ama admin CRUD için değil.
 - **Karar:** `AuditorAware` `SecurityContextHolder.getContext().getAuthentication().getPrincipal()` → `CustomUserDetails.getUserId()`, fallback `"system"` (signup background). RISK-3'ü kapatır.
-- **Durum:** Açık (RISK-3 alt kategorisi). Refactor Faz E.
+- **Durum:** ÇÖZÜLDÜ (2026-07-24). Refactor Faz E. `MultiTenancyJpaConfig.auditorAwareProvider` SecurityContext → `CustomUserDetails.getUserId()` okur; principal yoksa `"system"` fallback (signup/provisioning/startup). `AuditingTest` her iki yolu da doğrular. [RISK-3](#risk-3)'ü kapatır.
 
 ### RISK-34
 **Spring Boot 4 deprecated starter POM'ları (P2)**

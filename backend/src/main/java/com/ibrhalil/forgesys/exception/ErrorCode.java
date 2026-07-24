@@ -28,9 +28,6 @@ public enum ErrorCode {
     AUTH_UNAUTHENTICATED(HttpStatus.UNAUTHORIZED, "Authentication is required"),
     AUTH_BAD_CREDENTIALS(HttpStatus.UNAUTHORIZED, "Invalid username or password"),
     AUTH_ACCOUNT_LOCKED(HttpStatus.LOCKED, "Account is temporarily locked after repeated failed login attempts"),
-    AUTH_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "Invalid authentication token"),
-    AUTH_TOKEN_EXPIRED(HttpStatus.UNAUTHORIZED, "Authentication token has expired"),
-    AUTH_TOKEN_REVOKED(HttpStatus.UNAUTHORIZED, "Authentication token has been revoked"),
     AUTH_ACCESS_DENIED(HttpStatus.FORBIDDEN, "Access is denied"),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred");
 

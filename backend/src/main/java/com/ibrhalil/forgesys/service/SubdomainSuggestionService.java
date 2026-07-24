@@ -1,5 +1,6 @@
 package com.ibrhalil.forgesys.service;
 
+import com.ibrhalil.forgesys.dto.SubdomainRules;
 import com.ibrhalil.forgesys.dto.SubdomainSuggestionResponse;
 import com.ibrhalil.forgesys.persistence.repository.CompanyRepository;
 import lombok.RequiredArgsConstructor;
@@ -10,7 +11,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.regex.Pattern;
 
 /**
  * Generates unique subdomain slug candidates from an organization name (K-21). Used by
@@ -26,9 +26,6 @@ import java.util.regex.Pattern;
 public class SubdomainSuggestionService {
 
     static final int MAX_SUGGESTIONS = 3;
-    private static final int MAX_SUBDOMAIN_LENGTH = 100;
-    private static final Pattern SUBDOMAIN_PATTERN =
-            Pattern.compile("^[a-z0-9](?:[a-z0-9-]{0,98}[a-z0-9])?$");
 
     private static final Map<Character, Character> TURKISH_ASCII = Map.ofEntries(
             Map.entry('ç', 'c'), Map.entry('Ç', 'c'),
@@ -51,7 +48,7 @@ public class SubdomainSuggestionService {
         int suffix = 2;
         while (suggestions.size() < MAX_SUGGESTIONS && suffix <= 99) {
             String candidate = baseSlug + "-" + suffix;
-            if (candidate.length() <= MAX_SUBDOMAIN_LENGTH && isAvailable(candidate)) {
+            if (candidate.length() <= SubdomainRules.MAX_LENGTH && isAvailable(candidate)) {
                 suggestions.add(candidate);
             }
             suffix++;
@@ -65,7 +62,7 @@ public class SubdomainSuggestionService {
      * request, but the runtime check keeps the service self-contained).
      */
     public boolean isValidSubdomain(String subdomain) {
-        return subdomain != null && SUBDOMAIN_PATTERN.matcher(subdomain).matches();
+        return subdomain != null && SubdomainRules.PATTERN.matcher(subdomain).matches();
     }
 
     public boolean isAvailable(String subdomain) {
