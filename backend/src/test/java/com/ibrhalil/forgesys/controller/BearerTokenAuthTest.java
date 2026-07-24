@@ -30,6 +30,22 @@ class BearerTokenAuthTest extends AbstractRbacWebTest {
                 .andExpect(status().isOk());
     }
 
+    /**
+     * [RISK-19] A token minted for a different tenant than the request is rejected.
+     * The test profile runs with {@code TenantContext} unset -> resolved as "public",
+     * so a token carrying any other tenant schema is a cross-tenant replay attempt
+     * (Tenant-A admin token replayed against Tenant-B) and must yield 401.
+     */
+    @Test
+    void crossTenantBearerTokenIsRejected() throws Exception {
+        String token = jwtTokenProvider.generateAccessToken(
+                UUID.randomUUID().toString(), "attacker@tenant.test", "tenant_other", List.of("iam:role:read"));
+
+        mockMvc.perform(get("/api/v1/roles")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isUnauthorized());
+    }
+
     @Test
     void invalidBearerTokenReturns401() throws Exception {
         mockMvc.perform(get("/api/v1/roles")

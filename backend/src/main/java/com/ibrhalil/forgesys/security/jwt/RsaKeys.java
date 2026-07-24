@@ -28,9 +28,29 @@ public final class RsaKeys {
     private RsaKeys() {
     }
 
-    public static KeyPair resolve(RsaKeyProperties properties) {
+    /**
+     * Resolves the RSA key pair used for JWT signing/verification.
+     *
+     * <p>If both PEMs are configured, they are parsed into an {@link KeyPair}. If not
+     * configured, the behavior depends on {@code failIfUnconfigured}:
+     * <ul>
+     *   <li>{@code true} (prod) — throws {@link IllegalStateException} fail-fast. An
+     *       unconfigured prod deployment must not silently start on an ephemeral key
+     *       (tokens wouldn't survive a restart and multi-instance clusters would each
+     *       mint under different keys → random 401s). [RISK-23]</li>
+     *   <li>{@code false} (dev/test) — generates an ephemeral 2048-bit key pair
+     *       (warning logged) so local dev/tests need no cert files.</li>
+     * </ul>
+     */
+    public static KeyPair resolve(RsaKeyProperties properties, boolean failIfUnconfigured) {
         if (properties != null && properties.isConfigured()) {
             return new KeyPair(parsePublicKey(properties.publicKeyPem()), parsePrivateKey(properties.privateKeyPem()));
+        }
+        if (failIfUnconfigured) {
+            throw new IllegalStateException(
+                    "jwt.rsa.private-key-pem / public-key-pem are not configured. " +
+                    "Persistent RSA keys are MANDATORY in the prod profile " +
+                    "(ephemeral keys are dev/test only).");
         }
         log.warn("No RSA keys configured (jwt.rsa.private-key-pem / public-key-pem). "
                 + "Generating an EPHEMERAL key pair — tokens will not survive a restart. "

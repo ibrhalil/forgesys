@@ -23,7 +23,9 @@ import java.util.Set;
  * <strong>direct user roles</strong> + <strong>active group roles</strong>, each
  * expanded to their permissions ({@code {module}:{resource}:{action}}).
  *
- * <p>This runs at login only. The JWT filter reconstructs the principal from claims
+ * <p>{@link #loadUserByUsername(String)} is the {@link UserDetailsService} contract.
+ * {@link #resolveAuthorities(User)} is shared authority resolution invoked by
+ * {@code AuthService} at login. The JWT filter reconstructs the principal from claims
  * on subsequent requests (no DB load), so permission changes apply on the next token.
  */
 @Service
@@ -47,7 +49,7 @@ public class CustomUserDetailsService implements UserDetailsService {
         return CustomUserDetails.from(user, account, resolveAuthorities(user), TenantContext.getCurrentTenant().orElse(null));
     }
 
-    static Set<GrantedAuthority> resolveAuthorities(User user) {
+    public static Set<GrantedAuthority> resolveAuthorities(User user) {
         Set<GrantedAuthority> authorities = new HashSet<>();
         for (Role role : user.getRoles()) {
             addPermissions(authorities, role);

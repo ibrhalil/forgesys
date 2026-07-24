@@ -23,6 +23,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.WebApplicationContext;
 
+import java.time.OffsetDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -211,6 +212,62 @@ class AuthControllerLoginTest {
         assertThat(storedAfter).startsWith("{sf-peppered}");
         assertThat(passwordEncoder.upgradeEncoding(storedAfter)).isFalse();
         assertThat(storedAfter).isNotEqualTo(storedBefore);
+    }
+
+    /**
+     * [RISK-22] Brute-force lockout: after MAX_FAILED_LOGIN_ATTEMPTS (5) wrong passwords
+     * the account is locked. The attempt that trips the lock still answers
+     * {@code auth_bad_credentials} (wrong password, no lock-engaged leak); the lock
+     * surfaces on the next attempt — even the correct password is rejected with
+     * {@code auth_account_locked} (423).
+     */
+    @Test
+    void tooManyFailedAttemptsLockTheAccount() throws Exception {
+        for (int i = 0; i < 5; i++) {
+            mockMvc.perform(post("/api/v1/auth/login")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"email":"admin@acme.com","password":"wrong"}"""))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.code").value("auth_bad_credentials"));
+        }
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"admin@acme.com","password":"password123"}"""))
+                .andExpect(status().isLocked())
+                .andExpect(jsonPath("$.code").value("auth_account_locked"));
+
+        UserAccount locked = userRepository.findByEmail(EMAIL).orElseThrow().getUserAccount();
+        assertThat(locked.getFailedLoginAttempts()).isEqualTo(5);
+        assertThat(locked.getLockedUntil()).isNotNull();
+    }
+
+    /**
+     * [RISK-22] Once the lock window has expired, a correct login succeeds and the
+     * attempt counter is reset (fresh attempt budget).
+     */
+    @Test
+    void loginSucceedsAfterLockWindowExpires() throws Exception {
+        User user = userRepository.findByEmail(EMAIL).orElseThrow();
+        UserAccount account = user.getUserAccount();
+        account.setLockedUntil(OffsetDateTime.now().minusMinutes(1));
+        account.setFailedLoginAttempts(5);
+        userRepository.save(user);
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"admin@acme.com","password":"password123"}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value(EMAIL));
+
+        UserAccount refreshed = userRepository.findByEmail(EMAIL).orElseThrow().getUserAccount();
+        assertThat(refreshed.getFailedLoginAttempts()).isZero();
+        assertThat(refreshed.getLockedUntil()).isNull();
     }
 
     private String loginAndGetToken() throws Exception {

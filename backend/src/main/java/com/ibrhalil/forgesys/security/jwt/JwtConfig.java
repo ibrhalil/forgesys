@@ -6,6 +6,8 @@ import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
@@ -32,8 +34,10 @@ public class JwtConfig {
     public static final String KEY_ID = "forgesys-rs256";
 
     @Bean
-    public KeyPair jwtRsaKeyPair(RsaKeyProperties properties) {
-        return RsaKeys.resolve(properties);
+    public KeyPair jwtRsaKeyPair(RsaKeyProperties properties, Environment environment) {
+        // [RISK-23] prod must fail fast on missing RSA keys; dev/test fall back to ephemeral.
+        boolean prod = environment.acceptsProfiles(Profiles.of("prod"));
+        return RsaKeys.resolve(properties, prod);
     }
 
     @Bean
