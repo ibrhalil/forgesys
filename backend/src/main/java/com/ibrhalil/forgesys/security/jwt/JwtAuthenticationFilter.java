@@ -1,5 +1,6 @@
 package com.ibrhalil.forgesys.security.jwt;
 
+import com.ibrhalil.forgesys.common.tenant.TenantContext;
 import com.ibrhalil.forgesys.security.CustomUserDetails;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -33,13 +34,20 @@ import java.util.stream.Collectors;
  * rebuilds the {@link CustomUserDetails} principal + authorities from claims (no DB
  * hit), and populates the {@link SecurityContext}.
  *
+ * <p><strong>Tenant binding ([RISK-19](../../../../../../docs/DECISIONS.md#risk-19)):</strong>
+ * the JWT {@code tenant} claim (schema minted at login) MUST equal the schema resolved
+ * for the request by {@code TenantFilter} (read from {@link TenantContext}). A token
+ * minted for tenant A replayed against tenant B (cross-tenant privilege escalation)
+ * is rejected by clearing the context (→ 401). When the request carries no tenant
+ * (exempt/public), both sides normalize to {@code "public"}.
+ *
  * <p>On any decode failure (bad signature/expired/malformed) the context is cleared
  * and the request proceeds unauthenticated; protected routes then get a uniform 401
  * from {@code RestAuthenticationEntryPoint}.
  *
- * <p>Revocation (DB {@code tokenInvalidBefore} + Redis blacklist) is deferred to the
- * logout/refresh work ([ROADMAP Epic 2.5/2.6](../../../../../../docs/ROADMAP.md)) —
- * this filter validates signature + expiry only for the first-working-login slice.
+ * <p>Revocation (DB {@code tokenInvalidBefore} + Redis blacklist) is still deferred
+ * to the logout/refresh work ([ROADMAP Epic 2.5/2.6](../../../../../../docs/ROADMAP.md))
+ * — this filter validates signature + expiry + tenant binding only ([RISK-21] open).
  */
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
@@ -62,13 +70,34 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (StringUtils.hasText(token) && SecurityContextHolder.getContext().getAuthentication() == null) {
             try {
                 Jwt jwt = jwtDecoder.decode(token);
-                SecurityContextHolder.getContext().setAuthentication(toAuthentication(jwt));
+                authenticateIfTenantMatches(jwt);
             } catch (JwtException e) {
                 log.debug("Invalid JWT rejected: {}", e.getMessage());
                 SecurityContextHolder.clearContext();
             }
         }
         chain.doFilter(request, response);
+    }
+
+    /**
+     * [RISK-19] Binds the token to the request tenant: the JWT {@code tenant} claim
+     * must equal the schema resolved for this request by {@code TenantFilter} (read
+     * from {@link TenantContext}). A mismatch clears the context so the request
+     * proceeds unauthenticated (→ 401). The principal's {@code tenantSchema} is taken
+     * from the context, never the claim.
+     */
+    private void authenticateIfTenantMatches(Jwt jwt) {
+        String ctxTenant = TenantContext.getCurrentTenant().orElse("public");
+        String jwtTenant = jwt.getClaimAsString(JwtTokenProvider.CLAIM_TENANT);
+        if (!StringUtils.hasText(jwtTenant)) {
+            jwtTenant = "public";
+        }
+        if (!jwtTenant.equals(ctxTenant)) {
+            log.debug("JWT tenant claim [{}] does not match request tenant [{}]; rejecting", jwtTenant, ctxTenant);
+            SecurityContextHolder.clearContext();
+            return;
+        }
+        SecurityContextHolder.getContext().setAuthentication(toAuthentication(jwt, ctxTenant));
     }
 
     private String extractToken(HttpServletRequest request) {
@@ -93,16 +122,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     @SuppressWarnings("unchecked")
-    private UsernamePasswordAuthenticationToken toAuthentication(Jwt jwt) {
+    private UsernamePasswordAuthenticationToken toAuthentication(Jwt jwt, String tenantSchema) {
         UUID userId = UUID.fromString(jwt.getSubject());
         String email = jwt.getClaimAsString(JwtTokenProvider.CLAIM_EMAIL);
-        String tenant = jwt.getClaimAsString(JwtTokenProvider.CLAIM_TENANT);
         List<String> authorityNames = jwt.getClaimAsStringList(JwtTokenProvider.CLAIM_AUTHORITIES);
         Set<GrantedAuthority> authorities = (authorityNames == null ? List.<String>of() : authorityNames).stream()
                 .map(SimpleGrantedAuthority::new)
                 .collect(Collectors.toSet());
 
-        CustomUserDetails principal = new CustomUserDetails(userId, email, null, true, true, true, true, authorities, tenant);
+        CustomUserDetails principal = new CustomUserDetails(userId, email, null, true, true, true, true, authorities, tenantSchema);
         return new UsernamePasswordAuthenticationToken(principal, null, authorities);
     }
 }

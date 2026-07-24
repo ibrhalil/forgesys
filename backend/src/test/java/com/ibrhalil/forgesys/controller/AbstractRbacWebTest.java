@@ -56,4 +56,15 @@ abstract class AbstractRbacWebTest {
                 userId.toString(), email, "public", List.of(authorities));
         return new Cookie(COOKIE_NAME, token);
     }
+
+    /**
+     * A signed access-token cookie bound to a specific tenant schema — for platform /
+     * cross-tenant tests where the request thread carries an active {@code TenantContext}
+     * that must match the token ([RISK-19] binding).
+     */
+    Cookie authTenant(String tenant, String email, String... authorities) {
+        String token = jwtTokenProvider.generateAccessToken(
+                UUID.randomUUID().toString(), email, tenant, List.of(authorities));
+        return new Cookie(COOKIE_NAME, token);
+    }
 }

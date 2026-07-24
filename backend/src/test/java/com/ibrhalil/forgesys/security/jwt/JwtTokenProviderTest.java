@@ -31,7 +31,7 @@ class JwtTokenProviderTest {
 
     @BeforeEach
     void setUp() {
-        KeyPair keyPair = RsaKeys.resolve(new RsaKeyProperties(null, null));
+        KeyPair keyPair = RsaKeys.resolve(new RsaKeyProperties(null, null), false);
         RSAKey rsaKey = new RSAKey.Builder((java.security.interfaces.RSAPublicKey) keyPair.getPublic())
                 .privateKey((java.security.interfaces.RSAPrivateKey) keyPair.getPrivate())
                 .keyID(JwtConfig.KEY_ID)
@@ -75,7 +75,7 @@ class JwtTokenProviderTest {
     void expiredTokenIsRejected() {
         // Build a provider with 0-minute TTL so the token is already at its boundary;
         // a token whose exp is in the past must be rejected on decode.
-        KeyPair keyPair = RsaKeys.resolve(new RsaKeyProperties(null, null));
+        KeyPair keyPair = RsaKeys.resolve(new RsaKeyProperties(null, null), false);
         RSAKey rsaKey = new RSAKey.Builder((java.security.interfaces.RSAPublicKey) keyPair.getPublic())
                 .privateKey((java.security.interfaces.RSAPrivateKey) keyPair.getPrivate())
                 .keyID(JwtConfig.KEY_ID)

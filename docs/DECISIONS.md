@@ -256,7 +256,7 @@ Her kayıt:
 **JWT tenant claim doğrulanmıyor — cross-tenant privilege escalation (P0)**
 - **Bağlam:** `JwtAuthenticationFilter` JWT'den `tenant` claim + `authorities`'i doğrudan principal'a yazıyor ama `TenantFilter`'ın çözdüğü request tenant (subdomain) ile JWT `tenant` claim karşılaştırılmıyor. RBAC yetkileri (JWT) ile data scoping (`TenantContext`) ayrışık → Tenant-A admin token'ı Tenant-B'de geçerli. Koleksiyon endpoint'leri (`/users`, `/roles`) tamamen istismar edilebilir: saldırgan `a.forgesys.app`'ten aldığı admin token'ını `b.forgesys.app/api/v1/users`'a replay eder → Tenant-B user'larını okur/yazar/siler.
 - **Karar:** `JwtAuthenticationFilter.doFilterInternal`'da decode sonrası `TenantContext.getCurrentTenant()` ile JWT `tenant` claim eşleşmezse `SecurityContextHolder.clearContext()` + chain devam (→ 401). Principal `tenantSchema`'sını claim'den değil `TenantContext`'ten al.
-- **Durum:** Açık (kritik). Refactor Faz A. [AGENTS.md Refactor Roadmap](../AGENTS.md#refactor-roadmap-2026-07-24-review).
+- **Durum:** ÇÖZÜLDÜ (2026-07-24). Refactor Faz A. `JwtAuthenticationFilter.authenticateIfTenantMatches` JWT `tenant` claim'ini `TenantContext` ile karşılaştırır (boş context → `"public"` normalizasyonu, `TenantIdentifierResolver` ile aynı); mismatch → `clearContext` (→ 401). Principal `tenantSchema`'sını claim'den değil context'ten alır. `BearerTokenAuthTest.crossTenantBearerTokenIsRejected` doğrular; platform cross-tenant yolu için `PlatformCompanyControllerTest` token-context eşleşecek şekilde güncellendi. Gerçek çapraz-tenant izolasyon testi RISK-20 (Testcontainers) ile. [AGENTS.md Refactor Roadmap](../AGENTS.md#refactor-roadmap-2026-07-24-review).
 
 ### RISK-20
 **Cross-tenant isolation testi yok (P0)**
@@ -274,19 +274,19 @@ Her kayıt:
 **Brute-force / lockout koruması yok (P1)**
 - **Bağlam:** `failedLoginAttempts`/`lockedUntil` entity'de var ama **referans yok** (sadece comment'ler). Public `/auth/login`'de rate-limit/lockout yok. BCrypt(12) + pepper her tahmini yavaşlatsa da paralel credential stuffing'e karşı korumasız. RISK-21 ile birleşince → çalınan token 15 dk revoke edilemiyor.
 - **Karar:** `AuthService.login`'de attempt counting + `lockedUntil` backoff + rate-limit (IP/tenant/email bazlı, Bucket4j veya Redis). Yeni `auth_account_locked` ErrorCode (kalan deneme sayısını sızdırmadan).
-- **Durum:** Açık. Refactor Faz A.
+- **Durum:** ÇÖZÜLDÜ (2026-07-24). Refactor Faz A. `AuthService.login` (artık `User` entity'yi tek sefer yükler, authority resolution + lazy pepper rehash aynı transaction'da) `failedLoginAttempts`/`lockedUntil` kullanır: 5 yanlış → 15dk lock, yeni `ErrorCode.AUTH_ACCOUNT_LOCKED` (423). Lock-expiry'de counter sıfırlanır (yeni deneme hakkı). `@Transactional(noRollbackFor=AuthException.class)` — attempt artışı `bad_credentials` throw'u ile rollback olmaz. **Kapsam:** login-scoped (filter DB lookup RISK-21 ile). IP/email rate-limit Redis (Epic 2.6) sonrası. Kilitlenen hesabın eldeki token'ı (≤ TTL) RISK-21 gelene kadar geçerli. `AuthControllerLoginTest` lockout + unlock test'leri doğrular.
 
 ### RISK-23
 **Prod'da RSA key eksikse sessizce ephemeral (P1)**
 - **Bağlam:** `RsaKeys.resolve` key yoksa `log.warn` + 2048-bit ephemeral üretiyor. Prod'da key unutulursa: (a) app yeşil başlar (warning log JSON/ECS log'larında gözden kaçar), (b) token restart'ta survive etmez, (c) **çok-instance dağıtımda her instance farklı key** → instance A'nın token'ı instance B'de fail (rastgele 401) veya "geçerli issuer" kümesi sessiz genişler.
 - **Karar:** Prod profilinde key yoksa fail-fast (`IllegalStateException("jwt.rsa.* must be configured in prod")`).
-- **Durum:** Açık. Refactor Faz A (tek satır değişiklik).
+- **Durum:** ÇÖZÜLDÜ (2026-07-24). Refactor Faz A. `RsaKeys.resolve(properties, failIfUnconfigured)` — prod profilinde (`JwtConfig` `Environment.acceptsProfiles(Profiles.of("prod"))`) key yoksa `IllegalStateException`. Dev/test ephemeral korunur. `RsaKeysTest` doğrular.
 
 ### RISK-24
 **Access token cookie `Secure` değil (P1)**
 - **Bağlam:** `jwt.cookie-secure` default `false`, hiçbir YAML'da override yok → prod'da access token cookie `Secure` attribute'suz. HTTP düşürme/redirect/mixed content/internal network yollarında cookie cleartext gider. `SameSite=Lax` bunu engellemez.
 - **Karar:** `application-prod.yaml`'a `jwt.cookie-secure: true`. (Ek: `@Value` yerine `@ConfigurationProperties` daha temiz.)
-- **Durum:** Açık. Refactor Faz A (tek satır).
+- **Durum:** ÇÖZÜLDÜ (2026-07-24). Refactor Faz A. `application-prod.yaml`'a `jwt.cookie-secure: true` (dev/test default `false`). `@Value` → `@ConfigurationProperties` taşınması Faz F'de.
 
 ### RISK-25
 **Token consumption race condition (P1)**

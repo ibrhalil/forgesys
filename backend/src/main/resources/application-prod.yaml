@@ -19,6 +19,12 @@ spring:
   # env var (see docker-compose-prod.yml + .env.example) — not via spring.config.import
   # here, to avoid duplicate resolution.
 
+# RISK-24: the access-token cookie MUST be Secure in prod so it never travels over
+# cleartext HTTP (redirect / mixed-content downgrade, internal network paths).
+# SameSite=Lax alone does not prevent that. Dev/test keep the default (false).
+jwt:
+  cookie-secure: true
+
 management:
   endpoints:
     web:

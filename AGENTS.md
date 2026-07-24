@@ -80,11 +80,13 @@ General engineering conduct. Project-specific rules above take precedence; the s
 Kapsamlı 4-katmanlı review (service/security/persistence/test) + Spring Boot 4.0 / Security 7 resmi migration kaynakları. Bulgular önem sırasına göre fazlara bölünmüş. Detay ve dosya:ref'ler: [`docs/DECISIONS.md`](docs/DECISIONS.md) RISK-19..RISK-34. Tüm fazlar uygulanacak (kullanıcı kararı), önem sırasıyla.
 
 ### Faz A — Kritik Güvenlik (önce)
-- [ ] **[P0 RISK-19]** JWT tenant binding — `JwtAuthenticationFilter`'da token tenant claim == request tenant (TenantContext) kontrolü; mismatch → SecurityContext temizle. Cross-tenant escalation kapatır.
+- [x] **[P0 RISK-19]** JWT tenant binding — `JwtAuthenticationFilter`'da token tenant claim == request tenant (TenantContext) kontrolü; mismatch → SecurityContext temizle. Cross-tenant escalation kapatır.
 - [ ] **[P1 RISK-21]** `tokenInvalidBefore` filter kontrolü + `changePassword`/`resetPassword`/`logout`'ta `tokenInvalidBefore = now()` set.
-- [ ] **[P1 RISK-22]** Brute-force lockout (`failedLoginAttempts`/`lockedUntil` kullan + rate-limit IP/tenant/email bazlı).
-- [ ] **[P1 RISK-23]** RSA key prod fail-fast (`RsaKeys.resolve` prod profilinde key yoksa `IllegalStateException`).
-- [ ] **[P1 RISK-24]** Access token cookie `Secure: true` (`application-prod.yaml`).
+- [x] **[P1 RISK-22]** Brute-force lockout — `failedLoginAttempts`/`lockedUntil` + `AuthService.login`'de 5 deneme/15dk backoff, `auth_account_locked` (423). **Login-scoped** (filter DB lookup RISK-21 ile). IP/tenant/email rate-limit Redis (Epic 2.6) sonrası.
+- [x] **[P1 RISK-23]** RSA key prod fail-fast (`RsaKeys.resolve` prod profilinde key yoksa `IllegalStateException`).
+- [x] **[P1 RISK-24]** Access token cookie `Secure: true` (`application-prod.yaml`).
+
+> Faz A'nın 4 maddesi (19/22/23/24) uygulandı (2026-07-24), 118 test yeşil (H2). RISK-21 (filter'da `tokenInvalidBefore` DB lookup + logout/change/reset noktaları) açık — Redis cache (Epic 2.6) ile veya tek başına ele alınacak. RISK-22 lockout login'de tam çalışır; kilitlenen hesabın eldeki token'ı (≤ TTL) RISK-21 gelene kadar geçerli kalır. Gerçek çapraz-tenant izolasyon doğrulaması Faz B (RISK-20, Testcontainers) ile.
 
 ### Faz B — Test Altyapısı (kullanıcı erteledi, kritik)
 - [ ] **[P0 RISK-20]** Testcontainers + PostgreSQL ile iki gerçek tenant şeması isolation test altyapısı. RISK-19 ve RISK-26 doğrulamasının ön koşulu.

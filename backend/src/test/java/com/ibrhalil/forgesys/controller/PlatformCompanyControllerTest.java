@@ -119,18 +119,20 @@ class PlatformCompanyControllerTest extends AbstractRbacWebTest {
 
     /**
      * Reproduces the real cross-tenant scenario: the request thread already has an active
-     * tenant context (set by TenantFilter in dev). PlatformCompanyService must clear it to
-     * reach the public schema; if it didn't, the query would run against the bogus schema
-     * (which has no t_companies) and return nothing / fail.
+     * tenant context (set by TenantFilter in dev). The platform admin's token is bound to
+     * that same tenant ([RISK-19]), and PlatformCompanyService must clear it to reach the
+     * public schema; if it didn't, the query would run against the tenant schema (which
+     * has no t_companies) and return nothing / fail.
      */
     @Test
     void listReturnsCompaniesEvenWithActiveTenantContext() throws Exception {
         Company company = seedCompany("ctxtest", CompanyStatus.ACTIVE);
+        String tenant = "tenant_does_not_exist";
 
-        TenantContext.setCurrentTenant("tenant_does_not_exist");
+        TenantContext.setCurrentTenant(tenant);
         try {
             mockMvc.perform(get("/api/v1/platform/companies")
-                            .cookie(auth("platform_reader@tenant.test", "platform:company:read")))
+                            .cookie(authTenant(tenant, "platform_reader@tenant.test", "platform:company:read")))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$[?(@.id == '" + company.getId() + "')].name").value("ctxtest"));
         } finally {
