@@ -307,19 +307,19 @@ Her kayıt:
 **N+1 — `findAll` userProfile/userAccount (P1)**
 - **Bağlam:** `UserRepository.findAll` `@EntityGraph({"roles","groups"})` — `userProfile`/`userAccount` eksik. `UserService.toResponse` ikisine de erişir (`profile.getFirstName()`, `user.getUserAccount().isEnabled()`). Inverse `@OneToOne` LAZY bilinen sorunlu alan + sayfa başına N user → 2N ekstra SELECT. Multi-tenant'ta her sorgu tenant schema geçişi → maliyet katlanır.
 - **Karar:** EntityGraph'a `userProfile`, `userAccount` ekle.
-- **Durum:** Açık. Refactor Faz D.
+- **Durum:** ÇÖZÜLDÜ (2026-07-24). Refactor Faz D. `UserRepository.findAll(Pageable)` `@EntityGraph`'ı `{"roles","groups","userProfile","userAccount"}` oldu (roles/groups `Set` → multiple-bag yok). N+1 (sayfa başına 2N ekstra SELECT) tek sorguda join'e indi. `UserControllerTest.listReturnsUsersWithRolesAndGroups` artık firstName/lastName/enabled da assert ediyor (profile+account fetch).
 
 ### RISK-28
 **TOCTOU uniqueness → 500 (P2)**
 - **Bağlam:** `UserService.create`, `RoleService.create/update`, `GroupService.create/update`, `TenantProvisioningService.validateUnique` — hepsi check-then-save pattern'ı. Concurrent duplicate → DB unique constraint → `DataIntegrityViolationException` → 500 `internal_error` (temiz `*_TAKEN` 400 değil).
 - **Karar:** `GlobalExceptionHandler`'a `DataIntegrityViolationException` handler + constraint name → `ErrorCode` map; veya her create try/catch + `BusinessException`.
-- **Durum:** Açık. Refactor Faz D.
+- **Durum:** ÇÖZÜLDÜ (2026-07-24). Refactor Faz D. `GlobalExceptionHandler.handleDataIntegrity` Hibernate `ConstraintViolationException.getConstraintName()`'i çıkarıp substring haritasıyla `*_TAKEN` koduna map'ler (`users_email`→USER_EMAIL_TAKEN vb.); bilinmeyen → `business_error`. **Ana kazanç 500→400 garantisi.** Service `existsBy*` check'leri korundu (defense-in-depth; handler concurrent race'i kapatır). Taşınabilir substring eşleştirme (PG index adları + H2 farkı tolere). `GlobalExceptionHandlerTest` (unit, DB'siz) doğrular.
 
 ### RISK-29
 **`MethodArgumentTypeMismatchException` → 500 (P1)**
 - **Bağlam:** `GET /api/v1/users/not-a-uuid` (malformed UUID) `GlobalExceptionHandler` catch-all'a düşer → 500 `internal_error`. Client hatası, 400 olmalı. `GlobalExceptionHandler`'da handler yok. Ayrıca `ConstraintViolationException` ve `MissingServletRequestParameterException` da eksik.
 - **Karar:** `GlobalExceptionHandler`'a bu üç handler'ı ekle (→ 400 `validation_error`).
-- **Durum:** Açık. Refactor Faz D.
+- **Durum:** ÇÖZÜLDÜ (2026-07-24). Refactor Faz D. `handleTypeMismatch` (MethodArgumentTypeMismatchException — malformed UUID), `handleMissingParam` (MissingServletRequestParameterException), `handleConstraintViolation` (jakarta ConstraintViolationException — defansif, şu an `@Validated` yok) eklendi; hepsi → 400 `validation_error`. ConstraintViolation invalid-value'ları maskeli. `GlobalExceptionHandlerTest` + `UserControllerTest.getMalformedUuidReturns400Not500` doğrular.
 
 ### RISK-30
 **Verification token plain-text + stale retention (P2)**

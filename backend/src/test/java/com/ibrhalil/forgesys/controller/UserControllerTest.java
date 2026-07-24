@@ -65,7 +65,10 @@ class UserControllerTest extends AbstractRbacWebTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].email").value("alice@tenant.test"))
                 .andExpect(jsonPath("$.content[0].roles[0].name").value("admin"))
-                .andExpect(jsonPath("$.content[0].groups[0].name").value("engineering"));
+                .andExpect(jsonPath("$.content[0].groups[0].name").value("engineering"))
+                .andExpect(jsonPath("$.content[0].firstName").value("Test"))
+                .andExpect(jsonPath("$.content[0].lastName").value("User"))
+                .andExpect(jsonPath("$.content[0].enabled").value(true));
     }
 
     /* ── create ── */
@@ -117,6 +120,18 @@ class UserControllerTest extends AbstractRbacWebTest {
                         .cookie(auth("reader@tenant.test", "iam:user:read")))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("resource_not_found"));
+    }
+
+    /**
+     * [RISK-29] A malformed path variable (non-UUID) must map to 400 validation_error,
+     * not the previous catch-all 500.
+     */
+    @Test
+    void getMalformedUuidReturns400Not500() throws Exception {
+        mockMvc.perform(get("/api/v1/users/not-a-uuid")
+                        .cookie(auth("reader@tenant.test", "iam:user:read")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("validation_error"));
     }
 
     /* ── update ── */

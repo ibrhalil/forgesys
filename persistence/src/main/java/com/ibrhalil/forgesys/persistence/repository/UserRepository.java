@@ -28,11 +28,13 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     /**
      * {@inheritDoc}
-     * Redeclared to attach an {@link EntityGraph} (roles + groups) so the paginated
-     * list query avoids N+1 when building {@code UserResponse}.
+     * Redeclared to attach an {@link EntityGraph} (roles + groups + profile + account)
+     * so the paginated list query avoids N+1 when building {@code UserResponse}
+     * ([RISK-27]). {@code roles}/{@code groups} are {@code Set}s (not bags), so fetching
+     * both plus the two {@code @OneToOne} associations in one graph is safe.
      */
     @Override
-    @EntityGraph(attributePaths = {"roles", "groups"})
+    @EntityGraph(attributePaths = {"roles", "groups", "userProfile", "userAccount"})
     Page<User> findAll(Pageable pageable);
 
     @Query("select u from User u join u.groups g where g.id = :groupId")

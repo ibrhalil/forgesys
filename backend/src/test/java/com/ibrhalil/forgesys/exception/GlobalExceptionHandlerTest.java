@@ -1,11 +1,23 @@
 package com.ibrhalil.forgesys.exception;
 
 import com.ibrhalil.forgesys.common.exception.TenantNotFoundException;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.ConstraintViolationException;
+import jakarta.validation.Validation;
+import jakarta.validation.Validator;
+import jakarta.validation.constraints.NotBlank;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.validation.BeanPropertyBindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+
+import java.sql.SQLException;
+import java.util.Set;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -91,6 +103,75 @@ class GlobalExceptionHandlerTest {
         assertThat(GlobalExceptionHandler.sanitizeRejectedValue(fieldError("adminPassword", "secret"))).isEqualTo("[REDACTED]");
         assertThat(GlobalExceptionHandler.sanitizeRejectedValue(fieldError("refreshToken", "abc"))).isEqualTo("[REDACTED]");
         assertThat(GlobalExceptionHandler.sanitizeRejectedValue(fieldError("email", "a@b.com"))).isEqualTo("a@b.com");
+    }
+
+    @Test
+    void typeMismatchMapsTo400Validation() {
+        MethodArgumentTypeMismatchException ex = new MethodArgumentTypeMismatchException(
+                "not-a-uuid", UUID.class, "id", null, new IllegalArgumentException("bad uuid"));
+
+        ApiErrorResponse body = handler.handleTypeMismatch(ex, request).getBody();
+
+        assertThat(body).isNotNull();
+        assertThat(body.status()).isEqualTo(400);
+        assertThat(body.code()).isEqualTo("validation_error");
+        assertThat(body.message()).contains("id").contains("UUID");
+    }
+
+    @Test
+    void missingParameterMapsTo400Validation() {
+        MissingServletRequestParameterException ex = new MissingServletRequestParameterException("page", "int");
+
+        ApiErrorResponse body = handler.handleMissingParam(ex, request).getBody();
+
+        assertThat(body).isNotNull();
+        assertThat(body.status()).isEqualTo(400);
+        assertThat(body.code()).isEqualTo("validation_error");
+        assertThat(body.message()).contains("page");
+    }
+
+    @Test
+    void constraintViolationMapsTo400AndMasksPassword() {
+        Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
+        Set<ConstraintViolation<PasswordBean>> violations = validator.validate(new PasswordBean(""));
+        ConstraintViolationException ex = new ConstraintViolationException(violations);
+
+        ApiErrorResponse body = handler.handleConstraintViolation(ex, request).getBody();
+
+        assertThat(body).isNotNull();
+        assertThat(body.status()).isEqualTo(400);
+        assertThat(body.code()).isEqualTo("validation_error");
+        assertThat(field(body, "password").rejectedValue()).isEqualTo("[REDACTED]");
+    }
+
+    @Test
+    void dataIntegrityKnownConstraintMapsToTakenCode() {
+        org.hibernate.exception.ConstraintViolationException hibernate =
+                new org.hibernate.exception.ConstraintViolationException("dup", new SQLException("dup"), "uk_users_email");
+        DataIntegrityViolationException ex = new DataIntegrityViolationException("dup", hibernate);
+
+        ApiErrorResponse body = handler.handleDataIntegrity(ex, request).getBody();
+
+        assertThat(body).isNotNull();
+        assertThat(body.status()).isEqualTo(400);
+        assertThat(body.code()).isEqualTo("user_email_taken");
+    }
+
+    @Test
+    void dataIntegrityUnknownConstraintMapsToBusinessError() {
+        org.hibernate.exception.ConstraintViolationException hibernate =
+                new org.hibernate.exception.ConstraintViolationException("dup", new SQLException("dup"), "uk_something_unknown");
+        DataIntegrityViolationException ex = new DataIntegrityViolationException("dup", hibernate);
+
+        ApiErrorResponse body = handler.handleDataIntegrity(ex, request).getBody();
+
+        assertThat(body).isNotNull();
+        assertThat(body.status()).isEqualTo(400);
+        assertThat(body.code()).isEqualTo("business_error");
+    }
+
+    @SuppressWarnings("unused")
+    private record PasswordBean(@NotBlank String password) {
     }
 
     private static MockHttpServletRequest request(String path) {
