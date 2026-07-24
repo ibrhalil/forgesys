@@ -4,6 +4,8 @@ import com.ibrhalil.forgesys.common.tenant.TenantContext;
 import com.ibrhalil.forgesys.dto.CompanyResponse;
 import com.ibrhalil.forgesys.entity.Company;
 import com.ibrhalil.forgesys.entity.CompanyStatus;
+import com.ibrhalil.forgesys.exception.BusinessException;
+import com.ibrhalil.forgesys.exception.ErrorCode;
 import com.ibrhalil.forgesys.exception.ResourceNotFoundException;
 import com.ibrhalil.forgesys.persistence.repository.CompanyRepository;
 import lombok.RequiredArgsConstructor;
@@ -46,6 +48,12 @@ public class PlatformCompanyService {
             Company company = companyRepository.findById(id)
                     .orElseThrow(() -> new ResourceNotFoundException("Company not found with id: " + id));
 
+            if (!company.getStatus().canTransitionTo(status)) {
+                // [RISK-32] reject illegal transitions (e.g. TERMINATED->ACTIVE,
+                // ACTIVE->PROVISIONING) that would leave the tenant in a broken state.
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR,
+                        "Illegal company status transition: " + company.getStatus() + " -> " + status);
+            }
             company.setStatus(status);
             Company saved = companyRepository.save(company);
             log.info("Company status updated: id={}, newStatus={}", saved.getId(), saved.getStatus());
@@ -72,12 +80,12 @@ public class PlatformCompanyService {
     }
 
     private CompanyResponse mapToResponse(Company company) {
+        // schemaName/dbRole are intentionally omitted — internal details, not part of
+        // the API contract ([RISK] CompanyResponse internal leak cleanup).
         return new CompanyResponse(
                 company.getId(),
                 company.getName(),
                 company.getSubdomain(),
-                company.getSchemaName(),
-                company.getDbRole(),
                 company.getStatus()
         );
     }

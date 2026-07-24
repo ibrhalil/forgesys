@@ -23,6 +23,8 @@ import java.util.List;
 public class JwtTokenProvider {
 
     public static final String ISSUER = "https://forgesys.dev";
+    /** Intended audience for every access token; validated by {@code JwtAuthenticationFilter}. */
+    public static final String AUDIENCE = "forgesys";
     public static final String CLAIM_AUTHORITIES = "authorities";
     public static final String CLAIM_TENANT = "tenant";
     public static final String CLAIM_EMAIL = "email";
@@ -40,6 +42,7 @@ public class JwtTokenProvider {
         Instant now = Instant.now();
         JwtClaimsSet.Builder builder = JwtClaimsSet.builder()
                 .issuer(ISSUER)
+                .audience(List.of(AUDIENCE))
                 .issuedAt(now)
                 .expiresAt(now.plus(accessTokenTtlMinutes, ChronoUnit.MINUTES))
                 .subject(userId)

@@ -45,7 +45,8 @@ Backend altyapısı + auth/RBAC/platform management + iki-fazlı tenant signup t
 
 **Faz 2.7-2.8 (kısmen DONE) — Wrap-up:**
 - [x] `SystemAdminBootstrapRunner` + `RbacSeeder` + `PermissionCatalog` (K-24, K-25)
-- [ ] `AuditorAware` SecurityContext userId (RISK-3 — hala `"system"`), springdoc-openapi
+- [x] `AuditorAware` SecurityContext userId (RISK-3/[RISK-33] — Çözüldü 2026-07-24)
+- [ ] springdoc-openapi
 
 **Faz 2.9 (DONE) — User & RBAC + Platform management:**
 - [x] User/Role/Permission/Group CRUD + assign/revoke + DTO (`@Transactional`, soft-delete)
@@ -158,7 +159,7 @@ Kod analizi sonucu keşfedilen P0 düzeltmeler. User CRUD / log'dan ÖNCE çöz�
 - ~~JwtAuthFilter blacklist hook~~ — CANCEL (`tokenInvalidBefore` ile gereksiz)
 
 ### Epic 2.7-2.8 — Wrap-up
-- [ ] `AuditorAware` SecurityContext userId (RISK-3) — hala hardcoded `"system"` (`MultiTenancyJpaConfig`)
+- [x] `AuditorAware` SecurityContext userId (RISK-3/[RISK-33]) — Çözüldü 2026-07-24; artık SecurityContext userId + `"system"` fallback (`MultiTenancyJpaConfig`)
 - [x] Bootstrap data initializer (rol/permission/group seed, idempotent, diff-based) — **K-24** (`SystemAdminBootstrapRunner` + `RbacSeeder` + `PermissionCatalog`)
 - [ ] springdoc-openapi dep + Swagger scheme doc (profile gating) — pom'da dependency YOK, erteli
 

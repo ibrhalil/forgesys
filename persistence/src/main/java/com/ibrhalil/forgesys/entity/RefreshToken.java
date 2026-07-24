@@ -20,7 +20,7 @@ import lombok.ToString;
 @Getter
 @Setter
 @NoArgsConstructor
-@ToString(exclude = "user")
+@ToString(exclude = {"user", "token"})
 @Table(
         name = "t_refresh_tokens",
         indexes = {

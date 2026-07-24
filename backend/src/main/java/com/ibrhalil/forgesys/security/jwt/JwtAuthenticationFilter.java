@@ -87,6 +87,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
      * from the context, never the claim.
      */
     private void authenticateIfTenantMatches(Jwt jwt) {
+        if (!hasValidIssuerAndAudience(jwt)) {
+            SecurityContextHolder.clearContext();
+            return;
+        }
         String ctxTenant = TenantContext.getCurrentTenant().orElse("public");
         String jwtTenant = jwt.getClaimAsString(JwtTokenProvider.CLAIM_TENANT);
         if (!StringUtils.hasText(jwtTenant)) {
@@ -98,6 +102,24 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
         SecurityContextHolder.getContext().setAuthentication(toAuthentication(jwt, ctxTenant));
+    }
+
+    /**
+     * Validates the standard {@code iss}/{@code aud} claims so a token minted by another
+     * system (even if it happened to share the key) or a malformed token is rejected.
+     */
+    private boolean hasValidIssuerAndAudience(Jwt jwt) {
+        String issuer = jwt.getIssuer() == null ? null : jwt.getIssuer().toString();
+        if (!JwtTokenProvider.ISSUER.equals(issuer)) {
+            log.debug("JWT issuer [{}] rejected", issuer);
+            return false;
+        }
+        List<String> audience = jwt.getAudience();
+        if (audience == null || !audience.contains(JwtTokenProvider.AUDIENCE)) {
+            log.debug("JWT audience {} rejected", audience);
+            return false;
+        }
+        return true;
     }
 
     private String extractToken(HttpServletRequest request) {

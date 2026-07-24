@@ -11,7 +11,7 @@ public record CompanyRegisterRequest(
         String companyName,
 
         @NotBlank(message = "Subdomain is required")
-        @Pattern(regexp = "^[a-z0-9](?:[a-z0-9-]{0,98}[a-z0-9])?$",
+        @Pattern(regexp = SubdomainRules.REGEX,
                 message = "Subdomain must be 1-100 chars: lowercase alphanumeric and hyphens, not starting/ending with hyphen")
         String subdomain,
 

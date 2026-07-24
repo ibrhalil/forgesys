@@ -104,31 +104,33 @@ Kapsamlı 4-katmanlı review (service/security/persistence/test) + Spring Boot 4
 > Faz D uygulandı (2026-07-24), 124 test yeşil (H2). Malformed UUID/artık parametre artık 400 (`validation_error`), N+1 (`findAll`) kapatıldı (EntityGraph), concurrent duplicate uniqueness artık 500 değil 400 (`*_TAKEN` / `business_error`).
 
 ### Faz E — P2 Toplu Temizlik
-- [ ] [RISK-30] Verification token hash-at-rest (SHA-256) + purge job + `adminPasswordHash` consume sonrası null.
-- [ ] [RISK-32] `PlatformCompanyService.updateStatus` state-machine (`CompanyStatus.canTransitionTo`).
-- [ ] [RISK-33] AuditorAware SecurityContext userId (RISK-3'ü kapatır).
-- [ ] [RISK-34] Deprecated SB4 starter'lar: `oauth2-resource-server`→`security-oauth2-resource-server`, `web`→`webmvc`, Flyway→`spring-boot-starter-flyway`.
-- [ ] AuthService timing enumeration (dummy bcrypt sabit-zamanlı compare).
-- [ ] GroupService.setMembers N+1 + bulk update; `findGroupMembers` `@EntityGraph`.
-- [ ] JWT `iss`/`aud` validation; security headers/CSP explicit customizer.
-- [ ] `t_user_groups(group_id)` reverse index; redundant UNIQUE=PK cleanup (4 join tablosu).
-- [ ] `ErrorCode.AUTH_TOKEN_*` wire or remove (dead code — üretilmiyor).
-- [ ] `CompanyResponse` `schemaName`/`dbRole` kaldır (internal sızıntı).
-- [ ] `GlobalExceptionHandler` sensitive-value masking → exception message'lara da uygula.
+- [ ] [RISK-30] Verification token hash-at-rest (SHA-256) + purge job + `adminPasswordHash` consume sonrası null. *(erteledi: provisioning akışına dokunuyor — gerçek PG doğrulaması (RISK-20) + `adminPasswordHash` null için migration gerekli)*
+- [x] [RISK-32] `PlatformCompanyService.updateStatus` state-machine (`CompanyStatus.canTransitionTo`).
+- [x] [RISK-33] AuditorAware SecurityContext userId (RISK-3'ü kapatır).
+- [ ] [RISK-34] Deprecated SB4 starter'lar: `oauth2-resource-server`→`security-oauth2-resource-server`, `web`→`webmvc`, Flyway→`spring-boot-starter-flyway`. *(erteledi: build-risk, ayrı değerlendirilecek)*
+- [x] AuthService timing enumeration (dummy bcrypt sabit-zamanlı compare).
+- [~] GroupService.setMembers N+1 + bulk update; `findGroupMembers` `@EntityGraph`. *(EntityGraph + id dedupe done; modifying-query bulk erteledi — persistence-context riski)*
+- [x] JWT `iss`/`aud` validation; security headers/CSP explicit customizer.
+- [ ] `t_user_groups(group_id)` reverse index; redundant UNIQUE=PK cleanup (4 join tablosu). *(erteledi: tenant migration — "ask first")*
+- [x] `ErrorCode.AUTH_TOKEN_*` wire or remove (dead code — üretilmiyor).
+- [x] `CompanyResponse` `schemaName`/`dbRole` kaldır (internal sızıntı).
+- [ ] `GlobalExceptionHandler` sensitive-value masking → exception message'lara da uygula. *(erteledi: mesajlarda gerçek secret leak yok; geniş masking debug'ı zorlaştırır)*
 
 ### Faz F — P3 Polisaj
-- N+1 `findById` EntityGraph'lar (UserService/RoleService).
-- `resolveRoles`/`resolveGroups` duplicate-id `HashSet` dedupe.
-- `@ToString` token/hash/userProfile/userAccount exclude (`TenantVerificationToken`, `RefreshToken`, `User`).
-- `version BIGINT` → `NOT NULL DEFAULT 0` (migration).
-- `RefreshToken` ölü kod + `t_refresh_tokens` tablosu kaldır (Epic 2.5 gelince ekle).
-- Subdomain pattern constant (DTO + service DRY).
-- Password complexity policy (`@Pattern` mixed case/digit/symbol).
-- `Assign*Request` `@Size(max=...)` bound.
-- `IllegalArgumentException`/`RuntimeException` → `BusinessException`/`ErrorCode` convention.
-- Test dummy BCrypt hash'leri düzelt; forbidden test'leri `$.code == auth_access_denied` assert.
-- `Map<String,Object>` → `@ConfigurationProperties` (`jwt.*` cookie properties).
-- `provisionSystemTenant` self-invocation `@Transactional` no-op (proxy düzelt).
+- [ ] N+1 `findById` EntityGraph'lar (UserService/RoleService). *(erteledi: düşük değer)*
+- [x] `resolveRoles`/`resolveGroups` duplicate-id `HashSet` dedupe.
+- [x] `@ToString` token/hash/userProfile/userAccount exclude (`TenantVerificationToken`, `RefreshToken`, `User`).
+- [ ] `version BIGINT` → `NOT NULL DEFAULT 0` (migration). *(erteledi: tenant migration)*
+- [ ] `RefreshToken` ölü kod + `t_refresh_tokens` tablosu kaldır (Epic 2.5 gelince ekle). *(bırakıldı: Epic 2.5 tekrar ekleyecek, churn önlenir)*
+- [x] Subdomain pattern constant (DTO + service DRY — `SubdomainRules`).
+- [ ] Password complexity policy (`@Pattern` mixed case/digit/symbol). *(ürün-politikası kararı; tüm test/bootstrap şifrelerini değiştirir)*
+- [x] `Assign*Request` `@Size(max=...)` bound.
+- [ ] `IllegalArgumentException`/`RuntimeException` → `BusinessException`/`ErrorCode` convention. *(erteledi: geniş service-layer denetimi)*
+- [~] Test dummy BCrypt hash'leri düzelt; forbidden test'leri `$.code == auth_access_denied` assert. *(forbidden asserts done — 10 yer; dummy hash kozmetik bırakıldı)*
+- [ ] `Map<String,Object>` → `@ConfigurationProperties` (`jwt.*` cookie properties).
+- [ ] `provisionSystemTenant` self-invocation `@Transactional` no-op (proxy düzelt). *(cosmetic no-op — verifyAndProvision REQUIRED, outer tx zaten kapsıyor)*
+
+> Faz E/F toplu temizlik (2026-07-24): yapılandırılabilir/mekanik kalemlerin çoğu uygulandı — AUTH_TOKEN ölü kod, CompanyResponse internal sızıntı, @ToString secret exclude, subdomain pattern DRY (`SubdomainRules`), Assign* `@Size`, id dedupe, AuthService timing, JWT iss/aud + security headers/CSP, CompanyStatus state-machine (RISK-32), findGroupMembers EntityGraph, forbidden `$.code` assert'leri. **126 test yeşil (H2).** Ertenlenenler: RISK-30 (provisioning + migration), RISK-34 (build-risk), password complexity (ürün kararı), tenant migration'ları (version DEFAULT / reverse index / UNIQUE=PK — "ask first"). Gerçek PG doğrulaması Faz B (RISK-20) ile.
 
 ### Doğrulanan (uyumlu, aksiyon yok)
 - Jackson 3 (`tools.jackson.*`), yeni `@EntityScan` paketi, `@EnableMethodSecurity`, `authorizeHttpRequests`+`requestMatchers`, literal `-100` filter order, `GenerationType.UUID`, `@SQLRestriction` (deprecated `@Where` değil), `TIMESTAMPTZ` uzun form.

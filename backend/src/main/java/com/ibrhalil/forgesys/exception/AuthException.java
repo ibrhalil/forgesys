@@ -22,12 +22,4 @@ public class AuthException extends BusinessException {
     public static AuthException accountLocked() {
         return new AuthException(ErrorCode.AUTH_ACCOUNT_LOCKED);
     }
-
-    public static AuthException tokenInvalid() {
-        return new AuthException(ErrorCode.AUTH_TOKEN_INVALID);
-    }
-
-    public static AuthException tokenExpired() {
-        return new AuthException(ErrorCode.AUTH_TOKEN_EXPIRED);
-    }
 }

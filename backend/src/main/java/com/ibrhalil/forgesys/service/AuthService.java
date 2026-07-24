@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Authentication operations. {@link #login(LoginRequest)} validates credentials
@@ -66,8 +67,15 @@ public class AuthService {
      */
     @Transactional(noRollbackFor = AuthException.class)
     public LoginResponse login(LoginRequest request) {
-        User user = userRepository.findByEmail(request.email())
-                .orElseThrow(AuthException::badCredentials);
+        Optional<User> maybeUser = userRepository.findByEmail(request.email());
+        if (maybeUser.isEmpty()) {
+            // Timing defense: an unknown email still pays the bcrypt cost (encode is
+            // discarded) so its response time matches a wrong-password attempt — no
+            // user-enumeration oracle via timing.
+            passwordEncoder.encode(request.password());
+            throw AuthException.badCredentials();
+        }
+        User user = maybeUser.get();
         UserAccount account = user.getUserAccount();
         if (account == null) {
             // Account-less user cannot authenticate; treat as bad credentials to keep

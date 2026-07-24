@@ -21,7 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Comparator;
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -95,13 +95,13 @@ public class GroupService {
     @Transactional
     public GroupResponse setMembers(UUID groupId, AssignMembersRequest request) {
         Group group = getGroupOrThrow(groupId);
-        List<User> targetUsers = request.userIds().isEmpty()
+        Set<UUID> targetIds = new LinkedHashSet<>(request.userIds());
+        List<User> targetUsers = targetIds.isEmpty()
                 ? List.of()
-                : userRepository.findAllById(request.userIds());
-        if (targetUsers.size() != request.userIds().size()) {
+                : userRepository.findAllById(targetIds);
+        if (targetUsers.size() != targetIds.size()) {
             throw new ResourceNotFoundException("One or more users not found");
         }
-        Set<UUID> targetIds = new HashSet<>(request.userIds());
 
         for (User current : userRepository.findGroupMembers(groupId)) {
             if (!targetIds.contains(current.getId()) && current.getGroups().remove(group)) {
@@ -120,8 +120,9 @@ public class GroupService {
         if (roleIds == null || roleIds.isEmpty()) {
             return List.of();
         }
-        List<Role> roles = roleRepository.findAllById(roleIds);
-        if (roles.size() != roleIds.size()) {
+        Set<UUID> distinctIds = new LinkedHashSet<>(roleIds);
+        List<Role> roles = roleRepository.findAllById(distinctIds);
+        if (roles.size() != distinctIds.size()) {
             throw new ResourceNotFoundException("One or more roles not found");
         }
         return roles;

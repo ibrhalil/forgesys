@@ -35,7 +35,8 @@ class PlatformCompanyControllerTest extends AbstractRbacWebTest {
     @Test
     void listForbiddenWithoutReadPermission() throws Exception {
         mockMvc.perform(get("/api/v1/platform/companies").cookie(auth("nop@tenant.test")))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("auth_access_denied"));
     }
 
     @Test
@@ -44,7 +45,8 @@ class PlatformCompanyControllerTest extends AbstractRbacWebTest {
                         .contentType(JSON)
                         .cookie(auth("reader@tenant.test", "platform:company:read"))
                         .content("{\"status\":\"SUSPENDED\"}"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("auth_access_denied"));
     }
 
     /* ── list & get ── */
@@ -91,6 +93,22 @@ class PlatformCompanyControllerTest extends AbstractRbacWebTest {
                         .content("{\"status\":\"SUSPENDED\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("SUSPENDED"));
+    }
+
+    /**
+     * [RISK-32] An illegal status transition (TERMINATED -> ACTIVE) is rejected with
+     * 400 business_error instead of silently flipping the company into a broken state.
+     */
+    @Test
+    void illegalStatusTransitionReturns400() throws Exception {
+        Company company = seedCompany("terminated", CompanyStatus.TERMINATED);
+
+        mockMvc.perform(patch("/api/v1/platform/companies/" + company.getId() + "/status")
+                        .contentType(JSON)
+                        .cookie(auth("platform_writer@tenant.test", "platform:company:write"))
+                        .content("{\"status\":\"ACTIVE\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("business_error"));
     }
 
     @Test

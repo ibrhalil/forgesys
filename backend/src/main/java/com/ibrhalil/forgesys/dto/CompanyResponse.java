@@ -8,8 +8,6 @@ public record CompanyResponse(
         UUID id,
         String name,
         String subdomain,
-        String schemaName,
-        String dbRole,
         CompanyStatus status
 ) {
 }
