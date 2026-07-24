@@ -14,7 +14,7 @@ flowchart LR
     end
     subgraph AppHost[Application Host]
         SB[Spring Boot<br/>:8080]
-        TF[TenantFilter<br/>subdomain → schema]
+        TF["TenantFilter<br/>subdomain → schema"]
         CTX[(TenantContext<br/>ThreadLocal)]
         SB --- TF
         TF --- CTX
@@ -122,7 +122,9 @@ flowchart TB
 
 | Şema             | Tablo               | Amaç                                 | Migration           |
 |------------------|---------------------|--------------------------------------|---------------------|
-| `public`         | `t_companies`       | Tenant kayıt (subdomain→schema map)  | `public/V1__...sql` |
+| `public`         | `t_companies`       | Tenant kayıt (subdomain→schema map, status)  | `public/V1__...sql` |
+| `public`         | `t_organization_domains` | Org-owned email domain'leri (1:N, opsiyonel, K-32) | `public/V3__...sql` |
+| `public`         | `t_tenant_verification_tokens` | K-21 signup token'ları (admin credential'lar gömülü) | `public/V3__...sql` |
 | `tenant_<sub>`   | `t_users`           | Kullanıcı hesabı (credential'lar)    | `tenant/V1__...sql` |
 | `tenant_<sub>`   | `t_user_accounts`   | Security state (lock, failed login)  | `tenant/V1__...sql` |
 | `tenant_<sub>`   | `t_user_profiles`   | PII (isim, telefon, adres)           | `tenant/V1__...sql` |
@@ -135,18 +137,26 @@ flowchart TB
 | `tenant_<sub>`   | `t_group_roles`     | Group↔Role join                      | `tenant/V1__...sql` |
 | `tenant_<sub>`   | `t_refresh_tokens`  | JWT refresh token'ları               | `tenant/V1__...sql` |
 
-**Tenant provisioning akışı** (`TenantProvisioningService.provisionTenant`) — mevcut tek-fazlı senkron akış:
+**Tenant provisioning akışı** (`TenantProvisioningService`, K-21 iki-fazlı):
 
-1. `public.t_companies` satırı INSERT (subdomain, emailDomain, schemaName, status=ACTIVE).
-2. `CREATE SCHEMA tenant_<subdomain>` (raw JDBC, transaction dışı — DDL implicit commit).
+**Faz 1 — `createPendingCompany`** (`@Transactional`, hafif):
+1. `validateUnique` (subdomain + schemaName; `email_domain` K-32 ile kaldırıldı).
+2. `public.t_companies` satırı INSERT (status=`PROVISIONING`).
+3. `public.t_tenant_verification_tokens` INSERT (token + admin email/password-hash/first/last name + expiresAt).
+4. `VerificationSender.send(adminEmail, link)` — link: `${appBaseUrl}/verify-tenant?token=...`.
+
+**Faz 2 — `verifyAndProvision(token)`** (`@Transactional`, senkron ağır — kullanıcı linki tıklar):
+1. Token valid mi? (`usedAt != null` → `TENANT_TOKEN_ALREADY_USED`, `expiresAt <= now` → `TENANT_TOKEN_EXPIRED`, yok → `TENANT_TOKEN_INVALID`). Company `PROVISIONING` değilse reject.
+2. `CREATE SCHEMA IF NOT EXISTS tenant_<subdomain>` (raw JDBC — PostgreSQL implicit commit, transaction dışına kaçar; DEBT-10 partial).
 3. Flyway programmatik: `db/migration/tenant/*.sql` yeni şemada migrate.
 4. `TenantContext.setCurrentTenant("tenant_<subdomain>")` set et.
-5. Admin user INSERT (JPA).
+5. Admin user INSERT (email/password-hash token'dan, `emailVerified=true`) + `RbacSeeder.seedForCurrentTenant()` (Admin rolü + permission catalog).
 6. `TenantContext.clear()` `finally`'de.
+7. `Company.status = ACTIVE`, `token.usedAt = now`.
 
-> **Bilinen borç:** `provisionTenant` + `createAdminUser` `@Transactional` DEĞİL — kısmi write riski ([DEBT-10](DECISIONS.md#debt-10)). İki fazlı akış (K-21) uygulanınca refactor edilir.
->
-> **İki fazlı plan (K-21, uygulanmadı):** signup `PROVISIONING` Company yaratır (hafif), admin email verify linki `verify` endpoint'inde SENKRON `ACTIVE`'e çeker. Detay [DECISIONS.md K-21](DECISIONS.md#k-21).
+**Bootstrap auto-verify** (`provisionSystemTenant`, K-24): `SystemAdminBootstrapRunner` faz 1 (mail yok) + faz 2'yi arka arkaya çağırır — `system` tenant'ı startup'ta mail loop olmadan provision edilir.
+
+> **DEBT-10 (kısmen çözüldü):** `createPendingCompany` tam transactional (yalnız DB write). `verifyAndProvision` `@Transactional` işaretli ama `CREATE SCHEMA` implicit commit → DDL transaction dışına kaçar. Recovery idempotency ile (`IF NOT EXISTS`, `usedAt` guard). Tam transactional DDL PostgreSQL'de mümkün değil.
 
 ## Modül Bağımlılık Grafiği
 
@@ -159,7 +169,7 @@ flowchart LR
 
     Common --> Persistence
     Persistence --> Backend
-    Frontend -. npm build (Maven) .-> Backend
+    Frontend -. "npm build (Maven)" .-> Backend
 
     style Common fill:#fef3c7
     style Persistence fill:#dbeafe
@@ -179,14 +189,14 @@ Döngüsel bağımlılık YASAK. Kök pom yalnız aggregator + version managemen
 ```mermaid
 classDiagram
     class AuditEntity {
-        <<@MappedSuperclass>>
+        <<MappedSuperclass>>
         +OffsetDateTime createdDate
         +OffsetDateTime updatedDate
         +String createdBy
         +String updatedBy
     }
     class SoftDeleteAuditEntity {
-        <<@MappedSuperclass>>
+        <<MappedSuperclass>>
         +boolean isDeleted
         +OffsetDateTime deletedAt
         +Long version

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useTenantStore } from '../store/tenantStore';
 import { Button } from '../components/ui/Button';
@@ -94,6 +94,13 @@ export function LoginPage() {
             {isSubmitting ? 'Signing in...' : 'Sign In'}
           </Button>
         </form>
+
+        <p className="mt-6 text-center text-sm text-muted">
+          Yeni organizasyon mu?{' '}
+          <Link to="/register" className="font-medium text-accent transition-colors hover:text-accent-blue">
+            Kayıt ol
+          </Link>
+        </p>
       </div>
     </div>
   );

@@ -33,7 +33,7 @@ import java.util.UUID;
  * common case (already-peppered hash) performs no write.
  *
  * <p>Deferred to the next session (Epic 2.5/2.6): refresh tokens, logout (Redis
- * blacklist), register (email-domain check), login-history write, brute-force
+ * blacklist), tenant içi user register (domain-bazlı, K-21 org-domain tablosu), login-history write, brute-force
  * lockout (the {@code failedLoginAttempts}/{@code lockedUntil} fields already exist).
  */
 @Slf4j

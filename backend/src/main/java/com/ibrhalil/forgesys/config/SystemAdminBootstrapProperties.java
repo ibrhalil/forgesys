@@ -23,7 +23,6 @@ public record SystemAdminBootstrapProperties(
         boolean enabled,
         String companyName,
         String subdomain,
-        String emailDomain,
         String email,
         String password,
         String firstName,
