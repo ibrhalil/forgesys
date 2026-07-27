@@ -11,6 +11,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
+import java.util.UUID;
 
 /**
  * Read side of the audit subsystem (K-19). Returns paged views over a tenant's
@@ -18,8 +21,11 @@ import org.springframework.transaction.annotation.Transactional;
  * {@code iam:audit:read}. Mapping to response records keeps the entity shape out of
  * the API contract.
  *
- * <p>No filtering yet &mdash; a v1 browse (newest first). Action / userId / date-range
- * filters are a follow-up; the repositories already expose the derived queries.
+ * <p>Optional filters: audit-logs by {@code action} or {@code actorId}, login-history by
+ * {@code userId} or {@code success}. Filters are evaluated with first-match priority (a
+ * single active filter at a time); combining several into one query is future work
+ * (Specification-based). Date-range filtering can be added on top of the existing
+ * {@code findByDateRange} query.
  */
 @Service
 @RequiredArgsConstructor
@@ -29,13 +35,29 @@ public class AuditQueryService {
     private final LoginHistoryRepository loginHistoryRepository;
 
     @Transactional(readOnly = true)
-    public Page<AuditLogResponse> findAllAuditLogs(Pageable pageable) {
-        return auditLogRepository.findAll(pageable).map(this::toAuditLogResponse);
+    public Page<AuditLogResponse> findAllAuditLogs(Pageable pageable, String action, UUID actorId) {
+        Page<AuditLog> page;
+        if (StringUtils.hasText(action)) {
+            page = auditLogRepository.findByAction(action, pageable);
+        } else if (actorId != null) {
+            page = auditLogRepository.findByActorId(actorId, pageable);
+        } else {
+            page = auditLogRepository.findAll(pageable);
+        }
+        return page.map(this::toAuditLogResponse);
     }
 
     @Transactional(readOnly = true)
-    public Page<LoginHistoryResponse> findAllLoginHistory(Pageable pageable) {
-        return loginHistoryRepository.findAll(pageable).map(this::toLoginHistoryResponse);
+    public Page<LoginHistoryResponse> findAllLoginHistory(Pageable pageable, UUID userId, Boolean success) {
+        Page<LoginHistory> page;
+        if (userId != null) {
+            page = loginHistoryRepository.findByUserId(userId, pageable);
+        } else if (success != null) {
+            page = loginHistoryRepository.findBySuccess(success, pageable);
+        } else {
+            page = loginHistoryRepository.findAll(pageable);
+        }
+        return page.map(this::toLoginHistoryResponse);
     }
 
     private AuditLogResponse toAuditLogResponse(AuditLog log) {
