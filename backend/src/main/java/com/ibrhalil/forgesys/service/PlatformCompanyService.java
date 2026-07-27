@@ -23,6 +23,7 @@ import java.util.function.Supplier;
 public class PlatformCompanyService {
 
     private final CompanyRepository companyRepository;
+    private final AuditService auditService;
 
     @Transactional(readOnly = true)
     public List<CompanyResponse> findAll() {
@@ -44,7 +45,7 @@ public class PlatformCompanyService {
 
     @Transactional
     public CompanyResponse updateStatus(UUID id, CompanyStatus status) {
-        return executeWithoutTenantContext(() -> {
+        Company saved = executeWithoutTenantContext(() -> {
             Company company = companyRepository.findById(id)
                     .orElseThrow(() -> new ResourceNotFoundException("Company not found with id: " + id));
 
@@ -55,11 +56,14 @@ public class PlatformCompanyService {
                         "Illegal company status transition: " + company.getStatus() + " -> " + status);
             }
             company.setStatus(status);
-            Company saved = companyRepository.save(company);
-            log.info("Company status updated: id={}, newStatus={}", saved.getId(), saved.getStatus());
-
-            return mapToResponse(saved);
+            return companyRepository.save(company);
         });
+        log.info("Company status updated: id={}, newStatus={}", saved.getId(), saved.getStatus());
+        // Audited after executeWithoutTenantContext restores the caller's tenant context:
+        // platform actions operate on the public schema, but t_audit_logs is tenant-scoped,
+        // so the record is written to the platform admin's (system) tenant schema.
+        auditService.record("company_status_updated", "Company", saved.getId(), saved.getName());
+        return mapToResponse(saved);
     }
 
     /**
