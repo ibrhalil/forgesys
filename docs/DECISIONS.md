@@ -59,9 +59,9 @@ Her kayıt:
 - **Karar:** Üç ayrı log katmanı, her birinin kendi tablosu + endpoint'i:
   1. **Audit log** — admin aksiyonları (actor/action/entity/old-new JSONB/ip/trace_id). AOP `@AuditLog` annotation ile otomatik.
   2. **Giriş geçmişi (login history)** — user/success/ip/user_agent/reason. Login/refresh/register/logout'ta.
-  3. **Request/trace log** — MDC traceId + `X-Request-Id` header. `RequestLoggingFilter` ile.
-- **Durum:** Planlandı (Faz 2.10). Request/trace altyapısı Faz 2.0 Foundation'da gelir.
-- **Etki:** Yeni tenant migration: `tenant/V2__audit_login_history.sql` (`t_audit_logs` + `t_login_history`).
+  3. **Request/trace log** — MDC traceId + `X-Request-Id` header. `RequestMetadataFilter` ile.
+- **Durum:** UYGULANDI (core, 2026-07-27). 3 katmanın 2'si + trace altyapısı tamamlandı: (1) audit log — `AuditService` her admin aksiyonunu `t_audit_logs`'a yazar (User/Role/Group/PlatformCompany write metodlarında explicit `record(action, entityType, entityId, entityName)`); (2) login history — `LoginHistoryService` her login denemesini (success + failure, `reason` = `ErrorCode.code()`) `t_login_history`'e yazar (`AuthService.login` her outcome'unda, unknown email → `userId=null`); (3) request/trace — `RequestMetadataFilter` (`-102` order, tenant `-101` ve security `-100` öncesi) `X-Request-Id`/UUID + client IP (`X-Forwarded-For`/`X-Real-IP`/`getRemoteAddr`) + User-Agent'ı `RequestContext` ThreadLocal + MDC `traceId`'ye yazar (stabil per-request traceId; `ApiErrorFactory` MDC'den okur). Read side: `GET /api/v1/audit-logs` + `GET /api/v1/login-history` (`iam:audit:read`, sayfalı + opsiyonel filtre, `AuditQueryService`). Tüm yazılar `REQUIRES_NEW` + best-effort (audit asla iş sürecini bozmaz). **KALAN:** request/trace log **tablosu** (`GET /request-logs`) ve K-27 uzantıları (old/new-value, high-risk body capture mask-first, `@AuditLog` AOP aspect — AOP infra classpath'te, `@ApprovalRequired` approval workflow, anomaly detection).
+- **Etki:** Yeni tenant migration `tenant/V3__audit_login_history.sql` (`t_audit_logs` + `t_login_history`); backend `web/` package (`RequestMetadataFilter` + `RequestContext`/`RequestMeta`); yeni `iam:audit:read` permission (`PermissionCatalog` → Admin rolüne seed). Mevcut tenant'lara `TenantMigrationRunner` V3'ü startup'ta uygular.
 
 ### K-20
 **Admin/User/Log UI Faz 3 öncesi**
