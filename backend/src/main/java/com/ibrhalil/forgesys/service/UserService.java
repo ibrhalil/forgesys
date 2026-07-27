@@ -43,6 +43,7 @@ public class UserService {
     private final RoleRepository roleRepository;
     private final GroupRepository groupRepository;
     private final PasswordEncoder passwordEncoder;
+    private final AuditService auditService;
 
     @Transactional(readOnly = true)
     public Page<UserResponse> findAll(Pageable pageable) {
@@ -81,7 +82,9 @@ public class UserService {
         profile.setLastName(request.lastName());
         user.setUserProfile(profile);
 
-        return toResponse(userRepository.save(user));
+        User saved = userRepository.save(user);
+        auditService.record("user_created", "User", saved.getId(), saved.getEmail());
+        return toResponse(saved);
     }
 
     @Transactional
@@ -95,7 +98,9 @@ public class UserService {
         if (request.enabled() != null) {
             user.getUserAccount().setEnabled(request.enabled());
         }
-        return toResponse(userRepository.save(user));
+        User saved = userRepository.save(user);
+        auditService.record("user_updated", "User", saved.getId(), saved.getEmail());
+        return toResponse(saved);
     }
 
     @Transactional
@@ -104,6 +109,7 @@ public class UserService {
             throw new ResourceNotFoundException("User not found: " + id);
         }
         userRepository.deleteById(id);
+        auditService.record("user_deleted", "User", id, null);
     }
 
     @Transactional
