@@ -33,6 +33,7 @@ public final class PermissionCatalog {
     public static final String IAM_GROUP_READ = "iam:group:read";
     public static final String IAM_GROUP_WRITE = "iam:group:write";
     public static final String IAM_GROUP_DELETE = "iam:group:delete";
+    public static final String IAM_AUDIT_READ = "iam:audit:read";
 
     public static final String PLATFORM_COMPANY_READ = "platform:company:read";
     public static final String PLATFORM_COMPANY_WRITE = "platform:company:write";
@@ -52,6 +53,7 @@ public final class PermissionCatalog {
             new PermissionDefinition(IAM_GROUP_READ, "Read tenant groups"),
             new PermissionDefinition(IAM_GROUP_WRITE, "Create or update tenant groups"),
             new PermissionDefinition(IAM_GROUP_DELETE, "Delete tenant groups"),
+            new PermissionDefinition(IAM_AUDIT_READ, "Read tenant audit logs and login history"),
             new PermissionDefinition(PLATFORM_COMPANY_READ, "Read platform companies"),
             new PermissionDefinition(PLATFORM_COMPANY_WRITE, "Update platform company status")
     );
