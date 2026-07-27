@@ -5,6 +5,7 @@ import com.ibrhalil.forgesys.security.RestAccessDeniedHandler;
 import com.ibrhalil.forgesys.security.RestAuthenticationEntryPoint;
 import com.ibrhalil.forgesys.security.jwt.JwtAuthenticationFilter;
 import com.ibrhalil.forgesys.tenant.TenantFilter;
+import com.ibrhalil.forgesys.web.RequestMetadataFilter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
@@ -92,6 +93,21 @@ public class SecurityConfig {
     public FilterRegistrationBean<TenantFilter> tenantFilterRegistration(TenantFilter tenantFilter) {
         FilterRegistrationBean<TenantFilter> registration = new FilterRegistrationBean<>(tenantFilter);
         registration.setOrder(SECURITY_FILTER_ORDER - 1);
+        return registration;
+    }
+
+    /**
+     * Runs {@link RequestMetadataFilter} before the tenant filter (order -102) and
+     * the Spring Security chain (-100), so the trace id, client IP and User-Agent
+     * are available to every downstream filter and service (and error responses
+     * carry a stable trace id). Defining this registration also prevents the
+     * default low-precedence auto-registration of the {@code @Component} filter.
+     */
+    @Bean
+    public FilterRegistrationBean<RequestMetadataFilter> requestMetadataFilterRegistration(
+            RequestMetadataFilter requestMetadataFilter) {
+        FilterRegistrationBean<RequestMetadataFilter> registration = new FilterRegistrationBean<>(requestMetadataFilter);
+        registration.setOrder(SECURITY_FILTER_ORDER - 2);
         return registration;
     }
 

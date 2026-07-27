@@ -18,10 +18,10 @@ import lombok.ToString;
 @NoArgsConstructor
 @ToString(exclude = {"oldValue", "newValue", "requestBody"})
 @Table(name = "t_audit_logs", indexes = {
-        @jakarta.persistence.Index(name = "idx_audit_logs_actor_id", columnList = "actorId"),
-        @jakarta.persistence.Index(name = "idx_audit_logs_entity", columnList = "entityType, entityId"),
+        @jakarta.persistence.Index(name = "idx_audit_logs_actor_id", columnList = "actor_id"),
+        @jakarta.persistence.Index(name = "idx_audit_logs_entity", columnList = "entity_type, entity_id"),
         @jakarta.persistence.Index(name = "idx_audit_logs_action", columnList = "action"),
-        @jakarta.persistence.Index(name = "idx_audit_logs_created_at", columnList = "createdDate")
+        @jakarta.persistence.Index(name = "idx_audit_logs_created_at", columnList = "created_at")
 })
 @EntityListeners(AuditingEntityListener.class)
 public class AuditLog extends GeneratedIdAuditEntity {
