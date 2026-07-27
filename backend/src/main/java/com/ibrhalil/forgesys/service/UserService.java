@@ -118,7 +118,9 @@ public class UserService {
         List<Role> roles = resolveRoles(request.roleIds());
         user.getRoles().clear();
         user.getRoles().addAll(roles);
-        return toResponse(userRepository.save(user));
+        User saved = userRepository.save(user);
+        auditService.record("user_roles_updated", "User", saved.getId(), saved.getEmail());
+        return toResponse(saved);
     }
 
     @Transactional
@@ -127,7 +129,9 @@ public class UserService {
         List<Group> groups = resolveGroups(request.groupIds());
         user.getGroups().clear();
         user.getGroups().addAll(groups);
-        return toResponse(userRepository.save(user));
+        User saved = userRepository.save(user);
+        auditService.record("user_groups_updated", "User", saved.getId(), saved.getEmail());
+        return toResponse(saved);
     }
 
     /**
@@ -170,6 +174,7 @@ public class UserService {
         user.setPassword(passwordEncoder.encode(request.newPassword()));
         invalidateTokens(user);
         userRepository.save(user);
+        auditService.record("user_password_changed", "User", userId, user.getEmail());
     }
 
     /**
@@ -184,6 +189,7 @@ public class UserService {
         user.setPassword(passwordEncoder.encode(request.newPassword()));
         invalidateTokens(user);
         userRepository.save(user);
+        auditService.record("user_password_reset", "User", userId, user.getEmail());
     }
 
     /**

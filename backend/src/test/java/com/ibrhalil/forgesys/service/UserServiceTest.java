@@ -1,5 +1,9 @@
 package com.ibrhalil.forgesys.service;
 
+import com.ibrhalil.forgesys.dto.AdminPasswordResetRequest;
+import com.ibrhalil.forgesys.dto.AssignGroupsRequest;
+import com.ibrhalil.forgesys.dto.AssignRolesRequest;
+import com.ibrhalil.forgesys.dto.PasswordChangeRequest;
 import com.ibrhalil.forgesys.dto.UserCreateRequest;
 import com.ibrhalil.forgesys.dto.UserUpdateRequest;
 import com.ibrhalil.forgesys.entity.User;
@@ -15,6 +19,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -77,6 +82,56 @@ class UserServiceTest {
 
         verify(userRepository).deleteById(id);
         verify(auditService).record("user_deleted", "User", id, null);
+    }
+
+    @Test
+    void setRolesRecordsAuditLog() {
+        UUID id = UUID.randomUUID();
+        User user = userFixture(id, "user@example.com", "user");
+        when(userRepository.findById(id)).thenReturn(Optional.of(user));
+        when(userRepository.save(any(User.class))).thenReturn(user);
+
+        userService.setRoles(id, new AssignRolesRequest(List.of()));
+
+        verify(auditService).record("user_roles_updated", "User", id, "user@example.com");
+    }
+
+    @Test
+    void setGroupsRecordsAuditLog() {
+        UUID id = UUID.randomUUID();
+        User user = userFixture(id, "user@example.com", "user");
+        when(userRepository.findById(id)).thenReturn(Optional.of(user));
+        when(userRepository.save(any(User.class))).thenReturn(user);
+
+        userService.setGroups(id, new AssignGroupsRequest(List.of()));
+
+        verify(auditService).record("user_groups_updated", "User", id, "user@example.com");
+    }
+
+    @Test
+    void resetPasswordRecordsAuditLog() {
+        UUID id = UUID.randomUUID();
+        User user = userFixture(id, "user@example.com", "user");
+        when(userRepository.findById(id)).thenReturn(Optional.of(user));
+        when(passwordEncoder.encode("newpass123")).thenReturn("$2a$12$newhash");
+
+        userService.resetPassword(id, new AdminPasswordResetRequest("newpass123"));
+
+        verify(auditService).record("user_password_reset", "User", id, "user@example.com");
+    }
+
+    @Test
+    void changePasswordRecordsAuditLog() {
+        UUID id = UUID.randomUUID();
+        User user = userFixture(id, "user@example.com", "user");
+        user.setPassword("$2a$12$oldhash");
+        when(userRepository.findById(id)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("current", "$2a$12$oldhash")).thenReturn(true);
+        when(passwordEncoder.encode("newpass123")).thenReturn("$2a$12$newhash");
+
+        userService.changePassword(id, new PasswordChangeRequest("current", "newpass123"));
+
+        verify(auditService).record("user_password_changed", "User", id, "user@example.com");
     }
 
     private User userFixture(UUID id, String email, String username) {
