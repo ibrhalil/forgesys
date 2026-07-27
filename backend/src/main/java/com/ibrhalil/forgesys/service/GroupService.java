@@ -33,6 +33,7 @@ public class GroupService {
     private final GroupRepository groupRepository;
     private final RoleRepository roleRepository;
     private final UserRepository userRepository;
+    private final AuditService auditService;
 
     @Transactional(readOnly = true)
     public Page<GroupResponse> findAll(Pageable pageable) {
@@ -53,7 +54,9 @@ public class GroupService {
         group.setName(request.name());
         group.setDescription(request.description());
         group.setActive(request.active() == null || request.active());
-        return toResponse(groupRepository.save(group));
+        Group saved = groupRepository.save(group);
+        auditService.record("group_created", "Group", saved.getId(), saved.getName());
+        return toResponse(saved);
     }
 
     @Transactional
@@ -67,7 +70,9 @@ public class GroupService {
         if (request.active() != null) {
             group.setActive(request.active());
         }
-        return toResponse(groupRepository.save(group));
+        Group saved = groupRepository.save(group);
+        auditService.record("group_updated", "Group", saved.getId(), saved.getName());
+        return toResponse(saved);
     }
 
     @Transactional
@@ -76,6 +81,7 @@ public class GroupService {
             throw new ResourceNotFoundException("Group not found: " + id);
         }
         groupRepository.deleteById(id);
+        auditService.record("group_deleted", "Group", id, null);
     }
 
     @Transactional
@@ -84,7 +90,9 @@ public class GroupService {
         List<Role> roles = resolveRoles(request.roleIds());
         group.getRoles().clear();
         group.getRoles().addAll(roles);
-        return toResponse(groupRepository.save(group));
+        Group saved = groupRepository.save(group);
+        auditService.record("group_roles_updated", "Group", saved.getId(), saved.getName());
+        return toResponse(saved);
     }
 
     /**
@@ -113,6 +121,7 @@ public class GroupService {
                 userRepository.save(target);
             }
         }
+        auditService.record("group_members_updated", "Group", group.getId(), group.getName());
         return toResponse(group);
     }
 

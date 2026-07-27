@@ -27,6 +27,7 @@ public class RoleService {
 
     private final RoleRepository roleRepository;
     private final PermissionRepository permissionRepository;
+    private final AuditService auditService;
 
     @Transactional(readOnly = true)
     public Page<RoleResponse> findAll(Pageable pageable) {
@@ -46,7 +47,9 @@ public class RoleService {
         Role role = new Role();
         role.setName(request.name());
         role.setDescription(request.description());
-        return toResponse(roleRepository.save(role));
+        Role saved = roleRepository.save(role);
+        auditService.record("role_created", "Role", saved.getId(), saved.getName());
+        return toResponse(saved);
     }
 
     @Transactional
@@ -57,7 +60,9 @@ public class RoleService {
         }
         role.setName(request.name());
         role.setDescription(request.description());
-        return toResponse(roleRepository.save(role));
+        Role saved = roleRepository.save(role);
+        auditService.record("role_updated", "Role", saved.getId(), saved.getName());
+        return toResponse(saved);
     }
 
     @Transactional
@@ -66,6 +71,7 @@ public class RoleService {
             throw new ResourceNotFoundException("Role not found: " + id);
         }
         roleRepository.deleteById(id);
+        auditService.record("role_deleted", "Role", id, null);
     }
 
     @Transactional
@@ -81,7 +87,9 @@ public class RoleService {
         // Mutate the persistent collection (don't replace the reference).
         role.getPermissions().clear();
         role.getPermissions().addAll(permissions);
-        return toResponse(roleRepository.save(role));
+        Role saved = roleRepository.save(role);
+        auditService.record("role_permissions_updated", "Role", saved.getId(), saved.getName());
+        return toResponse(saved);
     }
 
     private Role getRoleOrThrow(UUID id) {
