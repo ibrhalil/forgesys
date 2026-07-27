@@ -18,8 +18,8 @@ import lombok.ToString;
 @NoArgsConstructor
 @ToString(exclude = {"userAgent"})
 @Table(name = "t_login_history", indexes = {
-        @jakarta.persistence.Index(name = "idx_login_history_user_id", columnList = "userId"),
-        @jakarta.persistence.Index(name = "idx_login_history_created_at", columnList = "createdDate"),
+        @jakarta.persistence.Index(name = "idx_login_history_user_id", columnList = "user_id"),
+        @jakarta.persistence.Index(name = "idx_login_history_created_at", columnList = "created_at"),
         @jakarta.persistence.Index(name = "idx_login_history_success", columnList = "success")
 })
 @EntityListeners(AuditingEntityListener.class)

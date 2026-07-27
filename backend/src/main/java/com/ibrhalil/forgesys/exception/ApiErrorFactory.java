@@ -10,10 +10,11 @@ import java.util.UUID;
 /**
  * Builds {@link ApiErrorResponse} instances from {@link ErrorCode}s.
  *
- * <p>The {@code traceId} is resolved from the MDC ({@code RequestLoggingFilter}
- * sets it in a later chunk); when no filter has populated it yet, a fresh UUID
- * is generated so the field is never null and remains useful for log correlation.
- * This keeps the error shape forward-compatible with request/trace logging.
+ * <p>The {@code traceId} is resolved from the MDC, populated per request by
+ * {@code com.ibrhalil.forgesys.web.RequestMetadataFilter} (which honors the
+ * {@code X-Request-Id} header or generates a UUID). Outside a request thread
+ * (or before the filter has run) a fresh UUID is generated so the field is never
+ * null and remains useful for log correlation.
  */
 public final class ApiErrorFactory {
 
