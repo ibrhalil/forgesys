@@ -6,6 +6,7 @@ import com.ibrhalil.forgesys.dto.LoginResponse;
 import com.ibrhalil.forgesys.entity.User;
 import com.ibrhalil.forgesys.entity.UserAccount;
 import com.ibrhalil.forgesys.exception.AuthException;
+import com.ibrhalil.forgesys.exception.ErrorCode;
 import com.ibrhalil.forgesys.persistence.repository.UserRepository;
 import com.ibrhalil.forgesys.security.CustomUserDetailsService;
 import com.ibrhalil.forgesys.security.jwt.JwtTokenProvider;
@@ -60,6 +61,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider tokenProvider;
     private final UserRepository userRepository;
+    private final LoginHistoryService loginHistoryService;
 
     /**
      * Validates credentials and mints an access token. {@code noRollbackFor} is set so
@@ -75,6 +77,7 @@ public class AuthService {
             // discarded) so its response time matches a wrong-password attempt — no
             // user-enumeration oracle via timing.
             passwordEncoder.encode(request.password());
+            loginHistoryService.record(null, request.email(), false, ErrorCode.AUTH_BAD_CREDENTIALS.code());
             throw AuthException.badCredentials();
         }
         User user = maybeUser.get();
@@ -82,6 +85,7 @@ public class AuthService {
         if (account == null) {
             // Account-less user cannot authenticate; treat as bad credentials to keep
             // the uniform failure shape (no enumeration oracle).
+            loginHistoryService.record(user.getId(), user.getEmail(), false, ErrorCode.AUTH_BAD_CREDENTIALS.code());
             throw AuthException.badCredentials();
         }
 
@@ -90,6 +94,7 @@ public class AuthService {
         // counter is reset so the user gets a fresh attempt budget.
         if (account.getLockedUntil() != null) {
             if (account.getLockedUntil().isAfter(OffsetDateTime.now())) {
+                loginHistoryService.record(user.getId(), user.getEmail(), false, ErrorCode.AUTH_ACCOUNT_LOCKED.code());
                 throw AuthException.accountLocked();
             }
             account.setLockedUntil(null);
@@ -98,6 +103,7 @@ public class AuthService {
 
         if (!passwordEncoder.matches(request.password(), user.getPassword())) {
             registerFailedAttempt(user, account);
+            loginHistoryService.record(user.getId(), user.getEmail(), false, ErrorCode.AUTH_BAD_CREDENTIALS.code());
             throw AuthException.badCredentials();
         }
 
@@ -119,6 +125,7 @@ public class AuthService {
         String token = tokenProvider.generateAccessToken(
                 user.getId().toString(), user.getEmail(), tenantSchema, authorities);
         long expiresIn = tokenProvider.getAccessTokenTtlMinutes() * 60;
+        loginHistoryService.record(user.getId(), user.getEmail(), true, null);
         return new LoginResponse(token, "Bearer", expiresIn, user.getId(), user.getEmail(), authorities);
     }
 
