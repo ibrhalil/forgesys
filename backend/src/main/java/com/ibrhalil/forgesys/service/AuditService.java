@@ -6,6 +6,7 @@ import com.ibrhalil.forgesys.security.CustomUserDetails;
 import com.ibrhalil.forgesys.web.RequestContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -40,6 +41,7 @@ public class AuditService {
     public static final String SYSTEM_ACTOR = "system";
 
     private final AuditLogRepository auditLogRepository;
+    private final ObjectProvider<AuditService> self;
 
     /**
      * @param action     stable action key, e.g. {@code user_created}
@@ -47,24 +49,33 @@ public class AuditService {
      * @param entityId   the affected entity's id, or {@code null} for bulk/cross-entity actions
      * @param entityName human-readable entity label (email / name) for the activity feed, or {@code null}
      */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void record(String action, String entityType, UUID entityId, String entityName) {
         try {
-            AuditLog entry = new AuditLog();
-            entry.setAction(action);
-            entry.setEntityType(entityType);
-            entry.setEntityId(entityId);
-            entry.setEntityName(entityName);
-            resolveActor(entry);
-            RequestContext.current().ifPresent(meta -> {
-                entry.setIpAddress(meta.clientIp());
-                entry.setTraceId(meta.traceId());
-            });
-            auditLogRepository.save(entry);
+            self.getObject().recordInNewTx(action, entityType, entityId, entityName);
         } catch (RuntimeException ex) {
             log.warn("Failed to record audit log (action={}, entityType={}, entityId={})",
                     action, entityType, entityId, ex);
         }
+    }
+
+    /**
+     * Isolated write invoked through the {@code self} proxy so its REQUIRES_NEW
+     * commit (JPA flushes at commit, after the method body returns) is covered by
+     * {@link #record}'s try/catch, not the caller's transaction.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordInNewTx(String action, String entityType, UUID entityId, String entityName) {
+        AuditLog entry = new AuditLog();
+        entry.setAction(action);
+        entry.setEntityType(entityType);
+        entry.setEntityId(entityId);
+        entry.setEntityName(entityName);
+        resolveActor(entry);
+        RequestContext.current().ifPresent(meta -> {
+            entry.setIpAddress(meta.clientIp());
+            entry.setTraceId(meta.traceId());
+        });
+        auditLogRepository.save(entry);
     }
 
     private void resolveActor(AuditLog entry) {
