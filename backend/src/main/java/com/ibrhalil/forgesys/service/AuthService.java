@@ -10,6 +10,7 @@ import com.ibrhalil.forgesys.exception.ErrorCode;
 import com.ibrhalil.forgesys.persistence.repository.UserRepository;
 import com.ibrhalil.forgesys.security.CustomUserDetails;
 import com.ibrhalil.forgesys.security.CustomUserDetailsService;
+import com.ibrhalil.forgesys.security.SessionRevocationService;
 import com.ibrhalil.forgesys.security.TokenBlacklistService;
 import com.ibrhalil.forgesys.security.jwt.JwtTokenProvider;
 import com.ibrhalil.forgesys.security.refresh.IssuedRefresh;
@@ -76,6 +77,7 @@ public class AuthService {
     private final RefreshTokenStore refreshTokenStore;
     private final CustomUserDetailsService userDetailsService;
     private final TokenBlacklistService tokenBlacklistService;
+    private final SessionRevocationService sessionRevocationService;
 
     /**
      * Validates credentials and mints an access token. {@code noRollbackFor} is set so
@@ -136,9 +138,22 @@ public class AuthService {
                 .map(GrantedAuthority::getAuthority)
                 .toList();
         String tenantSchema = TenantContext.getCurrentTenant().orElse(null);
+        // K-28: capture the login device's IP + User-Agent (from the per-request
+        // RequestContext, populated by RequestMetadataFilter) so the session list can
+        // show "where you're logged in". The store keeps them with the refresh-token hash.
+        String clientIp = null;
+        String userAgent = null;
+        if (com.ibrhalil.forgesys.web.RequestContext.current().isPresent()) {
+            com.ibrhalil.forgesys.web.RequestMeta meta = com.ibrhalil.forgesys.web.RequestContext.current().get();
+            clientIp = meta.clientIp();
+            userAgent = meta.userAgent();
+        }
         String token = tokenProvider.generateAccessToken(
                 user.getId().toString(), user.getEmail(), tenantSchema, authorities);
-        IssuedRefresh refresh = refreshTokenStore.issue(user.getId(), user.getEmail(), tenantSchema);
+        IssuedRefresh refresh = refreshTokenStore.issue(user.getId(), user.getEmail(), tenantSchema, clientIp, userAgent);
+        // Faz 5: cap concurrent active sessions — if this login pushes the user over the
+        // configured limit, the oldest sessions are evicted (login always succeeds).
+        sessionRevocationService.enforceSessionLimit(user.getId());
         long expiresIn = tokenProvider.getAccessTokenTtlMinutes() * 60;
         loginHistoryService.record(user.getId(), user.getEmail(), true, null);
         return new LoginResponse(token, refresh.token(), "Bearer", expiresIn, user.getId(), user.getEmail(), authorities);
@@ -234,16 +249,23 @@ public class AuthService {
     }
 
     /**
-     * [RISK-22] Records a failed login: increments the counter and, once the threshold
-     * is reached, sets the temporary lockout window. The remaining attempt count is
-     * never leaked — the caller still gets {@code auth_bad_credentials}.
+     * [RISK-22 + Faz 1] Records a failed login: increments the counter and, once the threshold
+     * is reached, sets the temporary lockout window. The remaining attempt count is never
+     * leaked — the caller still gets {@code auth_bad_credentials}. On lock the user's
+     * {@code tokenInvalidBefore} is also stamped so the account's outstanding access tokens
+     * die immediately (not at TTL) — a locked account is treated as suspected compromise /
+     * attack, so its live sessions are killed on the spot. The refresh path is already
+     * blocked while locked ({@code accountNonLocked} re-check at refresh); refresh tokens
+     * are therefore left in place so they work again once the lock window expires.
      */
     private void registerFailedAttempt(User user, UserAccount account) {
         int attempts = account.getFailedLoginAttempts() + 1;
         account.setFailedLoginAttempts(attempts);
         if (attempts >= MAX_FAILED_LOGIN_ATTEMPTS) {
-            account.setLockedUntil(OffsetDateTime.now().plusMinutes(LOCK_DURATION_MINUTES));
-            log.warn("User {} locked after {} failed login attempts until {}",
+            OffsetDateTime now = OffsetDateTime.now();
+            account.setLockedUntil(now.plusMinutes(LOCK_DURATION_MINUTES));
+            account.setTokenInvalidBefore(now);
+            log.warn("User {} locked after {} failed login attempts until {}; sessions revoked",
                     user.getId(), attempts, account.getLockedUntil());
         }
         userRepository.save(user);

@@ -32,6 +32,43 @@ export interface Permission {
   description: string | null;
 }
 
+// Audit & login history (K-19) — exposed by GET /audit-logs and /login-history
+export interface AuditLog {
+  id: string;
+  actorId: string | null;
+  actorName: string;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  entityName: string | null;
+  ipAddress: string | null;
+  traceId: string | null;
+  createdAt: string;
+}
+
+export interface LoginHistory {
+  id: string;
+  userId: string | null;
+  username: string;
+  success: boolean;
+  reason: string | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+  createdAt: string;
+}
+
+// Active refresh-token sessions (K-28) — one per device. Returned as a flat array
+// (not paged) by /users/me/sessions and /users/{id}/sessions.
+export interface ActiveSession {
+  sessionId: string;
+  userAgent: string | null;
+  ipAddress: string | null;
+  loginAt: string;
+  lastSeen: string;
+  /** True only on the self view, for the session behind the caller's refresh cookie. */
+  current: boolean;
+}
+
 // Full role (RoleResponse) — used by /roles endpoints
 export interface Role {
   id: string;

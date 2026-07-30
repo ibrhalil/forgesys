@@ -14,6 +14,7 @@ import com.ibrhalil.forgesys.exception.ResourceNotFoundException;
 import com.ibrhalil.forgesys.persistence.repository.GroupRepository;
 import com.ibrhalil.forgesys.persistence.repository.RoleRepository;
 import com.ibrhalil.forgesys.persistence.repository.UserRepository;
+import com.ibrhalil.forgesys.security.SessionRevocationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -34,6 +35,7 @@ public class GroupService {
     private final RoleRepository roleRepository;
     private final UserRepository userRepository;
     private final AuditService auditService;
+    private final SessionRevocationService sessionRevocationService;
 
     @Transactional(readOnly = true)
     public Page<GroupResponse> findAll(Pageable pageable) {
@@ -65,12 +67,20 @@ public class GroupService {
         if (!group.getName().equals(request.name()) && groupRepository.existsByName(request.name())) {
             throw new BusinessException(ErrorCode.GROUP_NAME_TAKEN, "Group name already exists: " + request.name());
         }
+        boolean wasActive = group.isActive();
         group.setName(request.name());
         group.setDescription(request.description());
         if (request.active() != null) {
             group.setActive(request.active());
         }
         Group saved = groupRepository.save(group);
+        // Faz 1: deactivating a group drops every member's group-granted permissions
+        // (resolveAuthorities skips inactive groups) — revoke members so the loss is
+        // enforced immediately. Activation grants permissions members gain on their next
+        // login, so it needs no revoke.
+        if (wasActive && Boolean.FALSE.equals(request.active())) {
+            sessionRevocationService.revokeGroupMembers(saved.getId());
+        }
         auditService.record("group_updated", "Group", saved.getId(), saved.getName());
         return toResponse(saved);
     }
@@ -80,6 +90,11 @@ public class GroupService {
         if (!groupRepository.existsById(id)) {
             throw new ResourceNotFoundException("Group not found: " + id);
         }
+        // Faz 1: revoke BEFORE the soft-delete. findUserIdsByGroup joins through the group
+        // entity, which @SQLRestriction filters out once is_deleted=true — resolving
+        // members after deleteById would return nobody. Members lose the group's roles on
+        // deletion, so kill their sessions now.
+        sessionRevocationService.revokeGroupMembers(id);
         groupRepository.deleteById(id);
         auditService.record("group_deleted", "Group", id, null);
     }
@@ -88,10 +103,19 @@ public class GroupService {
     public GroupResponse setRoles(UUID groupId, AssignRolesRequest request) {
         Group group = getGroupOrThrow(groupId);
         List<Role> roles = resolveRoles(request.roleIds());
+        java.util.Set<String> beforeNames = group.getRoles().stream()
+                .map(Role::getName).collect(java.util.stream.Collectors.toSet());
         group.getRoles().clear();
         group.getRoles().addAll(roles);
         Group saved = groupRepository.save(group);
-        auditService.record("group_roles_updated", "Group", saved.getId(), saved.getName());
+        // Faz 1: a role delta on this group changes every member's effective permissions,
+        // but their outstanding tokens still embed the old set — revoke members so the
+        // delta is enforced on the next request, not at access-token TTL.
+        sessionRevocationService.revokeGroupMembers(saved.getId());
+        // Faz 2b: record the before/after role set on the group.
+        auditService.recordDelta("group_roles_updated", "Group", saved.getId(), saved.getName(),
+                AuditService.namesJson(beforeNames),
+                AuditService.namesJson(roles.stream().map(Role::getName).collect(java.util.stream.Collectors.toSet())));
         return toResponse(saved);
     }
 
@@ -111,9 +135,11 @@ public class GroupService {
             throw new ResourceNotFoundException("One or more users not found");
         }
 
+        Set<UUID> removedMemberIds = new LinkedHashSet<>();
         for (User current : userRepository.findGroupMembers(groupId)) {
             if (!targetIds.contains(current.getId()) && current.getGroups().remove(group)) {
                 userRepository.save(current);
+                removedMemberIds.add(current.getId());
             }
         }
         for (User target : targetUsers) {
@@ -121,6 +147,10 @@ public class GroupService {
                 userRepository.save(target);
             }
         }
+        // Faz 1: only REMOVED members lose the group's permissions (the security-relevant
+        // case). Added members gain permissions on their next login — no revoke, so adding
+        // someone to a group does not log them out.
+        sessionRevocationService.revokeUsers(removedMemberIds);
         auditService.record("group_members_updated", "Group", group.getId(), group.getName());
         return toResponse(group);
     }

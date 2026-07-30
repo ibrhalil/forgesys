@@ -11,6 +11,7 @@ import com.ibrhalil.forgesys.exception.ErrorCode;
 import com.ibrhalil.forgesys.exception.ResourceNotFoundException;
 import com.ibrhalil.forgesys.persistence.repository.PermissionRepository;
 import com.ibrhalil.forgesys.persistence.repository.RoleRepository;
+import com.ibrhalil.forgesys.security.SessionRevocationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -28,6 +29,7 @@ public class RoleService {
     private final RoleRepository roleRepository;
     private final PermissionRepository permissionRepository;
     private final AuditService auditService;
+    private final SessionRevocationService sessionRevocationService;
 
     @Transactional(readOnly = true)
     public Page<RoleResponse> findAll(Pageable pageable) {
@@ -70,6 +72,12 @@ public class RoleService {
         if (!roleRepository.existsById(id)) {
             throw new ResourceNotFoundException("Role not found: " + id);
         }
+        // Faz 1: revoke BEFORE the soft-delete. findUserIdsByRole joins through the role
+        // entity, which @SQLRestriction filters out once is_deleted=true — so resolving
+        // bearers after deleteById would return nobody and the revoke would silently miss
+        // every holder. Every bearer's outstanding tokens still carry the removed role's
+        // permissions until their next issue, so kill their sessions now.
+        sessionRevocationService.revokeRoleHolders(id);
         roleRepository.deleteById(id);
         auditService.record("role_deleted", "Role", id, null);
     }
@@ -84,11 +92,20 @@ public class RoleService {
         if (permissions.size() != requestedIds.size()) {
             throw new ResourceNotFoundException("One or more permissions not found");
         }
+        java.util.Set<String> beforeNames = role.getPermissions().stream()
+                .map(Permission::getName).collect(java.util.stream.Collectors.toSet());
         // Mutate the persistent collection (don't replace the reference).
         role.getPermissions().clear();
         role.getPermissions().addAll(permissions);
         Role saved = roleRepository.save(role);
-        auditService.record("role_permissions_updated", "Role", saved.getId(), saved.getName());
+        // Faz 1: a permission delta on this role changes what every bearer can do, but
+        // their outstanding tokens still embed the old permission set — revoke so the
+        // delta is enforced on the next request, not at access-token TTL.
+        sessionRevocationService.revokeRoleHolders(saved.getId());
+        // Faz 2b: record the before/after permission set.
+        auditService.recordDelta("role_permissions_updated", "Role", saved.getId(), saved.getName(),
+                AuditService.namesJson(beforeNames),
+                AuditService.namesJson(permissions.stream().map(Permission::getName).collect(java.util.stream.Collectors.toSet())));
         return toResponse(saved);
     }
 

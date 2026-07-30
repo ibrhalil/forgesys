@@ -61,12 +61,31 @@ export function AppShell() {
               Groups
             </NavLink>
           </PermissionGate>
+
+          <PermissionGate authority="iam:audit:read">
+            <NavLink to="/audit-logs" className={navClass}>
+              <svg className={iconClass} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z" /><path d="M14 2v5h5" /><path d="M8 13h8" /><path d="M8 17h8" /><path d="M8 9h2" /></svg>
+              Audit Log
+            </NavLink>
+            <NavLink to="/login-history" className={navClass}>
+              <svg className={iconClass} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" /><path d="M3 12h12" /><path d="M11 8l4 4-4 4" /><path d="M3 12a9 9 0 0 1 9-9" /></svg>
+              Login History
+            </NavLink>
+          </PermissionGate>
+
+          <NavLink to="/sessions" className={navClass}>
+            <svg className={iconClass} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8" /><path d="M12 17v4" /></svg>
+            Sessions
+          </NavLink>
         </nav>
 
-        <div className="mt-auto flex items-center justify-between gap-3 border-t border-glass pt-5">
-          <span className="overflow-hidden text-ellipsis whitespace-nowrap text-sm text-main">
+        <div className="mt-auto flex flex-col gap-2 border-t border-glass pt-5">
+          <NavLink
+            to="/profile"
+            className="overflow-hidden text-ellipsis whitespace-nowrap rounded-md px-2 py-1 text-left text-sm text-main transition-colors hover:bg-white/5 hover:text-accent"
+          >
             {user?.email ?? '—'}
-          </span>
+          </NavLink>
           <button
             onClick={handleLogout}
             className="shrink-0 rounded-md border border-glass px-3 py-1 text-xs text-muted transition-colors hover:border-accent hover:text-accent"

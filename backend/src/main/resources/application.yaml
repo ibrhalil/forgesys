@@ -42,3 +42,7 @@ forgesys:
     # back to /api/v1/auth/company/verify). Token lifetime in hours.
     app-base-url: ${APP_BASE_URL:http://localhost:3000}
     verification-token-ttl-hours: ${VERIFICATION_TOKEN_TTL_HOURS:24}
+    # Faz 5 concurrent-session limit per user. On login, if the user already holds
+    # this many active sessions the oldest are evicted (login always succeeds). 0 =
+    # unlimited (default). Caps the blast radius of a compromised account.
+    max-sessions: ${MAX_SESSIONS:0}

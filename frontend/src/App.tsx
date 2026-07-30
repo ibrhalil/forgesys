@@ -12,6 +12,11 @@ import { ProjectDetailPage } from './pages/ProjectDetailPage';
 import { UsersPage } from './pages/UsersPage';
 import { RolesPage } from './pages/RolesPage';
 import { GroupsPage } from './pages/GroupsPage';
+import { ProfilePage } from './pages/ProfilePage';
+import { AuditLogsPage } from './pages/AuditLogsPage';
+import { LoginHistoryPage } from './pages/LoginHistoryPage';
+import { SessionsPage } from './pages/SessionsPage';
+import { UserSessionsPage } from './pages/UserSessionsPage';
 import { ApiError } from './lib/api';
 
 const queryClient = new QueryClient({
@@ -67,6 +72,11 @@ export default function App() {
             <Route path="users" element={<UsersPage />} />
             <Route path="roles" element={<RolesPage />} />
             <Route path="groups" element={<GroupsPage />} />
+            <Route path="profile" element={<ProfilePage />} />
+            <Route path="audit-logs" element={<AuditLogsPage />} />
+            <Route path="login-history" element={<LoginHistoryPage />} />
+            <Route path="sessions" element={<SessionsPage />} />
+            <Route path="admin/users/:userId/sessions" element={<UserSessionsPage />} />
             <Route path="permissions" element={<Navigate to="/" replace />} />
             <Route path="platform/companies" element={<Navigate to="/" replace />} />
           </Route>

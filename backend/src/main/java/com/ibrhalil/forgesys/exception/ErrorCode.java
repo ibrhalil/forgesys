@@ -32,6 +32,7 @@ public enum ErrorCode {
     AUTH_REFRESH_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "Refresh token is invalid or expired"),
     AUTH_REFRESH_TOKEN_REUSE(HttpStatus.UNAUTHORIZED, "Refresh token reuse detected; all sessions have been revoked"),
     AUTH_ACCESS_DENIED(HttpStatus.FORBIDDEN, "Access is denied"),
+    SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "Session was not found or has already ended"),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred");
 
     private final HttpStatus status;

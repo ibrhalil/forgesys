@@ -50,8 +50,21 @@ public class AuditService {
      * @param entityName human-readable entity label (email / name) for the activity feed, or {@code null}
      */
     public void record(String action, String entityType, UUID entityId, String entityName) {
+        recordDelta(action, entityType, entityId, entityName, null, null);
+    }
+
+    /**
+     * Faz 2b delta capture: like {@link #record} but also persists the before/after state
+     * (as JSON strings in {@code old_value}/{@code new_value}) so the audit answers
+     * <em>"who granted/revoked which permission to whom"</em>, not just the action key.
+     * {@code oldValue}/{@code newValue} are caller-built JSON (see {@link #namesJson});
+     * {@code null} leaves a column unset. Use the plain {@link #record} overload when no
+     * delta applies (create/delete/status).
+     */
+    public void recordDelta(String action, String entityType, UUID entityId, String entityName,
+                            String oldValue, String newValue) {
         try {
-            self.getObject().recordInNewTx(action, entityType, entityId, entityName);
+            self.getObject().recordInNewTx(action, entityType, entityId, entityName, oldValue, newValue);
         } catch (RuntimeException ex) {
             log.warn("Failed to record audit log (action={}, entityType={}, entityId={})",
                     action, entityType, entityId, ex);
@@ -64,18 +77,47 @@ public class AuditService {
      * {@link #record}'s try/catch, not the caller's transaction.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void recordInNewTx(String action, String entityType, UUID entityId, String entityName) {
+    public void recordInNewTx(String action, String entityType, UUID entityId, String entityName,
+                              String oldValue, String newValue) {
         AuditLog entry = new AuditLog();
         entry.setAction(action);
         entry.setEntityType(entityType);
         entry.setEntityId(entityId);
         entry.setEntityName(entityName);
+        entry.setOldValue(oldValue);
+        entry.setNewValue(newValue);
         resolveActor(entry);
         RequestContext.current().ifPresent(meta -> {
             entry.setIpAddress(meta.clientIp());
             entry.setTraceId(meta.traceId());
         });
         auditLogRepository.save(entry);
+    }
+
+    /**
+     * Faz 2b: deterministic JSON array of names for the {@code old_value}/{@code new_value}
+     * audit columns (sorted, escaped). Dependency-free (names are simple role/permission/
+     * group strings); callers pass the before/after name collections so the audit record
+     * shows the exact privilege delta, not just the action key.
+     */
+    public static String namesJson(java.util.Collection<String> names) {
+        if (names == null) {
+            return null;
+        }
+        java.util.TreeSet<String> sorted = new java.util.TreeSet<>(names);
+        StringBuilder sb = new StringBuilder("[");
+        boolean first = true;
+        for (String name : sorted) {
+            if (name == null) {
+                continue;
+            }
+            if (!first) {
+                sb.append(',');
+            }
+            first = false;
+            sb.append('"').append(name.replace("\\", "\\\\").replace("\"", "\\\"")).append('"');
+        }
+        return sb.append(']').toString();
     }
 
     private void resolveActor(AuditLog entry) {

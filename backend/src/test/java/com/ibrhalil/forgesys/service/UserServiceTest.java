@@ -12,7 +12,7 @@ import com.ibrhalil.forgesys.entity.UserProfile;
 import com.ibrhalil.forgesys.persistence.repository.GroupRepository;
 import com.ibrhalil.forgesys.persistence.repository.RoleRepository;
 import com.ibrhalil.forgesys.persistence.repository.UserRepository;
-import com.ibrhalil.forgesys.security.refresh.RefreshTokenStore;
+import com.ibrhalil.forgesys.security.SessionRevocationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,6 +25,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -42,13 +43,13 @@ class UserServiceTest {
     @Mock
     private AuditService auditService;
     @Mock
-    private RefreshTokenStore refreshTokenStore;
+    private SessionRevocationService sessionRevocationService;
 
     private UserService userService;
 
     @BeforeEach
     void setUp() {
-        userService = new UserService(userRepository, roleRepository, groupRepository, passwordEncoder, auditService, refreshTokenStore);
+        userService = new UserService(userRepository, roleRepository, groupRepository, passwordEncoder, auditService, sessionRevocationService);
     }
 
     @Test
@@ -96,7 +97,7 @@ class UserServiceTest {
 
         userService.setRoles(id, new AssignRolesRequest(List.of()));
 
-        verify(auditService).record("user_roles_updated", "User", id, "user@example.com");
+        verify(auditService).recordDelta(eq("user_roles_updated"), eq("User"), eq(id), eq("user@example.com"), any(), any());
     }
 
     @Test
@@ -108,7 +109,7 @@ class UserServiceTest {
 
         userService.setGroups(id, new AssignGroupsRequest(List.of()));
 
-        verify(auditService).record("user_groups_updated", "User", id, "user@example.com");
+        verify(auditService).recordDelta(eq("user_groups_updated"), eq("User"), eq(id), eq("user@example.com"), any(), any());
     }
 
     @Test
@@ -135,6 +136,57 @@ class UserServiceTest {
         userService.changePassword(id, new PasswordChangeRequest("current", "newpass123"));
 
         verify(auditService).record("user_password_changed", "User", id, "user@example.com");
+    }
+
+    @Test
+    void setRolesRevokesSessions() {
+        UUID id = UUID.randomUUID();
+        User user = userFixture(id, "user@example.com", "user");
+        when(userRepository.findById(id)).thenReturn(Optional.of(user));
+        when(userRepository.save(any(User.class))).thenReturn(user);
+
+        userService.setRoles(id, new AssignRolesRequest(List.of()));
+
+        // Faz 1: a role-set change kills the user's outstanding sessions immediately.
+        verify(sessionRevocationService).revokeUser(id);
+    }
+
+    @Test
+    void setGroupsRevokesSessions() {
+        UUID id = UUID.randomUUID();
+        User user = userFixture(id, "user@example.com", "user");
+        when(userRepository.findById(id)).thenReturn(Optional.of(user));
+        when(userRepository.save(any(User.class))).thenReturn(user);
+
+        userService.setGroups(id, new AssignGroupsRequest(List.of()));
+
+        verify(sessionRevocationService).revokeUser(id);
+    }
+
+    @Test
+    void changePasswordRevokesSessions() {
+        UUID id = UUID.randomUUID();
+        User user = userFixture(id, "user@example.com", "user");
+        user.setPassword("$2a$12$oldhash");
+        when(userRepository.findById(id)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("current", "$2a$12$oldhash")).thenReturn(true);
+        when(passwordEncoder.encode("newpass123")).thenReturn("$2a$12$newhash");
+
+        userService.changePassword(id, new PasswordChangeRequest("current", "newpass123"));
+
+        verify(sessionRevocationService).revokeUser(id);
+    }
+
+    @Test
+    void resetPasswordRevokesSessions() {
+        UUID id = UUID.randomUUID();
+        User user = userFixture(id, "user@example.com", "user");
+        when(userRepository.findById(id)).thenReturn(Optional.of(user));
+        when(passwordEncoder.encode("newpass123")).thenReturn("$2a$12$newhash");
+
+        userService.resetPassword(id, new AdminPasswordResetRequest("newpass123"));
+
+        verify(sessionRevocationService).revokeUser(id);
     }
 
     private User userFixture(UUID id, String email, String username) {

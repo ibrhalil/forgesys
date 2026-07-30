@@ -15,22 +15,28 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
 /**
- * Redis-backed {@link RefreshTokenStore} (dev/prod, K-34). Token records are Redis
- * hashes keyed by {@code refresh:tok:<sha256>} (value carries state/userId/email/tenant);
- * a per-user index set {@code refresh:idx:<tenant>:<userId>} backs
- * {@link #revokeAllForUser(UUID, String)}. TTL = refresh-token lifetime.
+ * Redis-backed {@link RefreshTokenStore} (dev/prod, K-34 + K-28). Token records are Redis
+ * hashes keyed by {@code refresh:tok:<sha256>} (value carries state/userId/email/tenant
+ * plus the K-28 session metadata: sessionId/ipAddress/userAgent/loginAt/lastSeen); a
+ * per-user index set {@code refresh:idx:<tenant>:<userId>} backs
+ * {@link #revokeAllForUser(UUID, String)} and {@link #listSessions(UUID, String)}.
+ * TTL = refresh-token lifetime.
  *
  * <p>Rotation is an atomic Lua conditional: only an {@code ACTIVE} token flips to
  * {@code ROTATED} and returns its metadata; a {@code ROTATED} token reports reuse.
  * This closes the read-modify-write race two concurrent refreshes would otherwise open.
+ * The stable {@code sessionId} and original device metadata are preserved across
+ * rotation; only {@code lastSeen} advances.
  */
 @Component
 @Profile("!test")
@@ -45,7 +51,9 @@ public class RedisRefreshTokenStore implements RefreshTokenStore {
 
     /**
      * Atomic rotate. Returns a flat list whose first element is a status
-     * ({@code OK}/{@code REUSE}/{@code NIL}); {@code OK} is followed by userId/email/tenant.
+     * ({@code OK}/{@code REUSE}/{@code NIL}); {@code OK} is followed by
+     * userId/email/tenant/sessionId/ipAddress/userAgent/loginAt so the caller can write
+     * the rotated record preserving the original device metadata.
      */
     private static final RedisScript<List> ROTATE = new DefaultRedisScript<>("""
             if redis.call('EXISTS', KEYS[1]) == 0 then return {'NIL'} end
@@ -54,8 +62,8 @@ public class RedisRefreshTokenStore implements RefreshTokenStore {
               return {'REUSE', r[1], r[2]}
             end
             redis.call('HSET', KEYS[1], 'state', 'ROTATED', 'rotatedTo', ARGV[1])
-            local v = redis.call('HMGET', KEYS[1], 'userId', 'email', 'tenant', 'issuedAt')
-            return {'OK', v[1], v[2], v[3], v[4]}
+            local v = redis.call('HMGET', KEYS[1], 'userId', 'email', 'tenant', 'sessionId', 'ipAddress', 'userAgent', 'loginAt')
+            return {'OK', v[1], v[2], v[3], v[4], v[5], v[6], v[7]}
             """, List.class);
 
     private final StringRedisTemplate redis;
@@ -68,13 +76,15 @@ public class RedisRefreshTokenStore implements RefreshTokenStore {
     }
 
     @Override
-    public IssuedRefresh issue(UUID userId, String email, String tenant) {
+    public IssuedRefresh issue(UUID userId, String email, String tenant, String ipAddress, String userAgent) {
         String raw = generateToken();
         String hash = sha256Hex(raw);
-        writeActive(hash, userId, email, tenant);
+        OffsetDateTime now = OffsetDateTime.now();
+        UUID sessionId = UUID.randomUUID();
+        writeActive(hash, userId, email, tenant, sessionId, ipAddress, userAgent, now, now);
         indexAdd(tenant, userId, hash);
         log.debug("Issued refresh token for user {} tenant {}", userId, tenant);
-        return new IssuedRefresh(raw, new RefreshSession(userId, email, tenant, OffsetDateTime.now()));
+        return new IssuedRefresh(raw, new RefreshSession(userId, email, tenant, now));
     }
 
     @Override
@@ -96,14 +106,19 @@ public class RedisRefreshTokenStore implements RefreshTokenStore {
                 UUID userId = parseUserId(res, 1);
                 String email = string(res, 2);
                 String tenant = string(res, 3);
+                UUID sessionId = parseUserId(res, 4);
+                String ipAddress = string(res, 5);
+                String userAgent = string(res, 6);
+                OffsetDateTime loginAt = parseOffsetDateTime(res, 7);
                 if (userId == null) {
                     yield new RotationResult.Unknown();
                 }
-                writeActive(newHash, userId, email, tenant);
+                OffsetDateTime now = OffsetDateTime.now();
+                writeActive(newHash, userId, email, tenant, sessionId, ipAddress, userAgent, loginAt, now);
                 indexAdd(tenant, userId, newHash);
                 log.debug("Rotated refresh token for user {} tenant {}", userId, tenant);
                 yield new RotationResult.Rotated(new IssuedRefresh(newRaw,
-                        new RefreshSession(userId, email, tenant, OffsetDateTime.now())));
+                        new RefreshSession(userId, email, tenant, now)));
             }
             case "REUSE" -> {
                 UUID userId = parseUserId(res, 1);
@@ -151,17 +166,100 @@ public class RedisRefreshTokenStore implements RefreshTokenStore {
         log.debug("Revoked all refresh tokens for user {} tenant {}", userId, tenant);
     }
 
+    @Override
+    public List<ActiveSession> listSessions(UUID userId, String tenant) {
+        Set<String> hashes = redis.opsForSet().members(indexKey(tenant, userId));
+        if (hashes == null) {
+            return List.of();
+        }
+        List<ActiveSession> sessions = new ArrayList<>();
+        for (String h : hashes) {
+            Map<Object, Object> record = redis.opsForHash().entries(tokenKey(h));
+            if (record.isEmpty() || !STATE_ACTIVE.equals(record.get("state"))) {
+                continue;
+            }
+            ActiveSession session = toActiveSession(record);
+            if (session != null) {
+                sessions.add(session);
+            }
+        }
+        // Newest activity first.
+        sessions.sort((a, b) -> {
+            int c = b.lastSeen().compareTo(a.lastSeen());
+            return c != 0 ? c : b.loginAt().compareTo(a.loginAt());
+        });
+        return sessions;
+    }
+
+    @Override
+    public boolean revokeSession(UUID userId, String tenant, UUID sessionId) {
+        String idx = indexKey(tenant, userId);
+        Set<String> hashes = redis.opsForSet().members(idx);
+        if (hashes == null) {
+            return false;
+        }
+        for (String h : hashes) {
+            String key = tokenKey(h);
+            Map<Object, Object> record = redis.opsForHash().entries(key);
+            if (record.isEmpty() || !STATE_ACTIVE.equals(record.get("state"))) {
+                continue;
+            }
+            if (sessionId.equals(parseUserId(record.get("sessionId")))) {
+                redis.delete(key);
+                redis.opsForSet().remove(idx, h);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Override
+    public Optional<ActiveSession> activeSessionFor(String presentedToken) {
+        if (presentedToken == null || presentedToken.isBlank()) {
+            return Optional.empty();
+        }
+        String hash = sha256Hex(presentedToken);
+        Map<Object, Object> record = redis.opsForHash().entries(tokenKey(hash));
+        if (record.isEmpty() || !STATE_ACTIVE.equals(record.get("state"))) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(toActiveSession(record));
+    }
+
     // --- helpers --------------------------------------------------------
 
-    private void writeActive(String hash, UUID userId, String email, String tenant) {
+    private void writeActive(String hash, UUID userId, String email, String tenant,
+                             UUID sessionId, String ipAddress, String userAgent,
+                             OffsetDateTime loginAt, OffsetDateTime lastSeen) {
         String key = tokenKey(hash);
         redis.opsForHash().putAll(key, Map.of(
                 "state", STATE_ACTIVE,
                 "userId", userId.toString(),
                 "email", email == null ? "" : email,
                 "tenant", tenant == null ? "" : tenant,
-                "issuedAt", OffsetDateTime.now().toString()));
+                "sessionId", sessionId.toString(),
+                "ipAddress", ipAddress == null ? "" : ipAddress,
+                "userAgent", userAgent == null ? "" : userAgent,
+                "loginAt", (loginAt == null ? OffsetDateTime.now() : loginAt).toString(),
+                "lastSeen", (lastSeen == null ? OffsetDateTime.now() : lastSeen).toString()));
         redis.expire(key, Duration.ofSeconds(ttlSeconds));
+    }
+
+    private ActiveSession toActiveSession(Map<Object, Object> record) {
+        UUID userId = parseUserId(record.get("userId"));
+        UUID sessionId = parseUserId(record.get("sessionId"));
+        if (userId == null || sessionId == null) {
+            return null;
+        }
+        return new ActiveSession(
+                sessionId,
+                userId,
+                string(record.get("email")),
+                string(record.get("tenant")),
+                string(record.get("ipAddress")),
+                string(record.get("userAgent")),
+                parseOffsetDateTime(record.get("loginAt")),
+                parseOffsetDateTime(record.get("lastSeen")));
     }
 
     private void indexAdd(String tenant, UUID userId, String hash) {
@@ -211,11 +309,30 @@ public class RedisRefreshTokenStore implements RefreshTokenStore {
         return parseUserId(res.get(idx));
     }
 
+    private static OffsetDateTime parseOffsetDateTime(Object raw) {
+        if (raw == null) {
+            return null;
+        }
+        try {
+            return OffsetDateTime.parse(raw.toString());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static OffsetDateTime parseOffsetDateTime(List<String> res, int idx) {
+        if (idx >= res.size()) {
+            return null;
+        }
+        return parseOffsetDateTime(res.get(idx));
+    }
+
     private static String string(List<String> res, int idx) {
         return idx < res.size() ? res.get(idx) : null;
     }
 
     private static String string(Object raw) {
-        return raw == null ? null : raw.toString();
+        String value = raw == null ? null : raw.toString();
+        return (value == null || value.isEmpty()) ? null : value;
     }
 }
