@@ -1,5 +1,8 @@
 spring:
   datasource:
+    # stringtype=unspecified is REQUIRED: t_audit_logs jsonb columns are mapped as
+    # String; without it Hibernate binds varchar and PG rejects the cast. The env
+    # value (see .env.example) must include ?stringtype=unspecified.
     url: ${SPRING_DATASOURCE_URL}
     username: ${SPRING_DATASOURCE_USERNAME}
     password: ${SPRING_DATASOURCE_PASSWORD}

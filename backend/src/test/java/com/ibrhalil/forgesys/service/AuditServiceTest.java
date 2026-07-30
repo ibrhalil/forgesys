@@ -13,6 +13,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 
@@ -32,6 +33,9 @@ class AuditServiceTest {
     @Mock
     private AuditLogRepository auditLogRepository;
 
+    @Mock
+    private ObjectProvider<AuditService> self;
+
     @InjectMocks
     private AuditService service;
 
@@ -44,6 +48,7 @@ class AuditServiceTest {
                 actorId, "admin@example.com", "pw", true, true, true, true, Set.of(), "tenant_test", null);
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(principal, null, Set.of()));
+        when(self.getObject()).thenReturn(service);
     }
 
     @AfterEach

@@ -1,6 +1,9 @@
 spring:
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/forgesys}
+    # stringtype=unspecified lets PG infer jsonb columns mapped as String
+    # (t_audit_logs.old_value/new_value/request_body); Hibernate binds them as
+    # varchar otherwise and PG rejects the implicit cast.
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/forgesys?stringtype=unspecified}
     username: ${SPRING_DATASOURCE_USERNAME:forgeadmin}
     password: ${SPRING_DATASOURCE_PASSWORD:forgepassword}
     driver-class-name: org.postgresql.Driver
