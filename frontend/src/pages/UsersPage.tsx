@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { User, Role, Group } from '../types';
 import { useUsers, useRoles, useGroups, useCreateUser, useUpdateUser, useDeleteUser, useSetUserRoles, useSetUserGroups, useResetPassword } from '../hooks/useRbac';
+import { useAuthStore } from '../store/authStore';
 import { ApiError } from '../lib/api';
 import { DataTable, type Column } from '../components/ui/DataTable';
 import { Modal } from '../components/ui/Modal';
@@ -16,6 +18,8 @@ export function UsersPage() {
   const [page, setPage] = useState(0);
   const { data, isLoading, isFetching } = useUsers({ page, size: PAGE_SIZE, sort: 'email' });
   const delUser = useDeleteUser();
+  const navigate = useNavigate();
+  const canManageSessions = useAuthStore((s) => s.hasAuthority('iam:user:write'));
 
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
@@ -100,6 +104,9 @@ export function UsersPage() {
             <Button size="sm" variant="ghost" onClick={() => setAssignRolesTo(u)}>Roles</Button>
             <Button size="sm" variant="ghost" onClick={() => setAssignGroupsTo(u)}>Groups</Button>
             <Button size="sm" variant="ghost" onClick={() => setResetPwdFor(u)}>Password</Button>
+            {canManageSessions && (
+              <Button size="sm" variant="ghost" onClick={() => navigate(`/admin/users/${u.id}/sessions`)}>Sessions</Button>
+            )}
             <Button size="sm" variant="danger" onClick={() => setDeleting(u)}>Delete</Button>
           </div>
         )}

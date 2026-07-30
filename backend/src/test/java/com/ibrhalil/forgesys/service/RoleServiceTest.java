@@ -5,6 +5,7 @@ import com.ibrhalil.forgesys.dto.RoleRequest;
 import com.ibrhalil.forgesys.entity.Role;
 import com.ibrhalil.forgesys.persistence.repository.PermissionRepository;
 import com.ibrhalil.forgesys.persistence.repository.RoleRepository;
+import com.ibrhalil.forgesys.security.SessionRevocationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -16,6 +17,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -28,12 +30,14 @@ class RoleServiceTest {
     private PermissionRepository permissionRepository;
     @Mock
     private AuditService auditService;
+    @Mock
+    private SessionRevocationService sessionRevocationService;
 
     private RoleService roleService;
 
     @BeforeEach
     void setUp() {
-        roleService = new RoleService(roleRepository, permissionRepository, auditService);
+        roleService = new RoleService(roleRepository, permissionRepository, auditService, sessionRevocationService);
     }
 
     @Test
@@ -79,7 +83,45 @@ class RoleServiceTest {
 
         roleService.setPermissions(id, new AssignPermissionsRequest(List.of()));
 
-        verify(auditService).record("role_permissions_updated", "Role", id, "Admin");
+        verify(auditService).recordDelta(eq("role_permissions_updated"), eq("Role"), eq(id), eq("Admin"), any(), any());
+    }
+
+    @Test
+    void setPermissionsRevokesHolders() {
+        UUID id = UUID.randomUUID();
+        Role role = roleFixture(id, "Admin");
+        when(roleRepository.findById(id)).thenReturn(Optional.of(role));
+        when(roleRepository.save(any(Role.class))).thenReturn(role);
+
+        roleService.setPermissions(id, new AssignPermissionsRequest(List.of()));
+
+        // Faz 1: a permission delta must drop sessions of every bearer immediately.
+        verify(sessionRevocationService).revokeRoleHolders(id);
+    }
+
+    @Test
+    void deleteRevokesHolders() {
+        UUID id = UUID.randomUUID();
+        when(roleRepository.existsById(id)).thenReturn(true);
+
+        roleService.delete(id);
+
+        // Revoked BEFORE the soft-delete (findUserIdsByRole filters deleted roles).
+        verify(sessionRevocationService).revokeRoleHolders(id);
+        verify(roleRepository).deleteById(id);
+    }
+
+    @Test
+    void updateDoesNotRevokeHolders() {
+        UUID id = UUID.randomUUID();
+        Role role = roleFixture(id, "Admin");
+        when(roleRepository.findById(id)).thenReturn(Optional.of(role));
+        when(roleRepository.save(any(Role.class))).thenReturn(role);
+
+        // A name/description change does not alter permissions — no revoke.
+        roleService.update(id, new RoleRequest("Admin", "desc"));
+
+        verify(sessionRevocationService, org.mockito.Mockito.never()).revokeRoleHolders(any());
     }
 
     private Role roleFixture(UUID id, String name) {

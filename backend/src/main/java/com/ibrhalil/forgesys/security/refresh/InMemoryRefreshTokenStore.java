@@ -8,17 +8,22 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.Comparator;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Test-profile {@link RefreshTokenStore} (Docker-free build, K-34). Mirrors the Redis
- * state machine (ACTIVE→ROTATED, reuse detection) in plain concurrent maps so the
- * default H2 test suite exercises refresh rotation/reuse without a Redis container.
+ * Test-profile {@link RefreshTokenStore} (Docker-free build, K-34 + K-28). Mirrors the
+ * Redis state machine (ACTIVE→ROTATED, reuse detection, per-user index) in plain
+ * concurrent maps so the default H2 test suite exercises refresh rotation/reuse and
+ * session listing/revoke without a Redis container.
  *
  * <p>TTL/expiry semantics are intentionally not enforced here — those are verified
  * against real Redis by the gated {@code RedisRefreshTokenIT}
@@ -28,7 +33,10 @@ import java.util.concurrent.ConcurrentHashMap;
 @Profile("test")
 public class InMemoryRefreshTokenStore implements RefreshTokenStore {
 
-    private record Entry(String state, UUID userId, String email, String tenant, String rotatedTo) {
+    private record Entry(
+            String state, UUID userId, String email, String tenant, String rotatedTo,
+            UUID sessionId, String ipAddress, String userAgent,
+            OffsetDateTime loginAt, OffsetDateTime lastSeen) {
     }
 
     private final Map<String, Entry> tokens = new ConcurrentHashMap<>();
@@ -36,12 +44,14 @@ public class InMemoryRefreshTokenStore implements RefreshTokenStore {
     private final SecureRandom random = new SecureRandom();
 
     @Override
-    public synchronized IssuedRefresh issue(UUID userId, String email, String tenant) {
+    public synchronized IssuedRefresh issue(UUID userId, String email, String tenant, String ipAddress, String userAgent) {
         String raw = generateToken();
         String hash = sha256Hex(raw);
-        tokens.put(hash, new Entry("ACTIVE", userId, email, tenant, null));
+        OffsetDateTime now = OffsetDateTime.now();
+        UUID sessionId = UUID.randomUUID();
+        tokens.put(hash, new Entry("ACTIVE", userId, email, tenant, null, sessionId, ipAddress, userAgent, now, now));
         index(tenant, userId).add(hash);
-        return new IssuedRefresh(raw, new RefreshSession(userId, email, tenant, OffsetDateTime.now()));
+        return new IssuedRefresh(raw, new RefreshSession(userId, email, tenant, now));
     }
 
     @Override
@@ -59,11 +69,15 @@ public class InMemoryRefreshTokenStore implements RefreshTokenStore {
         }
         String newRaw = generateToken();
         String newHash = sha256Hex(newRaw);
-        tokens.put(oldHash, new Entry("ROTATED", entry.userId, entry.email, entry.tenant, newHash));
-        tokens.put(newHash, new Entry("ACTIVE", entry.userId, entry.email, entry.tenant, null));
+        OffsetDateTime now = OffsetDateTime.now();
+        tokens.put(oldHash, new Entry("ROTATED", entry.userId, entry.email, entry.tenant, newHash,
+                entry.sessionId, entry.ipAddress, entry.userAgent, entry.loginAt, entry.lastSeen));
+        // Preserved sessionId + original device metadata; lastSeen advances.
+        tokens.put(newHash, new Entry("ACTIVE", entry.userId, entry.email, entry.tenant, null,
+                entry.sessionId, entry.ipAddress, entry.userAgent, entry.loginAt, now));
         index(entry.tenant, entry.userId).add(newHash);
         return new RotationResult.Rotated(new IssuedRefresh(newRaw,
-                new RefreshSession(entry.userId, entry.email, entry.tenant, OffsetDateTime.now())));
+                new RefreshSession(entry.userId, entry.email, entry.tenant, now)));
     }
 
     @Override
@@ -91,6 +105,58 @@ public class InMemoryRefreshTokenStore implements RefreshTokenStore {
                 tokens.remove(h);
             }
         }
+    }
+
+    @Override
+    public synchronized List<ActiveSession> listSessions(UUID userId, String tenant) {
+        Set<String> set = index.get(indexKey(tenant, userId));
+        if (set == null) {
+            return List.of();
+        }
+        List<ActiveSession> sessions = new ArrayList<>();
+        for (String h : set) {
+            Entry entry = tokens.get(h);
+            if (entry == null || !"ACTIVE".equals(entry.state)) {
+                continue;
+            }
+            sessions.add(new ActiveSession(entry.sessionId, entry.userId, entry.email, entry.tenant,
+                    entry.ipAddress, entry.userAgent, entry.loginAt, entry.lastSeen));
+        }
+        sessions.sort(Comparator.comparing(ActiveSession::lastSeen, Comparator.nullsLast(Comparator.reverseOrder())));
+        return sessions;
+    }
+
+    @Override
+    public synchronized boolean revokeSession(UUID userId, String tenant, UUID sessionId) {
+        Set<String> set = index.get(indexKey(tenant, userId));
+        if (set == null) {
+            return false;
+        }
+        for (String h : set) {
+            Entry entry = tokens.get(h);
+            if (entry == null || !"ACTIVE".equals(entry.state)) {
+                continue;
+            }
+            if (sessionId.equals(entry.sessionId)) {
+                tokens.remove(h);
+                set.remove(h);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Override
+    public synchronized Optional<ActiveSession> activeSessionFor(String presentedToken) {
+        if (presentedToken == null || presentedToken.isBlank()) {
+            return Optional.empty();
+        }
+        Entry entry = tokens.get(sha256Hex(presentedToken));
+        if (entry == null || !"ACTIVE".equals(entry.state)) {
+            return Optional.empty();
+        }
+        return Optional.of(new ActiveSession(entry.sessionId, entry.userId, entry.email, entry.tenant,
+                entry.ipAddress, entry.userAgent, entry.loginAt, entry.lastSeen));
     }
 
     private Set<String> index(String tenant, UUID userId) {

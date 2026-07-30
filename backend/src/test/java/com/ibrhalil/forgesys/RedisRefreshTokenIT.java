@@ -73,7 +73,7 @@ class RedisRefreshTokenIT {
     @Test
     void issueAndRotateProducesANewToken() {
         RedisRefreshTokenStore store = store();
-        IssuedRefresh first = store.issue(userId, "u@acme.com", TENANT);
+        IssuedRefresh first = store.issue(userId, "u@acme.com", TENANT, null, null);
 
         RotationResult result = store.rotate(first.token());
 
@@ -84,7 +84,7 @@ class RedisRefreshTokenIT {
     @Test
     void reusingAConsumedTokenSignalsReuse() {
         RedisRefreshTokenStore store = store();
-        IssuedRefresh first = store.issue(userId, "u2@acme.com", TENANT);
+        IssuedRefresh first = store.issue(userId, "u2@acme.com", TENANT, null, null);
         store.rotate(first.token());
 
         RotationResult result = store.rotate(first.token());
@@ -95,8 +95,8 @@ class RedisRefreshTokenIT {
     @Test
     void revokeAllForUserKillsOutstandingTokens() {
         RedisRefreshTokenStore store = store();
-        IssuedRefresh a = store.issue(userId, "u3@acme.com", TENANT);
-        IssuedRefresh b = store.issue(userId, "u3@acme.com", TENANT);
+        IssuedRefresh a = store.issue(userId, "u3@acme.com", TENANT, null, null);
+        IssuedRefresh b = store.issue(userId, "u3@acme.com", TENANT, null, null);
 
         store.revokeAllForUser(userId, TENANT);
 

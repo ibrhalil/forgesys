@@ -10,6 +10,7 @@ import com.ibrhalil.forgesys.exception.ErrorCode;
 import com.ibrhalil.forgesys.persistence.repository.UserRepository;
 import com.ibrhalil.forgesys.security.CustomUserDetails;
 import com.ibrhalil.forgesys.security.CustomUserDetailsService;
+import com.ibrhalil.forgesys.security.SessionRevocationService;
 import com.ibrhalil.forgesys.security.TokenBlacklistService;
 import com.ibrhalil.forgesys.security.jwt.JwtTokenProvider;
 import com.ibrhalil.forgesys.security.refresh.IssuedRefresh;
@@ -61,13 +62,16 @@ class AuthServiceTest {
     private CustomUserDetailsService userDetailsService;
     @Mock
     private TokenBlacklistService tokenBlacklistService;
+    @Mock
+    private SessionRevocationService sessionRevocationService;
 
     private AuthService authService;
 
     @BeforeEach
     void setUp() {
         authService = new AuthService(passwordEncoder, tokenProvider, userRepository,
-                loginHistoryService, refreshTokenStore, userDetailsService, tokenBlacklistService);
+                loginHistoryService, refreshTokenStore, userDetailsService, tokenBlacklistService,
+                sessionRevocationService);
         TenantContext.setCurrentTenant("tenant_test");
     }
 
@@ -85,7 +89,7 @@ class AuthServiceTest {
         when(passwordEncoder.upgradeEncoding(HASH)).thenReturn(false);
         when(tokenProvider.generateAccessToken(any(), any(), any(), any())).thenReturn("tok");
         when(tokenProvider.getAccessTokenTtlMinutes()).thenReturn(5L);
-        when(refreshTokenStore.issue(any(), any(), any())).thenReturn(
+        when(refreshTokenStore.issue(any(), any(), any(), any(), any())).thenReturn(
                 new IssuedRefresh("refresh", new RefreshSession(userId, EMAIL, "tenant_test", null)));
 
         LoginResponse response = authService.login(new LoginRequest(EMAIL, "secret"));
@@ -139,6 +143,25 @@ class AuthServiceTest {
         verify(userRepository).save(captor.capture());
         assertEquals(3, captor.getValue().getUserAccount().getFailedLoginAttempts());
         verify(loginHistoryService).record(userId, EMAIL, false, "auth_bad_credentials");
+    }
+
+    @Test
+    void loginLockoutStampsTokenInvalidBefore() {
+        // 4 prior failed attempts → the 5th wrong password locks the account.
+        UUID userId = UUID.randomUUID();
+        User user = userWithAccount(userId, null, 4);
+        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("wrong", HASH)).thenReturn(false);
+
+        assertThrows(AuthException.class, () -> authService.login(new LoginRequest(EMAIL, "wrong")));
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(captor.capture());
+        UserAccount saved = captor.getValue().getUserAccount();
+        assertEquals(5, saved.getFailedLoginAttempts());
+        org.junit.jupiter.api.Assertions.assertNotNull(saved.getLockedUntil(), "account locked");
+        org.junit.jupiter.api.Assertions.assertNotNull(saved.getTokenInvalidBefore(),
+                "Faz 1: lockout stamps tokenInvalidBefore so the locked account's access tokens die immediately");
     }
 
     @Test

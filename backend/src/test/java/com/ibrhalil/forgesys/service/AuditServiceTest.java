@@ -48,7 +48,7 @@ class AuditServiceTest {
                 actorId, "admin@example.com", "pw", true, true, true, true, Set.of(), "tenant_test", null);
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(principal, null, Set.of()));
-        when(self.getObject()).thenReturn(service);
+        org.mockito.Mockito.lenient().when(self.getObject()).thenReturn(service);
     }
 
     @AfterEach
@@ -107,5 +107,24 @@ class AuditServiceTest {
 
         assertDoesNotThrow(() -> service.record("user_deleted", "User", UUID.randomUUID(), null));
         verify(auditLogRepository).save(any(AuditLog.class));
+    }
+
+    @Test
+    void recordDeltaPersistsOldAndNewValue() {
+        service.recordDelta("user_roles_updated", "User", UUID.randomUUID(), "u@example.com",
+                "[\"Admin\"]", "[\"Editor\"]");
+
+        ArgumentCaptor<AuditLog> captor = ArgumentCaptor.forClass(AuditLog.class);
+        verify(auditLogRepository).save(captor.capture());
+        AuditLog saved = captor.getValue();
+        assertEquals("[\"Admin\"]", saved.getOldValue());
+        assertEquals("[\"Editor\"]", saved.getNewValue());
+    }
+
+    @Test
+    void namesJsonIsSortedUniqueAndEscaped() {
+        assertEquals("[\"b\",\"c\"]", AuditService.namesJson(java.util.List.of("c", "b", "c")));
+        assertEquals("[\"a\\\"b\"]", AuditService.namesJson(java.util.List.of("a\"b")));
+        assertNull(AuditService.namesJson(null));
     }
 }

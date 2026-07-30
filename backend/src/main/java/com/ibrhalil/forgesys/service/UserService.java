@@ -21,8 +21,7 @@ import com.ibrhalil.forgesys.exception.ResourceNotFoundException;
 import com.ibrhalil.forgesys.persistence.repository.GroupRepository;
 import com.ibrhalil.forgesys.persistence.repository.RoleRepository;
 import com.ibrhalil.forgesys.persistence.repository.UserRepository;
-import com.ibrhalil.forgesys.common.tenant.TenantContext;
-import com.ibrhalil.forgesys.security.refresh.RefreshTokenStore;
+import com.ibrhalil.forgesys.security.SessionRevocationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -30,7 +29,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.OffsetDateTime;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -46,7 +44,7 @@ public class UserService {
     private final GroupRepository groupRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuditService auditService;
-    private final RefreshTokenStore refreshTokenStore;
+    private final SessionRevocationService sessionRevocationService;
 
     @Transactional(readOnly = true)
     public Page<UserResponse> findAll(Pageable pageable) {
@@ -119,10 +117,18 @@ public class UserService {
     public UserResponse setRoles(UUID userId, AssignRolesRequest request) {
         User user = getUserOrThrow(userId);
         List<Role> roles = resolveRoles(request.roleIds());
+        Set<String> beforeNames = user.getRoles().stream().map(Role::getName).collect(java.util.stream.Collectors.toSet());
         user.getRoles().clear();
         user.getRoles().addAll(roles);
         User saved = userRepository.save(user);
-        auditService.record("user_roles_updated", "User", saved.getId(), saved.getEmail());
+        // Faz 1: a role-set change can drop permissions the user's outstanding tokens
+        // still carry — kill their sessions so the delta is enforced immediately, not at
+        // the next access-token TTL.
+        sessionRevocationService.revokeUser(saved.getId());
+        // Faz 2b: record the before/after role set so the audit answers "who granted/revoked which role to whom".
+        auditService.recordDelta("user_roles_updated", "User", saved.getId(), saved.getEmail(),
+                AuditService.namesJson(beforeNames),
+                AuditService.namesJson(roles.stream().map(Role::getName).collect(java.util.stream.Collectors.toSet())));
         return toResponse(saved);
     }
 
@@ -130,10 +136,17 @@ public class UserService {
     public UserResponse setGroups(UUID userId, AssignGroupsRequest request) {
         User user = getUserOrThrow(userId);
         List<Group> groups = resolveGroups(request.groupIds());
+        Set<String> beforeNames = user.getGroups().stream().map(Group::getName).collect(java.util.stream.Collectors.toSet());
         user.getGroups().clear();
         user.getGroups().addAll(groups);
         User saved = userRepository.save(user);
-        auditService.record("user_groups_updated", "User", saved.getId(), saved.getEmail());
+        // Faz 1: a group-set change can drop group-granted permissions the user's
+        // outstanding tokens still carry — kill their sessions immediately.
+        sessionRevocationService.revokeUser(saved.getId());
+        // Faz 2b: record the before/after group set.
+        auditService.recordDelta("user_groups_updated", "User", saved.getId(), saved.getEmail(),
+                AuditService.namesJson(beforeNames),
+                AuditService.namesJson(groups.stream().map(Group::getName).collect(java.util.stream.Collectors.toSet())));
         return toResponse(saved);
     }
 
@@ -210,22 +223,15 @@ public class UserService {
     }
 
     /**
-     * [RISK-21 + K-34] Stamps {@code tokenInvalidBefore = now()} (kills all outstanding
-     * access tokens) and revokes the user's refresh tokens (so a stolen refresh cannot
-     * mint a fresh access token whose {@code iat} would post-date
-     * {@code tokenInvalidBefore}). Invoked on password change/reset — multi-device, all
-     * sessions. Silent if the account row is absent.
+     * [RISK-21 + K-34 + Faz 1] Centralized session revoke for this user: delegates to
+     * {@link SessionRevocationService#revokeUser(UUID)}, which stamps
+     * {@code tokenInvalidBefore} (kills all outstanding access tokens) and drops the
+     * user's refresh tokens (so a stolen refresh cannot mint a fresh access token whose
+     * {@code iat} post-dates the revoke). Invoked on password change/reset and explicit
+     * token revoke — multi-device, all sessions.
      */
     private void invalidateTokens(User user) {
-        UserAccount account = user.getUserAccount();
-        if (account == null) {
-            // Defensive: a password write on an account-less user shouldn't happen
-            // (login requires an account), but we don't want to NPE here.
-            return;
-        }
-        account.setTokenInvalidBefore(OffsetDateTime.now());
-        TenantContext.getCurrentTenant().ifPresent(tenant ->
-                refreshTokenStore.revokeAllForUser(user.getId(), tenant));
+        sessionRevocationService.revokeUser(user.getId());
     }
 
     private List<Role> resolveRoles(List<UUID> roleIds) {
