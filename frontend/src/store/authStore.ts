@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { MeResponse } from '../types';
 import { authApi } from '../api/auth';
-import { ApiError } from '../lib/api';
+import { ApiError, setSessionExpiredHandler } from '../lib/api';
 
 interface AuthState {
   user: MeResponse | null;
@@ -13,6 +13,8 @@ interface AuthState {
   login: (email: string, password: string) => Promise<boolean>;
   fetchMe: () => Promise<void>;
   logout: () => Promise<void>;
+  /** Forced logout: the refresh token is gone/revoked (apiFetch signals this on a 401 it can't recover from). Clears auth so RequireAuth redirects to /login. */
+  sessionExpired: () => void;
   hasAuthority: (authority: string) => boolean;
   hasAnyAuthority: (...authorities: string[]) => boolean;
   clearError: () => void;
@@ -60,6 +62,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
+  sessionExpired: () => {
+    // isLoading is intentionally left as-is (false after bootstrap) so RequireAuth
+    // redirects to /login instead of hanging on the loading spinner.
+    set({ user: null, isAuthenticated: false });
+  },
+
   hasAuthority: (authority) => {
     const { user } = get();
     return user?.authorities?.includes(authority) ?? false;
@@ -73,3 +81,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   clearError: () => set({ error: null }),
 }));
+
+// Wire apiFetch's "session unrecoverable" signal to the store. Decoupled via the
+// setter so lib/api never imports this store (no circular dependency).
+setSessionExpiredHandler(() => useAuthStore.getState().sessionExpired());

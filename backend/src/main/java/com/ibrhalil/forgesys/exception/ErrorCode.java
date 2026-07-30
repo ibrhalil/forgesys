@@ -20,6 +20,7 @@ public enum ErrorCode {
     USER_PASSWORD_INCORRECT(HttpStatus.BAD_REQUEST, "Current password is incorrect"),
     ROLE_NAME_TAKEN(HttpStatus.BAD_REQUEST, "Role name is already in use"),
     GROUP_NAME_TAKEN(HttpStatus.BAD_REQUEST, "Group name is already in use"),
+    PROJECT_NAME_TAKEN(HttpStatus.BAD_REQUEST, "Project name is already in use"),
     COMPANY_SUBDOMAIN_TAKEN(HttpStatus.BAD_REQUEST, "Subdomain is already taken"),
     TENANT_NOT_FOUND(HttpStatus.BAD_REQUEST, "Tenant not found or inactive"),
     TENANT_TOKEN_INVALID(HttpStatus.BAD_REQUEST, "Invalid or unknown verification token"),

@@ -38,6 +38,11 @@ public final class PermissionCatalog {
     public static final String PLATFORM_COMPANY_READ = "platform:company:read";
     public static final String PLATFORM_COMPANY_WRITE = "platform:company:write";
 
+    // pm:* — project-management (the first product feature module, Faz 3 Stage 1).
+    public static final String PM_PROJECT_READ = "pm:project:read";
+    public static final String PM_PROJECT_WRITE = "pm:project:write";
+    public static final String PM_PROJECT_DELETE = "pm:project:delete";
+
     public record PermissionDefinition(String name, String description) {
     }
 
@@ -55,7 +60,10 @@ public final class PermissionCatalog {
             new PermissionDefinition(IAM_GROUP_DELETE, "Delete tenant groups"),
             new PermissionDefinition(IAM_AUDIT_READ, "Read tenant audit logs and login history"),
             new PermissionDefinition(PLATFORM_COMPANY_READ, "Read platform companies"),
-            new PermissionDefinition(PLATFORM_COMPANY_WRITE, "Update platform company status")
+            new PermissionDefinition(PLATFORM_COMPANY_WRITE, "Update platform company status"),
+            new PermissionDefinition(PM_PROJECT_READ, "Read tenant projects"),
+            new PermissionDefinition(PM_PROJECT_WRITE, "Create or update tenant projects"),
+            new PermissionDefinition(PM_PROJECT_DELETE, "Delete tenant projects")
     );
 
     private PermissionCatalog() {
