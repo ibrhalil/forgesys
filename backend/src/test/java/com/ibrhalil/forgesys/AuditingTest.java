@@ -63,7 +63,7 @@ class AuditingTest {
         UUID userId = UUID.randomUUID();
         Set<GrantedAuthority> noAuthorities = Set.of();
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
-                new CustomUserDetails(userId, "auditor@tenant.test", null, true, true, true, true, noAuthorities, null),
+                new CustomUserDetails(userId, "auditor@tenant.test", null, true, true, true, true, noAuthorities, null, null),
                 null, noAuthorities));
         try {
             Company company = new Company();

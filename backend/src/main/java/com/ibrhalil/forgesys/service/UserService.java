@@ -21,6 +21,8 @@ import com.ibrhalil.forgesys.exception.ResourceNotFoundException;
 import com.ibrhalil.forgesys.persistence.repository.GroupRepository;
 import com.ibrhalil.forgesys.persistence.repository.RoleRepository;
 import com.ibrhalil.forgesys.persistence.repository.UserRepository;
+import com.ibrhalil.forgesys.common.tenant.TenantContext;
+import com.ibrhalil.forgesys.security.refresh.RefreshTokenStore;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -44,6 +46,7 @@ public class UserService {
     private final GroupRepository groupRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuditService auditService;
+    private final RefreshTokenStore refreshTokenStore;
 
     @Transactional(readOnly = true)
     public Page<UserResponse> findAll(Pageable pageable) {
@@ -206,6 +209,13 @@ public class UserService {
         userRepository.save(user);
     }
 
+    /**
+     * [RISK-21 + K-34] Stamps {@code tokenInvalidBefore = now()} (kills all outstanding
+     * access tokens) and revokes the user's refresh tokens (so a stolen refresh cannot
+     * mint a fresh access token whose {@code iat} would post-date
+     * {@code tokenInvalidBefore}). Invoked on password change/reset — multi-device, all
+     * sessions. Silent if the account row is absent.
+     */
     private void invalidateTokens(User user) {
         UserAccount account = user.getUserAccount();
         if (account == null) {
@@ -214,6 +224,8 @@ public class UserService {
             return;
         }
         account.setTokenInvalidBefore(OffsetDateTime.now());
+        TenantContext.getCurrentTenant().ifPresent(tenant ->
+                refreshTokenStore.revokeAllForUser(user.getId(), tenant));
     }
 
     private List<Role> resolveRoles(List<UUID> roleIds) {

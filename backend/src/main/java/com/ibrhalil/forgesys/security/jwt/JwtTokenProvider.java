@@ -11,13 +11,15 @@ import org.springframework.stereotype.Component;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.UUID;
 
 /**
- * Mints RS256 access tokens. Claims: {@code sub} (userId), {@code email},
- * {@code tenant} (schema), {@code authorities} (resolved permission strings),
- * plus standard {@code iss}/{@code iat}/{@code exp}. The authorities are embedded
- * so the auth filter need not hit the DB on every request; permission changes take
- * effect on the next token issue (login/refresh).
+ * Mints RS256 access tokens. Claims: {@code sub} (userId), {@code jti} (unique token
+ * id — granular blacklist target, K-34), {@code email}, {@code tenant} (schema),
+ * {@code authorities} (resolved permission strings), plus standard {@code iss}/
+ * {@code iat}/{@code exp}. The authorities are embedded so the auth filter need not
+ * hit the DB on every request; permission changes take effect on the next token issue
+ * (login/refresh).
  */
 @Component
 public class JwtTokenProvider {
@@ -28,6 +30,8 @@ public class JwtTokenProvider {
     public static final String CLAIM_AUTHORITIES = "authorities";
     public static final String CLAIM_TENANT = "tenant";
     public static final String CLAIM_EMAIL = "email";
+    /** JWT id claim — unique per token, the granular-blacklist key (K-34). */
+    public static final String CLAIM_JTI = "jti";
 
     private final JwtEncoder jwtEncoder;
     private final long accessTokenTtlMinutes;
@@ -42,6 +46,7 @@ public class JwtTokenProvider {
         Instant now = Instant.now();
         JwtClaimsSet.Builder builder = JwtClaimsSet.builder()
                 .issuer(ISSUER)
+                .id(UUID.randomUUID().toString())
                 .audience(List.of(AUDIENCE))
                 .issuedAt(now)
                 .expiresAt(now.plus(accessTokenTtlMinutes, ChronoUnit.MINUTES))

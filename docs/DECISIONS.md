@@ -53,6 +53,27 @@ Her kayıt:
   - K-33 uygulandığında `infra/nginx/` altına: `nginx.conf` (gzip, rate-limit zone, real_ip), `snippets/proxy-common.conf`, `snippets/security-headers.conf`, `conf.d/_template.conf` gelecek.
   - `%90` ölçütü: Faz 2 (audit/log dahil) + Faz 3 (modüler platform + app builder backend) + Faz 4 (frontend) ana akışları; Faz 5 (TLS/CI/CD/observability) + Faz 6 (billing) hâlâ bekliyor olabilir.
 
+### K-34
+**Redis Refresh Token + Rotation + Reuse Detection + Per-Session Logout — UYGULANDI**
+- **Bağlam:** Epic 2.5/2.6. Access token kısa ömürlü (15dk) ve stateless; kullanıcı sık re-login yapmak zorunda. Uzun ömürlü refresh token + rotation gerekiyor. Mevcut `tokenInvalidBefore` user-scoped (tüm cihazlar) — tek cihaz logout (per-session) mümkün değil. Dead `RefreshToken` entity/tablosu (`t_refresh_tokens`, tenant şeması, plaintext) Epic 2.5 için bırakılmıştı. Redis altyapısı (starter + config + container) hazır ama hiç bean yoktu.
+- **Karar:** Opaque refresh token + Redis-first depolama + rotation + reuse detection:
+  1. **Format — opaque + hash-at-rest.** Refresh token 32-byte URL-safe random; Redis'e **SHA-256 hash** olarak yazılır (RISK-30 felsefesi — store/backup leak replay edilemez). JWT değil (revocability). `t_refresh_tokens` tablosu **kullanılmaz** (dead kalır, churn önlenir); Flyway migration YOK.
+  2. **Depolama — Redis hash + per-user index.** Token kaydı `refresh:tok:{hash}` (Redis hash: state/userId/email/tenant/issuedAt), TTL = refresh ömrü. Per-user index set `refresh:idx:{tenant}:{userId}` → `revokeAllForUser` için.
+  3. **Rotation + reuse detection — atomik Lua.** `rotate` sadece `ACTIVE` token'ı `ROTATED`'e çevirip yeni token üretir (atomic conditional Lua script — concurrent race kapalı). Zaten `ROTATED` (consume edilmiş) token tekrar sunulursa → **REUSE**: tüm kullanıcı refresh token'ları revoke + `tokenInvalidBefore` set (access token'lar da ölür) → `auth_refresh_token_reuse` (401). Bilinen UX sınırı: aynı token'la eşzamanlı iki refresh (grace window yok) reuse tetikler — client refresh'i serialize etmeli (standart SPA pratiği). Grace window erteli.
+  4. **Transport — ayrı cookie.** `sf_refresh_token` httpOnly cookie, `Path=/api/v1/auth` (sadece auth endpoint'lerine gönderilir), Secure (prod), SameSite=Lax. Body fallback (API client'lar, `RefreshRequest`).
+  5. **Endpoint — `POST /api/v1/auth/refresh`** (permitAll; tenant TenantFilter'dan gelir, yeni access token aynı tenanta bound — RISK-19). Authorities DB'den **re-resolve** edilir (taze yetkiler + locked/disabled re-check; locked hesap refresh edemez — RISK-22 iyileştirmesi).
+  6. **Per-session logout — jti blacklist.** Access token'a `jti` (JWT ID) claim eklendi. Logout: refresh consume + mevcut access `jti` Redis blacklist (`bl:jti:{jti}`, TTL = access ömrü). `JwtAuthenticationFilter` blacklist'i de kontrol eder → granular tek-token revoke. **Logout artık `tokenInvalidBefore` set ETMEZ** (o password change/reset/reuse için nuclear option). Diğer cihazlar çalışmaya devam eder.
+  7. **Soyutlama + test stratejisi.** `RefreshTokenStore` + `TokenBlacklistService` interface'leri, `@Profile("!test")` Redis impl + `@Profile("test")` InMemory impl (`InMemoryVerificationSender` pattern'i). Default H2 build Docker'sız yeşil; gerçek Redis doğrulaması gated `RedisRefreshTokenIT` (`-Dforgesys.redis.it=true`, `GenericContainer("redis:7.4-alpine")` + `@DynamicPropertySource` — yeni dependency YOK, testcontainers-core zaten var).
+- **Durum:** UYGULANDI (2026-07-30). 206 test yeşil (H2, 2 gated skip). PermissionCacheService (Epic 2.6'nın 3. parçası) **ertelendi** — yetkiler JWT'ye gömülü, cache sadece login/refresh mint'i optimize eder (düşük değer). K-28 session management (aktif session listesi, remote revoke endpoint'leri) bu altyapının üstüne gelir.
+- **Etki:**
+  - **`RedisConfig` yok:** Store'lar auto-config `StringRedisTemplate` kullanır (Redis hash + Lua). `GenericJackson2JsonRedisSerializer` (Jackson 2) projedeki Jackson 3 ile uyumsuz (NoClassDefFoundError) — JSON serializer gereksizdi (string/hash depolama yeterli). PermissionCacheService gelirse Jackson 3 uyumlu bir serializer ile yeniden değerlendirilir.
+  - **Per-request maliyet:** +1 Redis lookup (jti blacklist) mevcut DB lookup'a (tokenInvalidBefore) eklendi. Redis in-memory → tolere edilebilir. `tokenInvalidBefore`'ı Redis cache'lemek erteli.
+  - **Password change/reset artık refresh'leri de revoke eder** (`UserService.invalidateTokens` → `revokeAllForUser`) — çalınan refresh, şifre değişince yeni access mint edemez (yeni access'in iat > tokenInvalidBefore olsa bile).
+  - **Logout davranış değişti:** per-session (tek cihaz). Eski user-scoped `tokenInvalidBefore` logout artık password change/reset/reuse'e özel.
+  - **RISK-21 genişletildi:** granular tek-token (jti blacklist) + user-scoped (tokenInvalidBefore) iki katmanlı revoke.
+  - **K-28 (session management) unblocked:** Redis session altyapısı hazır; `/users/me/sessions` endpoint'leri + `t_sessions_log` sonraki adım.
+  - **Config:** `jwt.refresh-token-ttl-days` (default 7), `jwt.refresh-cookie-name` (`sf_refresh_token`), `jwt.refresh-cookie-secure` (prod `true`), `jwt.refresh-cookie-path` (`/api/v1/auth`) → `JwtCookieProperties` record'una eklendi. Yeni `ErrorCode`: `AUTH_REFRESH_TOKEN_INVALID` / `AUTH_REFRESH_TOKEN_REUSE`.
+
 ### K-19
 **3 Katmanlı Log**
 - **Bağlam:** Kurumsal bir platform için observability ve denetim gerekiyor. Farklı amaçlar için farklı log türleri.

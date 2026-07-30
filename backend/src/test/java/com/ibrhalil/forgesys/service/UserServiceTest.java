@@ -12,6 +12,7 @@ import com.ibrhalil.forgesys.entity.UserProfile;
 import com.ibrhalil.forgesys.persistence.repository.GroupRepository;
 import com.ibrhalil.forgesys.persistence.repository.RoleRepository;
 import com.ibrhalil.forgesys.persistence.repository.UserRepository;
+import com.ibrhalil.forgesys.security.refresh.RefreshTokenStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,12 +41,14 @@ class UserServiceTest {
     private PasswordEncoder passwordEncoder;
     @Mock
     private AuditService auditService;
+    @Mock
+    private RefreshTokenStore refreshTokenStore;
 
     private UserService userService;
 
     @BeforeEach
     void setUp() {
-        userService = new UserService(userRepository, roleRepository, groupRepository, passwordEncoder, auditService);
+        userService = new UserService(userRepository, roleRepository, groupRepository, passwordEncoder, auditService, refreshTokenStore);
     }
 
     @Test

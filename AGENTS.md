@@ -125,7 +125,7 @@ Kapsamlı 4-katmanlı review (service/security/persistence/test) + Spring Boot 4
 - [x] `resolveRoles`/`resolveGroups` duplicate-id `HashSet` dedupe.
 - [x] `@ToString` token/hash/userProfile/userAccount exclude (`TenantVerificationToken`, `RefreshToken`, `User`).
 - [ ] `version BIGINT` → `NOT NULL DEFAULT 0` (migration). *(erteledi: tenant migration)*
-- [ ] `RefreshToken` ölü kod + `t_refresh_tokens` tablosu kaldır (Epic 2.5 gelince ekle). *(bırakıldı: Epic 2.5 tekrar ekleyecek, churn önlenir)*
+- [ ] `RefreshToken` ölü kod + `t_refresh_tokens` tablosu kaldır. *(Epic 2.5/K-34 Redis-first refresh ile geldi — tablo KULLANILMIYOR, kalıcı vestigial. Silinmesi tenant migration (RISK-16) gerektirir; düşük öncelik.)*
 - [x] Subdomain pattern constant (DTO + service DRY — `SubdomainRules`).
 - [ ] Password complexity policy (`@Pattern` mixed case/digit/symbol). *(ürün-politikası kararı; tüm test/bootstrap şifrelerini değiştirir)*
 - [x] `Assign*Request` `@Size(max=...)` bound.

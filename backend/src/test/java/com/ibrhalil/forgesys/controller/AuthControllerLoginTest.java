@@ -50,7 +50,8 @@ class AuthControllerLoginTest {
 
     private static final String EMAIL = "admin@acme.com";
     private static final String PASSWORD = "password123";
-    private static final String COOKIE_NAME = "sf_access_token";
+    private static final String ACCESS_COOKIE = "sf_access_token";
+    private static final String REFRESH_COOKIE = "sf_refresh_token";
 
     @Autowired
     private WebApplicationContext context;
@@ -107,9 +108,12 @@ class AuthControllerLoginTest {
                 .andExpect(jsonPath("$.email").value(EMAIL))
                 .andExpect(jsonPath("$.authorities[0]").value("tasks:task:read"))
                 .andExpect(result -> {
-                    String cookie = result.getResponse().getHeader(HttpHeaders.SET_COOKIE);
-                    if (cookie == null || !cookie.startsWith(COOKIE_NAME + "=")) {
+                    java.util.Collection<String> cookies = result.getResponse().getHeaders(HttpHeaders.SET_COOKIE);
+                    if (setCookieFor(cookies, ACCESS_COOKIE) == null) {
                         throw new AssertionError("missing access-token cookie");
+                    }
+                    if (setCookieFor(cookies, REFRESH_COOKIE) == null) {
+                        throw new AssertionError("missing refresh-token cookie");
                     }
                 });
     }
@@ -138,7 +142,7 @@ class AuthControllerLoginTest {
     void meWithAccessTokenCookieReturnsCurrentUser() throws Exception {
         String token = loginAndGetToken();
 
-        mockMvc.perform(get("/api/v1/auth/me").cookie(new Cookie(COOKIE_NAME, token)))
+        mockMvc.perform(get("/api/v1/auth/me").cookie(new Cookie(ACCESS_COOKIE, token)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.email").value(EMAIL))
                 .andExpect(jsonPath("$.authorities[0]").value("tasks:task:read"));
@@ -162,14 +166,17 @@ class AuthControllerLoginTest {
     void logoutExpiresAccessTokenCookie() throws Exception {
         String token = loginAndGetToken();
 
-        mockMvc.perform(post("/api/v1/auth/logout").cookie(new Cookie(COOKIE_NAME, token)))
+        mockMvc.perform(post("/api/v1/auth/logout").cookie(new Cookie(ACCESS_COOKIE, token)))
                 .andExpect(status().isNoContent())
                 .andExpect(result -> {
-                    String cookie = result.getResponse().getHeader(HttpHeaders.SET_COOKIE);
-                    if (cookie == null
-                            || !cookie.startsWith(COOKIE_NAME + "=")
-                            || !cookie.contains("Max-Age=0")) {
+                    java.util.Collection<String> cookies = result.getResponse().getHeaders(HttpHeaders.SET_COOKIE);
+                    String accessExpired = setCookieFor(cookies, ACCESS_COOKIE);
+                    String refreshExpired = setCookieFor(cookies, REFRESH_COOKIE);
+                    if (accessExpired == null || !accessExpired.contains("Max-Age=0")) {
                         throw new AssertionError("logout did not expire the access-token cookie");
+                    }
+                    if (refreshExpired == null || !refreshExpired.contains("Max-Age=0")) {
+                        throw new AssertionError("logout did not expire the refresh-token cookie");
                     }
                 });
     }
@@ -271,12 +278,21 @@ class AuthControllerLoginTest {
     }
 
     private String loginAndGetToken() throws Exception {
-        String setCookie = mockMvc.perform(post("/api/v1/auth/login")
+        java.util.Collection<String> setCookies = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"email":"admin@acme.com","password":"password123"}"""))
-                .andReturn().getResponse().getHeader(HttpHeaders.SET_COOKIE);
+                .andReturn().getResponse().getHeaders(HttpHeaders.SET_COOKIE);
         // Set-Cookie value: sf_access_token=<jwt>; Path=/; ...
+        String setCookie = setCookieFor(setCookies, ACCESS_COOKIE);
         return setCookie.substring(setCookie.indexOf('=') + 1, setCookie.indexOf(';'));
+    }
+
+    /** Picks the Set-Cookie header line whose value starts with {@code <cookieName>=}. */
+    private static String setCookieFor(java.util.Collection<String> setCookies, String cookieName) {
+        return setCookies.stream()
+                .filter(c -> c.startsWith(cookieName + "="))
+                .findFirst()
+                .orElse(null);
     }
 }

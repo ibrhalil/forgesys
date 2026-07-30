@@ -10,7 +10,7 @@
 - `[BLOCKED]` — engelli (notu ile)
 - `CANCEL` — iptal (gerekçe ile)
 
-## Mevcut Durum (Faz 2.9 backend + K-21 + RISK-21 token revoke — DONE)
+## Mevcut Durum (Faz 2 backend — auth/RBAC/audit/refresh tamamlandı — DONE)
 
 Backend altyapısı + auth/RBAC/platform management + iki-fazlı tenant signup tamamlandı:
 
@@ -142,23 +142,25 @@ Kod analizi sonucu keşfedilen P0 düzeltmeler. User CRUD / log'dan ÖNCE çöz�
 - [x] SecurityConfig'e filter hook (`.oauth2ResourceServer()` ÇAĞIRILMAZ — RISK-14)
 - [x] Filter integration test (cookie -> /me auth, yok -> 401) — `AuthControllerLoginTest` kapsar
 
-### Epic 2.6 — Redis
-`RedisConfig`: RedisTemplate + serializer + connection test. `TokenBlacklistService` + unit test. `PermissionCacheService` (TTL 10dk) + unit test.
+### Epic 2.6 — Redis (kısmen DONE — refresh/blacklist; PermissionCache erteli)
+- [x] `TokenBlacklistService` (granular access-token `jti` revoke) + Redis/InMemory profilli impl'ler + unit/IT test. **RedisConfig YOK** — store'lar auto-config `StringRedisTemplate` (Redis hash + Lua) kullanır; Jackson2 JSON serializer Jackson 3 ile uyumsuzdu ve gereksizdi (K-34).
+- [ ] `PermissionCacheService` (TTL 10dk, role/group mutation'larinda evict) — **erteli** (yetkiler JWT'ye gömülü, cache sadece login/refresh mint'i optimize eder — düşük değer).
 
-> **Durum:** Bağlantı altyapısı (`spring.data.redis.*` config) hazır, `application-dev.yaml`'da `repositories.enabled=false`. Gerçek `TokenBlacklistService` / `PermissionCacheService` bean'leri henüz YOK — Epic 2.5 refresh/logout ve token revoke ile birlikte gelir.
+> **Durum (2026-07-30):** Refresh token + TokenBlacklistService K-34 ile geldi. Bağlantı altyapısı (`spring.data.redis.*`) + dev Redis container zaten hazırdı. PermissionCacheService erteli.
 
-### Epic 2.5 — Auth Endpoints (kısmen DONE — ilk çalışan login + RISK-21 revoke)
+### Epic 2.5 — Auth Endpoints (DONE — login + refresh + rotation/reuse + per-session logout)
 - [x] `AuthService.login()` iş mantığı (BCrypt doğrulama, unknown/bad-password aynı `auth_bad_credentials`)
 - [x] LoginRequest/LoginResponse DTO
-- [x] `POST /api/v1/auth/login`: Set-Cookie (httpOnly `sf_access_token`) + body'de accessToken. **NOT:** RefreshToken DB ERTENDİ
+- [x] `POST /api/v1/auth/login`: Set-Cookie (httpOnly `sf_access_token` + `sf_refresh_token`) + body. Refresh opaque, Redis'de hash-at-rest.
 - [x] Login integration test (valid -> cookie+200, wrong -> 401, unknown -> 401)
-- [x] `GET /api/v1/auth/me` (claim'den principal, DB'siz) — **not:** `/auth/me` yerine `/users/me` (UserProfileController) tercih edildi; `/auth/me` halen mevcut
-- [x] `POST /auth/logout`: **RISK-21 ÇÖZÜLDÜ (2026-07-24)** — `UserService.revokeTokens(userId)` ile `tokenInvalidBefore = now()` set + cookie expire. User-scoped revoke (multi-device logout); granular Redis blacklist hâlâ Epic 2.6.
-- [ ] `POST /refresh` (Redis + RefreshToken gerekli) — ertelendi
-- [ ] Refresh token rotation + reuse detection (ihlal -> tüm token revoke + `tokenInvalidBefore`) — ertelendi
-- ~~JwtAuthFilter blacklist hook~~ — CANCEL (`tokenInvalidBefore` user-scoped revoke ile aynı amaca hizmet ediyor; granular tek-token Redis blacklist Epic 2.6)
+- [x] `GET /api/v1/auth/me` (claim'den principal, DB'siz)
+- [x] `POST /auth/logout`: **per-session (K-34)** — refresh consume + mevcut access `jti` blacklist (granular tek-token revoke). `tokenInvalidBefore` set ETMEZ (o password change/reset/reuse'e özel).
+- [x] `POST /api/v1/auth/refresh` (K-34) — permitAll; tenant TenantFilter'dan; authorities DB'den re-resolve (taze yetkiler + locked/disabled re-check).
+- [x] Refresh token rotation + reuse detection (ihlal -> tüm refresh revoke + `tokenInvalidBefore`) — **K-34**.
+- ~~JwtAuthFilter blacklist hook~~ — DONE (K-34): filter artık `jti` blacklist'i kontrol eder.
 
-> **RISK-21 (tokenInvalidBefore) Çözüldü (2026-07-24):** `JwtAuthenticationFilter` her authenticated request'te `UserRepository.findTokenInvalidBefore` (tek-kolon projection) çağırır, `iat < tokenInvalidBefore` (saniyeye floor) → reject. Set noktaları: `UserService.changePassword` / `resetPassword` / `revokeTokens` + `AuthController.logout`. Çalınan token, şifre değişince/logout'ta anında geçersiz. Granular per-session revoke Epic 2.6'da Redis access-token blacklist ile.
+> **RISK-21 (tokenInvalidBefore) + K-34 (jti blacklist):** İki katmanlı revoke — user-scoped (`tokenInvalidBefore`, password change/reset/reuse) + granular per-session (`jti` blacklist, logout). Çalınan token anında geçersiz (logout/blacklist) veya şifre değişiminde (tokenInvalidBefore). Refresh reuse → tüm session'lar düşürülür.
+
 
 ### Epic 2.7-2.8 — Wrap-up
 - [x] `AuditorAware` SecurityContext userId (RISK-3/[RISK-33]) — Çözüldü 2026-07-24; artık SecurityContext userId + `"system"` fallback (`MultiTenancyJpaConfig`)

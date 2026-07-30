@@ -8,7 +8,14 @@ import com.ibrhalil.forgesys.entity.UserAccount;
 import com.ibrhalil.forgesys.exception.AuthException;
 import com.ibrhalil.forgesys.exception.ErrorCode;
 import com.ibrhalil.forgesys.persistence.repository.UserRepository;
+import com.ibrhalil.forgesys.security.CustomUserDetails;
+import com.ibrhalil.forgesys.security.CustomUserDetailsService;
+import com.ibrhalil.forgesys.security.TokenBlacklistService;
 import com.ibrhalil.forgesys.security.jwt.JwtTokenProvider;
+import com.ibrhalil.forgesys.security.refresh.IssuedRefresh;
+import com.ibrhalil.forgesys.security.refresh.RefreshSession;
+import com.ibrhalil.forgesys.security.refresh.RefreshTokenStore;
+import com.ibrhalil.forgesys.security.refresh.RotationResult;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -16,15 +23,20 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.OffsetDateTime;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -43,12 +55,19 @@ class AuthServiceTest {
     private UserRepository userRepository;
     @Mock
     private LoginHistoryService loginHistoryService;
+    @Mock
+    private RefreshTokenStore refreshTokenStore;
+    @Mock
+    private CustomUserDetailsService userDetailsService;
+    @Mock
+    private TokenBlacklistService tokenBlacklistService;
 
     private AuthService authService;
 
     @BeforeEach
     void setUp() {
-        authService = new AuthService(passwordEncoder, tokenProvider, userRepository, loginHistoryService);
+        authService = new AuthService(passwordEncoder, tokenProvider, userRepository,
+                loginHistoryService, refreshTokenStore, userDetailsService, tokenBlacklistService);
         TenantContext.setCurrentTenant("tenant_test");
     }
 
@@ -66,10 +85,13 @@ class AuthServiceTest {
         when(passwordEncoder.upgradeEncoding(HASH)).thenReturn(false);
         when(tokenProvider.generateAccessToken(any(), any(), any(), any())).thenReturn("tok");
         when(tokenProvider.getAccessTokenTtlMinutes()).thenReturn(5L);
+        when(refreshTokenStore.issue(any(), any(), any())).thenReturn(
+                new IssuedRefresh("refresh", new RefreshSession(userId, EMAIL, "tenant_test", null)));
 
         LoginResponse response = authService.login(new LoginRequest(EMAIL, "secret"));
 
         assertEquals("tok", response.accessToken());
+        assertEquals("refresh", response.refreshToken());
         assertEquals(userId, response.userId());
         verify(loginHistoryService).record(userId, EMAIL, true, null);
     }
@@ -132,6 +154,75 @@ class AuthServiceTest {
         verify(loginHistoryService).record(userId, EMAIL, false, "auth_account_locked");
         // [RISK-22] a locked account never reaches the password compare (no timing/attempt leak)
         verifyNoInteractions(passwordEncoder);
+    }
+
+    @Test
+    void refreshRotatesAndMintsNewAccessTokenWithFreshAuthorities() {
+        UUID userId = UUID.randomUUID();
+        String oldRefresh = "old-opaque-refresh";
+        String newRefresh = "new-opaque-refresh";
+        when(refreshTokenStore.rotate(oldRefresh)).thenReturn(new RotationResult.Rotated(
+                new IssuedRefresh(newRefresh, new RefreshSession(userId, EMAIL, "tenant_test", null))));
+        Set<GrantedAuthority> authorities = Set.<GrantedAuthority>of(new SimpleGrantedAuthority("tasks:task:read"));
+        when(userDetailsService.loadUserByUsername(EMAIL)).thenReturn(
+                new CustomUserDetails(userId, EMAIL, null, true, true, true, true, authorities, "tenant_test", null));
+        when(tokenProvider.generateAccessToken(any(), any(), any(), any())).thenReturn("newAccess");
+        when(tokenProvider.getAccessTokenTtlMinutes()).thenReturn(15L);
+
+        LoginResponse response = authService.refresh(oldRefresh);
+
+        assertEquals("newAccess", response.accessToken());
+        assertEquals(newRefresh, response.refreshToken());
+        verify(loginHistoryService).record(eq(userId), eq(EMAIL), eq(true), eq(null));
+    }
+
+    @Test
+    void refreshReuseRevokesAllSessionsAndInvalidatesAccessTokens() {
+        UUID userId = UUID.randomUUID();
+        User user = userWithAccount(userId, null, 0);
+        when(refreshTokenStore.rotate("leaked")).thenReturn(
+                new RotationResult.ReuseDetected(userId, "tenant_test"));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+        AuthException ex = assertThrows(AuthException.class, () -> authService.refresh("leaked"));
+
+        assertEquals(ErrorCode.AUTH_REFRESH_TOKEN_REUSE, ex.errorCode());
+        verify(refreshTokenStore).revokeAllForUser(userId, "tenant_test");
+        // tokenInvalidBefore stamped (kills outstanding access tokens)
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().getUserAccount().getTokenInvalidBefore()).isNotNull();
+    }
+
+    @Test
+    void refreshUnknownTokenThrowsInvalid() {
+        when(refreshTokenStore.rotate("bogus")).thenReturn(new RotationResult.Unknown());
+
+        AuthException ex = assertThrows(AuthException.class, () -> authService.refresh("bogus"));
+
+        assertEquals(ErrorCode.AUTH_REFRESH_TOKEN_INVALID, ex.errorCode());
+        verify(refreshTokenStore, never()).revokeAllForUser(any(), any());
+        verifyNoInteractions(userDetailsService);
+    }
+
+    @Test
+    void refreshBlankTokenThrowsInvalid() {
+        AuthException ex = assertThrows(AuthException.class, () -> authService.refresh("  "));
+        assertEquals(ErrorCode.AUTH_REFRESH_TOKEN_INVALID, ex.errorCode());
+        verify(refreshTokenStore, never()).rotate(any());
+    }
+
+    @Test
+    void refreshCrossTenantTokenIsRejected() {
+        UUID userId = UUID.randomUUID();
+        when(refreshTokenStore.rotate("t")).thenReturn(new RotationResult.Rotated(
+                new IssuedRefresh("n", new RefreshSession(userId, EMAIL, "other_tenant", null))));
+
+        AuthException ex = assertThrows(AuthException.class, () -> authService.refresh("t"));
+
+        assertEquals(ErrorCode.AUTH_REFRESH_TOKEN_INVALID, ex.errorCode());
+        verify(refreshTokenStore).revoke("n");
+        verifyNoInteractions(userDetailsService);
     }
 
     private User userWithAccount(UUID id, OffsetDateTime lockedUntil, int failedAttempts) {
