@@ -4,6 +4,7 @@ import com.ibrhalil.forgesys.security.PepperingPasswordEncoder;
 import com.ibrhalil.forgesys.security.RestAccessDeniedHandler;
 import com.ibrhalil.forgesys.security.RestAuthenticationEntryPoint;
 import com.ibrhalil.forgesys.security.jwt.JwtAuthenticationFilter;
+import com.ibrhalil.forgesys.security.ratelimit.RateLimitFilter;
 import com.ibrhalil.forgesys.tenant.TenantFilter;
 import com.ibrhalil.forgesys.web.RequestMetadataFilter;
 import org.springframework.beans.factory.annotation.Value;
@@ -45,6 +46,7 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
                                                    JwtAuthenticationFilter jwtAuthenticationFilter,
+                                                   RateLimitFilter rateLimitFilter,
                                                    RestAuthenticationEntryPoint authenticationEntryPoint,
                                                    RestAccessDeniedHandler accessDeniedHandler) throws Exception {
         http
@@ -66,6 +68,9 @@ public class SecurityConfig {
                                 + "style-src 'self' 'unsafe-inline'; script-src 'self'; "
                                 + "connect-src 'self'; frame-ancestors 'none'")))
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                // Faz 3: rate-limit the public auth endpoints before JWT decode so a blocked
+                // request short-circuits with 429 and never pays the BCrypt cost.
+                .addFilterBefore(rateLimitFilter, JwtAuthenticationFilter.class)
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint(authenticationEntryPoint)
                         .accessDeniedHandler(accessDeniedHandler));
