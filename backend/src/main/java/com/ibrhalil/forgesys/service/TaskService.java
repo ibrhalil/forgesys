@@ -1,0 +1,115 @@
+package com.ibrhalil.forgesys.service;
+
+import com.ibrhalil.forgesys.dto.TaskRequest;
+import com.ibrhalil.forgesys.dto.TaskResponse;
+import com.ibrhalil.forgesys.entity.Task;
+import com.ibrhalil.forgesys.entity.TaskPriority;
+import com.ibrhalil.forgesys.entity.TaskStatus;
+import com.ibrhalil.forgesys.exception.ResourceNotFoundException;
+import com.ibrhalil.forgesys.persistence.repository.ProjectRepository;
+import com.ibrhalil.forgesys.persistence.repository.TaskRepository;
+import com.ibrhalil.forgesys.persistence.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * Task operations scoped to a project (Faz 3 Stage 2). A task is always reached through
+ * its owning project ({@code /projects/{projectId}/tasks}); a task belonging to another
+ * project is not addressable here (404, no leak). Project + assignee existence are
+ * validated explicitly so an invalid id yields a clean 404 rather than a DB integrity 500.
+ */
+@Service
+@RequiredArgsConstructor
+public class TaskService {
+
+    private final TaskRepository taskRepository;
+    private final ProjectRepository projectRepository;
+    private final UserRepository userRepository;
+    private final AuditService auditService;
+
+    @Transactional(readOnly = true)
+    public List<TaskResponse> list(UUID projectId) {
+        if (!projectRepository.existsById(projectId)) {
+            throw new ResourceNotFoundException("Project not found: " + projectId);
+        }
+        return taskRepository.findAllByProjectId(projectId).stream().map(this::toResponse).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public TaskResponse findById(UUID projectId, UUID taskId) {
+        return toResponse(getTaskOrThrow(projectId, taskId));
+    }
+
+    @Transactional
+    public TaskResponse create(UUID projectId, TaskRequest request) {
+        if (!projectRepository.existsById(projectId)) {
+            throw new ResourceNotFoundException("Project not found: " + projectId);
+        }
+        validateAssignee(request.assigneeId());
+        Task task = new Task();
+        task.setProjectId(projectId);
+        applyRequest(task, request);
+        // Defaults on create (status/priority are optional in the request).
+        if (task.getStatus() == null) {
+            task.setStatus(TaskStatus.TODO);
+        }
+        if (task.getPriority() == null) {
+            task.setPriority(TaskPriority.MEDIUM);
+        }
+        Task saved = taskRepository.save(task);
+        auditService.record("task_created", "Task", saved.getId(), saved.getTitle());
+        return toResponse(saved);
+    }
+
+    @Transactional
+    public TaskResponse update(UUID projectId, UUID taskId, TaskRequest request) {
+        Task task = getTaskOrThrow(projectId, taskId);
+        validateAssignee(request.assigneeId());
+        applyRequest(task, request);
+        Task saved = taskRepository.save(task);
+        auditService.record("task_updated", "Task", saved.getId(), saved.getTitle());
+        return toResponse(saved);
+    }
+
+    @Transactional
+    public void delete(UUID projectId, UUID taskId) {
+        if (!taskRepository.existsByIdAndProjectId(taskId, projectId)) {
+            throw new ResourceNotFoundException("Task not found: " + taskId);
+        }
+        taskRepository.deleteById(taskId);
+        auditService.record("task_deleted", "Task", taskId, null);
+    }
+
+    private void applyRequest(Task task, TaskRequest request) {
+        task.setTitle(request.title());
+        task.setDescription(request.description());
+        if (request.status() != null) {
+            task.setStatus(request.status());
+        }
+        if (request.priority() != null) {
+            task.setPriority(request.priority());
+        }
+        task.setAssigneeId(request.assigneeId());
+        task.setDueDate(request.dueDate());
+    }
+
+    private Task getTaskOrThrow(UUID projectId, UUID taskId) {
+        return taskRepository.findByIdAndProjectId(taskId, projectId)
+                .orElseThrow(() -> new ResourceNotFoundException("Task not found: " + taskId));
+    }
+
+    private void validateAssignee(UUID assigneeId) {
+        if (assigneeId != null && !userRepository.existsById(assigneeId)) {
+            throw new ResourceNotFoundException("Assignee not found: " + assigneeId);
+        }
+    }
+
+    private TaskResponse toResponse(Task task) {
+        return new TaskResponse(task.getId(), task.getProjectId(), task.getTitle(), task.getDescription(),
+                task.getStatus(), task.getPriority(), task.getAssigneeId(), task.getDueDate());
+    }
+}
