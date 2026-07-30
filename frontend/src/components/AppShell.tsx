@@ -34,10 +34,12 @@ export function AppShell() {
         </div>
 
         <nav className="flex flex-1 flex-col gap-2">
-          <NavLink to="/" end className={navClass}>
-            <svg className={iconClass} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="9" rx="1" /><rect x="14" y="3" width="7" height="5" rx="1" /><rect x="14" y="12" width="7" height="9" rx="1" /><rect x="3" y="16" width="7" height="5" rx="1" /></svg>
-            Dashboard
-          </NavLink>
+          <PermissionGate authority="pm:project:read">
+            <NavLink to="/" end className={navClass}>
+              <svg className={iconClass} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" /></svg>
+              Projects
+            </NavLink>
+          </PermissionGate>
 
           <PermissionGate authority="iam:user:read">
             <NavLink to="/users" className={navClass}>
