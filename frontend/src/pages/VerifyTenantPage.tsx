@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { registrationApi } from '../api/registration';
@@ -25,15 +25,15 @@ export function VerifyTenantPage() {
   );
   const { setTenantId } = useTenantStore();
 
+  const firedRef = useRef(false);
   useEffect(() => {
-    if (!token) return;
-    let cancelled = false;
+    if (!token || firedRef.current) return;
+    firedRef.current = true;
     (async () => {
       try {
         const data = await registrationApi.verify({ token });
-        if (!cancelled) setState({ kind: 'success', data });
+        setState({ kind: 'success', data });
       } catch (err) {
-        if (cancelled) return;
         const code = err instanceof ApiError ? err.code : '';
         setState({
           kind: 'error',
@@ -41,9 +41,6 @@ export function VerifyTenantPage() {
         });
       }
     })();
-    return () => {
-      cancelled = true;
-    };
   }, [token]);
 
   // Card shell matching LoginPage/RegisterPage
