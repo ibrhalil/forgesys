@@ -1,10 +1,11 @@
 import { Link, useParams } from 'react-router-dom';
 import { useProject } from '../hooks/useProjects';
 import { Badge } from '../components/ui/Badge';
+import { TaskBoard } from '../components/TaskBoard';
 
 /**
- * Project workspace. Renders the project header; the task board for TASKS-type projects
- * is wired in the next stage. NOTES projects show a placeholder.
+ * Project workspace. Renders the project header; a TASKS-type project shows the task
+ * board, other types show a "coming soon" placeholder.
  */
 export function ProjectDetailPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -23,7 +24,7 @@ export function ProjectDetailPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-8">
       <header className="flex flex-col gap-3">
         <Link to="/" className="text-sm text-muted transition-colors hover:text-accent">← All projects</Link>
         <div className="flex flex-wrap items-center gap-3">
@@ -34,10 +35,7 @@ export function ProjectDetailPage() {
       </header>
 
       {project.type === 'TASKS' ? (
-        // Task board arrives in the next stage.
-        <div className="rounded-xl border border-glass bg-surface px-6 py-16 text-center text-muted">
-          Task board loads here.
-        </div>
+        <TaskBoard projectId={project.id} />
       ) : (
         <div className="rounded-xl border border-glass bg-surface px-6 py-16 text-center text-muted">
           The <span className="text-main">{project.type}</span> module is coming soon.
