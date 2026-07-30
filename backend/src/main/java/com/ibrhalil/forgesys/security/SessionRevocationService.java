@@ -1,6 +1,8 @@
 package com.ibrhalil.forgesys.security;
 
 import com.ibrhalil.forgesys.common.tenant.TenantContext;
+import com.ibrhalil.forgesys.entity.Role;
+import com.ibrhalil.forgesys.persistence.repository.RoleRepository;
 import com.ibrhalil.forgesys.persistence.repository.UserRepository;
 import com.ibrhalil.forgesys.security.refresh.ActiveSession;
 import com.ibrhalil.forgesys.security.refresh.RefreshTokenStore;
@@ -41,14 +43,17 @@ public class SessionRevocationService {
 
     private final UserRepository userRepository;
     private final RefreshTokenStore refreshTokenStore;
+    private final RoleRepository roleRepository;
     /** Max concurrent active sessions per user; {@code <=0} means unlimited (Faz 5). */
     private final int maxSessions;
 
     public SessionRevocationService(UserRepository userRepository,
                                     RefreshTokenStore refreshTokenStore,
+                                    RoleRepository roleRepository,
                                     @Value("${forgesys.security.max-sessions:0}") int maxSessions) {
         this.userRepository = userRepository;
         this.refreshTokenStore = refreshTokenStore;
+        this.roleRepository = roleRepository;
         this.maxSessions = maxSessions;
     }
 
@@ -56,6 +61,24 @@ public class SessionRevocationService {
     @Transactional
     public void revokeUser(UUID userId) {
         revokeUsers(userId == null ? List.<UUID>of() : List.of(userId));
+    }
+
+    /**
+     * Stamps {@code UserAccount.tokenInvalidBefore = now} for a single user, killing all
+     * of the user's outstanding access tokens (their {@code iat} will precede the stamp)
+     * <em>without</em> touching refresh tokens. Used by single-session admin revoke so the
+     * targeted device's access token dies immediately (the device's own refresh token was
+     * already dropped) — the device is signed out on its next request rather than at
+     * access-token TTL. Other devices of the same user eat a single 401 + silent refresh
+     * (their refresh tokens are still valid) and recover automatically, so this is a
+     * momentary blip for siblings, not a sign-out.
+     */
+    @Transactional
+    public void invalidateAccessTokens(UUID userId) {
+        if (userId == null) {
+            return;
+        }
+        userRepository.bulkSetTokenInvalidBefore(List.of(userId), OffsetDateTime.now());
     }
 
     /**
@@ -103,6 +126,20 @@ public class SessionRevocationService {
     }
 
     /**
+     * Ids of every user holding {@code roleId}, directly or via an active group —
+     * resolved WITHOUT revoking. Used by role deletion to resolve bearers before the
+     * soft-delete (post-delete, {@code @SQLRestriction} hides the role and the lookup
+     * would return nobody) while deferring the actual revoke until after the
+     * last-admin guard, so a rejected delete leaves no Redis-side revoke behind.
+     */
+    public List<UUID> resolveRoleHolderIds(UUID roleId) {
+        if (roleId == null) {
+            return List.of();
+        }
+        return userRepository.findUserIdsByRole(roleId);
+    }
+
+    /**
      * Revokes every member of {@code groupId}. Use on group role / membership / active
      * toggle changes and group deletion so the group's role delta is enforced immediately
      * for all members.
@@ -116,6 +153,23 @@ public class SessionRevocationService {
     }
 
     /**
+     * Revokes every user holding an <em>all-permissions</em> role (the built-in Admin and
+     * any user-defined "ALL" role), directly or via an active group. Used when a
+     * permission is created or renamed so the new/renamed name reaches those users on
+     * their next request — their outstanding tokens still embed the prior permission
+     * snapshot, and all-permissions users should "hear about" the new permission rather
+     * than waiting for their access-token TTL. No-op when no role carries the flag.
+     */
+    @Transactional
+    public void revokeAllPermissionsRoleHolders() {
+        Set<UUID> userIds = new LinkedHashSet<>();
+        for (Role role : roleRepository.findAllByAllPermissionsTrue()) {
+            userIds.addAll(userRepository.findUserIdsByRole(role.getId()));
+        }
+        revokeUsers(userIds);
+    }
+
+    /**
      * Faz 5 concurrent-session limit. Called after a new session is issued
      * ({@code AuthService.login}): when the user now holds more than {@code maxSessions}
      * active sessions the oldest ones are evicted (oldest {@code lastSeen} first) so a
@@ -123,8 +177,9 @@ public class SessionRevocationService {
      * of {@code <=0} is unlimited (no-op). Implemented with the existing K-28 session
      * primitives ({@link RefreshTokenStore#listSessions} / {@link RefreshTokenStore#revokeSession})
      * so it needs no store-contract change; the evicted device's short-lived access token
-     * expires at its TTL (its {@code jti} is not stored per-session — same as an admin
-     * remote-revoke). Rotation never triggers this: it preserves the {@code sessionId},
+     * is left to expire at its TTL (the evicted session's refresh is gone, so the device
+     * is signed out at the next access-token expiry — this is a session-cap eviction, not
+     * an admin remote-revoke, so it does not stamp {@code tokenInvalidBefore}). Rotation never triggers this: it preserves the {@code sessionId},
      * so it does not add a session.
      */
     public void enforceSessionLimit(UUID userId) {

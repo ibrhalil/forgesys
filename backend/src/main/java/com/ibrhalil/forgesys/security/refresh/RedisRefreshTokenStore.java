@@ -4,6 +4,8 @@ import com.ibrhalil.forgesys.security.jwt.JwtCookieProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Profile;
+import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.core.script.RedisScript;
@@ -17,7 +19,9 @@ import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.HashSet;
 import java.util.HexFormat;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -138,19 +142,30 @@ public class RedisRefreshTokenStore implements RefreshTokenStore {
         if (presented == null || presented.isBlank()) {
             return false;
         }
-        String hash = sha256Hex(presented);
-        String key = tokenKey(hash);
-        Map<Object, Object> record = redis.opsForHash().entries(key);
-        if (record.isEmpty()) {
-            return false;
+        // Follow the rotation chain: a ROTATED record's `rotatedTo` successor is the
+        // live token of the SAME session (rotation preserves sessionId). Revoking an
+        // already-rotated token (logout racing a silent refresh) must kill the successor
+        // too, or the session survives logout and keeps showing ACTIVE to admins.
+        boolean revokedAny = false;
+        Set<String> visited = new HashSet<>();
+        String currentHash = sha256Hex(presented);
+        while (currentHash != null && visited.add(currentHash)) {
+            String key = tokenKey(currentHash);
+            Map<Object, Object> record = redis.opsForHash().entries(key);
+            if (record.isEmpty()) {
+                break;
+            }
+            redis.delete(key);
+            revokedAny = true;
+            UUID userId = parseUserId(record.get("userId"));
+            if (userId != null) {
+                String tenant = string(record.get("tenant"));
+                redis.opsForSet().remove(indexKey(tenant, userId), currentHash);
+            }
+            // null for ACTIVE records (no successor) → the chain ends.
+            currentHash = string(record.get("rotatedTo"));
         }
-        redis.delete(key);
-        UUID userId = parseUserId(record.get("userId"));
-        if (userId != null) {
-            String tenant = string(record.get("tenant"));
-            redis.opsForSet().remove(indexKey(tenant, userId), hash);
-        }
-        return true;
+        return revokedAny;
     }
 
     @Override
@@ -184,6 +199,37 @@ public class RedisRefreshTokenStore implements RefreshTokenStore {
             }
         }
         // Newest activity first.
+        sessions.sort((a, b) -> {
+            int c = b.lastSeen().compareTo(a.lastSeen());
+            return c != 0 ? c : b.loginAt().compareTo(a.loginAt());
+        });
+        return sessions;
+    }
+
+    @Override
+    public List<ActiveSession> listAllSessions(String tenant) {
+        // Enumerate the tenant's per-user index keys (refresh:idx:<tenant>:<userId>) via
+        // SCAN, resolve the userId from each key, and reuse listSessions per user. No
+        // write-path change; bounded by the number of active refresh tokens. Tenant
+        // schema names contain no ':' so lastIndexOf cleanly splits the userId.
+        String match = INDEX_PREFIX + (tenant == null ? "" : tenant) + ":*";
+        Set<String> keys = new LinkedHashSet<>();
+        try (Cursor<String> cursor = redis.scan(ScanOptions.scanOptions().match(match).count(200).build())) {
+            while (cursor.hasNext()) {
+                keys.add(cursor.next());
+            }
+        }
+        List<ActiveSession> sessions = new ArrayList<>();
+        for (String key : keys) {
+            int lastColon = key.lastIndexOf(':');
+            if (lastColon < 0 || lastColon == key.length() - 1) {
+                continue;
+            }
+            UUID userId = parseUserId(key.substring(lastColon + 1));
+            if (userId != null) {
+                sessions.addAll(listSessions(userId, tenant));
+            }
+        }
         sessions.sort((a, b) -> {
             int c = b.lastSeen().compareTo(a.lastSeen());
             return c != 0 ? c : b.loginAt().compareTo(a.loginAt());

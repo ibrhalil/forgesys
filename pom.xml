@@ -18,6 +18,9 @@
         <java.version>21</java.version>
         <spring-boot.version>4.1.0</spring-boot.version>
         <lombok.version>1.18.46</lombok.version>
+        <!-- Must track spring-boot-dependencies' managed hibernate.version (not managed
+             by the BOM itself, so it needs an explicit property here). -->
+        <hibernate-jpamodelgen.version>7.4.1.Final</hibernate-jpamodelgen.version>
     </properties>
 
     <modules>

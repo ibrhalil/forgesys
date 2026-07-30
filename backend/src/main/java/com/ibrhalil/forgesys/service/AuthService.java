@@ -123,6 +123,15 @@ public class AuthService {
             throw AuthException.badCredentials();
         }
 
+        // Disabled check sits AFTER the password compare so an unknown-email vs
+        // disabled-account distinction cannot be probed without valid credentials (no
+        // enumeration oracle). A disabled user must not obtain a fresh token even with
+        // correct credentials; refresh already re-checks isEnabled() (K-34).
+        if (!account.isEnabled()) {
+            loginHistoryService.record(user.getId(), user.getEmail(), false, ErrorCode.AUTH_ACCOUNT_DISABLED.code());
+            throw AuthException.accountDisabled();
+        }
+
         // Success: reset the attempt counter, stamp last login, and lazily migrate a
         // legacy pepper-less hash to the peppered format (K-23) inline.
         account.setFailedLoginAttempts(0);
@@ -134,7 +143,7 @@ public class AuthService {
         }
         userRepository.save(user);
 
-        List<String> authorities = CustomUserDetailsService.resolveAuthorities(user).stream()
+        List<String> authorities = userDetailsService.resolveAuthorities(user.getId()).stream()
                 .map(GrantedAuthority::getAuthority)
                 .toList();
         String tenantSchema = TenantContext.getCurrentTenant().orElse(null);

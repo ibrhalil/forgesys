@@ -21,9 +21,10 @@ import org.springframework.stereotype.Component;
  * <p>Idempotent: if a company with the configured subdomain already exists the
  * runner does nothing. Failures are logged and swallowed so a bootstrap error
  * never aborts application startup. The RBAC seed (Admin role + platform/iam
- * permissions) and the role assignment for this admin are applied by
- * {@code RbacSeeder} (Faz 1) on subsequent startup — this runner intentionally
- * only performs tenant + admin provisioning.
+ * permissions) and the explicit Admin grant for this admin are applied by
+ * {@code TenantProvisioningService.createAdminUser} (via {@code RbacSeeder})
+ * during provisioning itself — this runner intentionally only performs tenant +
+ * admin provisioning.
  *
  * <p>Disabled in the {@code test} profile (mirrors {@code TenantMigrationRunner}).
  */

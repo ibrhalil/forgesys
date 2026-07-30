@@ -9,6 +9,7 @@ public record GroupResponse(
         String description,
         boolean active,
         List<RoleSummary> roles,
+        List<UserSummary> members,
         long memberCount
 ) {
 }

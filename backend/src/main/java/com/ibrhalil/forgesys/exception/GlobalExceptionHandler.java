@@ -125,6 +125,21 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * A {@code sort} property that does not resolve against the domain entity (e.g.
+     * {@code GET /api/v1/users?sort=notAField}). Without this the repository layer
+     * propagates the Spring Data exception into the catch-all and the client gets a
+     * 500; it is a client error, so it maps to {@code validation_error} (400). Known
+     * property <em>paths</em> that should stay closed are rejected earlier by
+     * {@code SortGuard} at the controller.
+     */
+    @ExceptionHandler(org.springframework.data.core.PropertyReferenceException.class)
+    public ResponseEntity<ApiErrorResponse> handlePropertyReference(org.springframework.data.core.PropertyReferenceException ex, HttpServletRequest request) {
+        String message = "Unsupported sort property: '" + ex.getPropertyName() + "'";
+        log.warn("Bad sort property at {}: {}", request.getRequestURI(), ex.getMessage());
+        return build(ErrorCode.VALIDATION_ERROR, message, request.getRequestURI());
+    }
+
+    /**
      * Bean Validation violations on method parameters (service-layer {@code @Validated}
      * beans, or a future controller {@code @Validated}). Currently nothing triggers this —
      * controllers use {@code @Valid} on {@code @RequestBody} which yields
@@ -222,6 +237,7 @@ public class GlobalExceptionHandler {
         if (lower.contains("users_username")) return ErrorCode.USER_USERNAME_TAKEN;
         if (lower.contains("roles_name")) return ErrorCode.ROLE_NAME_TAKEN;
         if (lower.contains("groups_name")) return ErrorCode.GROUP_NAME_TAKEN;
+        if (lower.contains("permissions_name")) return ErrorCode.PERMISSION_NAME_TAKEN;
         if (lower.contains("projects_name")) return ErrorCode.PROJECT_NAME_TAKEN;
         if (lower.contains("companies_subdomain") || lower.contains("companies_schema_name")) {
             return ErrorCode.COMPANY_SUBDOMAIN_TAKEN;

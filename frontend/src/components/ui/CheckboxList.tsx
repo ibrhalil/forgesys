@@ -31,7 +31,7 @@ export function CheckboxList({ items, selectedIds, onChange, emptyMessage = 'Not
             <label
               className={cn(
                 'flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2 transition-colors',
-                checked ? 'border-accent/40 bg-accent/10' : 'border-transparent hover:bg-white/5',
+                checked ? 'border-accent/40 bg-accent/10' : 'border-transparent hover:bg-main/5',
               )}
             >
               <input

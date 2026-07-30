@@ -7,6 +7,7 @@ public record RoleResponse(
         UUID id,
         String name,
         String description,
+        boolean allPermissions,
         List<PermissionResponse> permissions,
         List<RoleSummary> parents
 ) {

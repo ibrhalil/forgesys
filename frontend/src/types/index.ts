@@ -1,84 +1,9 @@
-// Auth
-export interface LoginRequest {
-  email: string;
-  password: string;
-}
+// Shared, cross-feature types only. Domain types live in their feature folder
+// (features/<name>/types.ts): auth, users, roles, groups, permissions, projects, audit, sessions.
 
-// Backend LoginResponse: accessToken, refreshToken, tokenType, expiresIn, userId,
-// email, authorities (no tenant field — tenant comes from /me). Both tokens are also
-// set as httpOnly cookies (sf_access_token, sf_refresh_token); the body copies exist
-// for non-browser clients. The SPA relies on the cookies, not these fields.
-export interface LoginResponse {
-  accessToken: string;
-  refreshToken?: string;
-  tokenType: string;
-  expiresIn: number;
-  userId: string;
-  email: string;
-  authorities: string[];
-}
-
-export interface MeResponse {
-  userId: string;
-  email: string;
-  tenant: string;
-  authorities: string[];
-}
-
-// RBAC
-export interface Permission {
-  id: string;
-  name: string;
-  description: string | null;
-}
-
-// Audit & login history (K-19) — exposed by GET /audit-logs and /login-history
-export interface AuditLog {
-  id: string;
-  actorId: string | null;
-  actorName: string;
-  action: string;
-  entityType: string;
-  entityId: string | null;
-  entityName: string | null;
-  ipAddress: string | null;
-  traceId: string | null;
-  createdAt: string;
-}
-
-export interface LoginHistory {
-  id: string;
-  userId: string | null;
-  username: string;
-  success: boolean;
-  reason: string | null;
-  ipAddress: string | null;
-  userAgent: string | null;
-  createdAt: string;
-}
-
-// Active refresh-token sessions (K-28) — one per device. Returned as a flat array
-// (not paged) by /users/me/sessions and /users/{id}/sessions.
-export interface ActiveSession {
-  sessionId: string;
-  userAgent: string | null;
-  ipAddress: string | null;
-  loginAt: string;
-  lastSeen: string;
-  /** True only on the self view, for the session behind the caller's refresh cookie. */
-  current: boolean;
-}
-
-// Full role (RoleResponse) — used by /roles endpoints
-export interface Role {
-  id: string;
-  name: string;
-  description: string | null;
-  permissions: Permission[];
-}
-
-// Lightweight references embedded inside User/Group responses (RoleSummary/GroupSummary
-// on the backend — only id + name, never the permission graph)
+// ─── RBAC summaries ───
+// Lightweight references embedded inside User/Group/Role responses
+// (RoleSummary/GroupSummary/UserSummary on the backend — only id + name/email).
 export interface RoleSummary {
   id: string;
   name: string;
@@ -89,48 +14,12 @@ export interface GroupSummary {
   name: string;
 }
 
-// Full group (GroupResponse) — nested roles are summaries
-export interface Group {
-  id: string;
-  name: string;
-  description: string | null;
-  active: boolean;
-  roles: RoleSummary[];
-  memberCount: number;
-}
-
-// UserResponse — roles/groups are summaries
-export interface User {
+export interface UserSummary {
   id: string;
   email: string;
-  username: string;
-  firstName: string | null;
-  lastName: string | null;
-  phoneNumber: string | null;
-  address: string | null;
-  city: string | null;
-  country: string | null;
-  zipCode: string | null;
-  enabled: boolean;
-  emailVerified: boolean;
-  roles: RoleSummary[];
-  groups: GroupSummary[];
 }
 
-// Platform
-export type CompanyStatus = 'PROVISIONING' | 'ACTIVE' | 'SUSPENDED' | 'TERMINATED';
-
-export interface Company {
-  id: string;
-  name: string;
-  subdomain: string;
-  emailDomain: string;
-  schemaName: string;
-  dbRole: string;
-  status: CompanyStatus;
-}
-
-// API error — mirrors backend ApiErrorResponse
+// ─── API error (mirrors backend ApiErrorResponse) ───
 export interface ApiFieldError {
   field: string;
   rejectedValue: unknown;
@@ -148,137 +37,47 @@ export interface ApiErrorResponse {
   fields: ApiFieldError[];
 }
 
-// Create/Update DTOs
-export interface CreateRoleRequest {
-  name: string;
-  description?: string;
+// ─── Pagination / sorting ───
+
+export type SortDir = 'asc' | 'desc';
+
+/** Single-column sort state for list pages (backend `sort=field,dir`). */
+export interface SortState {
+  field: string;
+  dir: SortDir;
 }
 
-export interface CreateGroupRequest {
-  name: string;
-  description?: string;
-  active?: boolean;
-}
-
-export interface CreateUserRequest {
-  email: string;
-  password: string;
-  username?: string;
-  firstName?: string;
-  lastName?: string;
-  enabled?: boolean;
-}
-
-export interface UpdateUserRequest {
-  firstName?: string;
-  lastName?: string;
-  enabled?: boolean;
-}
-
-export interface UserProfileUpdateRequest {
-  firstName?: string;
-  lastName?: string;
-  phoneNumber?: string;
-  address?: string;
-  city?: string;
-  country?: string;
-  zipCode?: string;
-}
-
-export interface PasswordChangeRequest {
-  currentPassword: string;
-  newPassword: string;
-}
-
-export interface AdminPasswordResetRequest {
-  newPassword: string;
-}
-
-export interface AssignPermissionsRequest {
-  permissionIds: string[];
-}
-
-export interface AssignRolesRequest {
-  roleIds: string[];
-}
-
-export interface AssignGroupsRequest {
-  groupIds: string[];
-}
-
-export interface AssignMembersRequest {
-  userIds: string[];
-}
-
-export interface CompanyStatusUpdateRequest {
-  status: CompanyStatus;
-}
-
-// K-21 tenant signup — two-phase provisioning (register -> email verify -> activate)
-export interface RegisterRequest {
-  companyName: string;
-  subdomain: string;
-  adminEmail: string;
-  adminPassword: string;
-  adminFirstName?: string;
-  adminLastName?: string;
-}
-
-// 202 Accepted response of POST /api/v1/auth/company/register (Company is PROVISIONING)
-export interface RegisterResponse {
-  companyId: string;
-  name: string;
-  subdomain: string;
-  status: CompanyStatus;
-  message: string | null;
-}
-
-export interface VerifyTenantRequest {
-  token: string;
-}
-
-// 200 OK response of POST /api/v1/auth/company/verify (Company promoted to ACTIVE)
-export interface VerifyTenantResponse {
-  companyId: string;
-  name: string;
-  subdomain: string;
-  status: CompanyStatus;
-  message: string | null;
-}
-
-export interface SuggestSubdomainRequest {
-  name: string;
-}
-
-export interface SuggestSubdomainResponse {
-  suggestions: string[];
-}
-
-// Pagination
 export interface PageParams {
   page?: number;
   size?: number;
-  /** Spring Data sort, e.g. "email" or "email,desc". */
+  /** Raw Spring Data sort string, e.g. "createdDate,desc" (audit pages). */
   sort?: string;
+  /** Structured multi-sort, serialized as repeated `sort=field,dir` params. */
+  sorts?: SortState[];
+  /** Server-side global search (OR-CONTAINS over the feature's searchable fields). */
+  q?: string;
 }
 
 /**
- * Raw Spring Data {@code Page<T>} response. Tolerant of both layouts: the legacy flat
- * one (totalElements/number/size at the root) and the Spring Boot >=3.3 nested
- * {@code page} object. See {@link normalizePage}.
+ * Raw paginated list response. Current backend shape is the API-owned
+ * `PageResponse` (`data[] + meta`); the legacy Spring Data fields stay as a
+ * tolerance so a mixed backend during rollout keeps working. See `normalizePage`.
  */
 export interface PageResponse<T> {
-  content: T[];
+  data?: T[];
+  meta?: {
+    page: number;
+    pageSize: number;
+    totalElements: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrevious: boolean;
+  };
+  content?: T[];
   totalElements?: number;
   totalPages?: number;
   number?: number;
   size?: number;
-  page?: {
-    size: number;
-    number: number;
-    totalElements: number;
-    totalPages: number;
-  };
 }
 
 /** Normalized pagination result consumed by the UI. */
@@ -288,45 +87,6 @@ export interface PageResult<T> {
   size: number;
   totalElements: number;
   totalPages: number;
-}
-
-// Projects & Tasks (pm:* — project-management module, Faz 3)
-export type ProjectType = 'TASKS' | 'NOTES';
-
-export interface Project {
-  id: string;
-  name: string;
-  description: string | null;
-  type: ProjectType;
-}
-
-/** Create + update share this shape (backend ProjectRequest). */
-export interface ProjectRequest {
-  name: string;
-  description?: string;
-  type: ProjectType;
-}
-
-export type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'DONE';
-export type TaskPriority = 'LOW' | 'MEDIUM' | 'HIGH';
-
-export interface Task {
-  id: string;
-  projectId: string;
-  title: string;
-  description: string | null;
-  status: TaskStatus;
-  priority: TaskPriority;
-  assigneeId: string | null;
-  /** ISO date yyyy-mm-dd. */
-  dueDate: string | null;
-}
-
-export interface TaskRequest {
-  title: string;
-  description?: string;
-  status?: TaskStatus;
-  priority?: TaskPriority;
-  assigneeId?: string | null;
-  dueDate?: string | null;
+  hasNext?: boolean;
+  hasPrevious?: boolean;
 }

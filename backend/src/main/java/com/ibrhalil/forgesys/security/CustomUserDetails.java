@@ -57,11 +57,27 @@ public class CustomUserDetails implements UserDetails {
                 user.getPassword(),
                 account.isEnabled(),
                 account.isAccountNonExpired(),
-                account.isAccountNonLocked(),
+                isEffectivelyNonLocked(account),
                 account.isCredentialsNonExpired(),
                 authorities,
                 tenantSchema,
                 null);
+    }
+
+    /**
+     * [RISK-22] The brute-force lockout writes {@code lockedUntil} only — the
+     * {@code accountNonLocked} column is never touched (it stays {@code true}). An
+     * active lock window ({@code lockedUntil} in the future) must therefore make
+     * {@code isAccountNonLocked()} false here, otherwise a locked account with a live
+     * refresh token could keep minting fresh access tokens through
+     * {@code /auth/refresh} for the whole lock duration — bypassing the lockout
+     * (only the access tokens are killed via {@code tokenInvalidBefore}, and refresh
+     * immediately issues new ones). Lock expiry is lazy: a past {@code lockedUntil}
+     * still counts as non-locked (the login path clears it on the next attempt).
+     */
+    private static boolean isEffectivelyNonLocked(UserAccount account) {
+        return account.isAccountNonLocked()
+                && (account.getLockedUntil() == null || !account.getLockedUntil().isAfter(java.time.OffsetDateTime.now()));
     }
 
     public UUID getUserId() {

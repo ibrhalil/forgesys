@@ -67,4 +67,44 @@ abstract class AbstractRbacWebTest {
                 UUID.randomUUID().toString(), email, tenant, List.of(authorities));
         return new Cookie(COOKIE_NAME, token);
     }
+
+    /**
+     * Seeds the last-admin invariant baseline: an {@code all_permissions} role held by
+     * an enabled user. Most write paths now run {@code LastAdminGuard}, which requires
+     * at least one active admin-capable user to REMAIN after the mutation — tests that
+     * exercise a happy-path mutation seed this first. Returns the admin user.
+     */
+    com.ibrhalil.forgesys.entity.User seedAdmin() {
+        com.ibrhalil.forgesys.entity.Role adminRole = new com.ibrhalil.forgesys.entity.Role();
+        adminRole.setName("Admin");
+        adminRole.setAllPermissions(true);
+        entityManager.persist(adminRole);
+
+        com.ibrhalil.forgesys.entity.User admin = seedRbacUser("admin@tenant.test", "admin");
+        admin.getRoles().add(adminRole);
+        entityManager.merge(admin);
+        return admin;
+    }
+
+    /** Minimal enabled user with account + profile (mirrors UserControllerTest.seedUser). */
+    com.ibrhalil.forgesys.entity.User seedRbacUser(String email, String username) {
+        com.ibrhalil.forgesys.entity.User user = new com.ibrhalil.forgesys.entity.User();
+        user.setUsername(username);
+        user.setEmail(email);
+        user.setPassword("$2a$12$dummyHashForTestingOnly00000000000000000000000000000");
+        user.setEmailVerified(false);
+
+        com.ibrhalil.forgesys.entity.UserAccount account = new com.ibrhalil.forgesys.entity.UserAccount();
+        account.setUser(user);
+        user.setUserAccount(account);
+
+        com.ibrhalil.forgesys.entity.UserProfile profile = new com.ibrhalil.forgesys.entity.UserProfile();
+        profile.setUser(user);
+        profile.setFirstName("Test");
+        profile.setLastName("User");
+        user.setUserProfile(profile);
+
+        entityManager.persist(user);
+        return user;
+    }
 }

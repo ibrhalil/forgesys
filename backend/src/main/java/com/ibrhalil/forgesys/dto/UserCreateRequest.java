@@ -4,6 +4,9 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
+import java.util.List;
+import java.util.UUID;
+
 public record UserCreateRequest(
         @NotBlank(message = "Email is required")
         @Email(message = "Invalid email format")
@@ -21,6 +24,12 @@ public record UserCreateRequest(
 
         @Size(max = 100) String lastName,
 
-        Boolean enabled
+        Boolean enabled,
+
+        // Optional: roles assigned at creation time (resolved + validated by UserService).
+        List<UUID> roleIds,
+
+        // Optional: groups assigned at creation time.
+        List<UUID> groupIds
 ) {
 }

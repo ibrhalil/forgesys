@@ -25,7 +25,7 @@ export function Field({ id, label, error, hint, className, children }: FieldProp
 }
 
 const INPUT_BASE =
-  'w-full rounded-lg border bg-white/5 px-3 py-2 text-sm text-main placeholder:text-muted/50 ' +
+  'w-full rounded-lg border bg-main/5 px-3 py-2 text-sm text-main placeholder:text-muted/50 ' +
   'transition-colors focus:outline-none focus:ring-2 focus:ring-accent/50';
 
 interface TextFieldProps extends InputHTMLAttributes<HTMLInputElement> {

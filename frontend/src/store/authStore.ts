@@ -1,14 +1,15 @@
 import { create } from 'zustand';
-import type { MeResponse } from '../types';
-import { authApi } from '../api/auth';
+import { authApi } from '../features/auth/authApi';
+import type { MeResponse } from '../features/auth/types';
 import { ApiError, setSessionExpiredHandler } from '../lib/api';
+import { notify } from '../lib/notify';
+import { t } from '../lib/i18n';
 
 interface AuthState {
   user: MeResponse | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   isSubmitting: boolean;
-  error: string | null;
 
   login: (email: string, password: string) => Promise<boolean>;
   fetchMe: () => Promise<void>;
@@ -17,7 +18,6 @@ interface AuthState {
   sessionExpired: () => void;
   hasAuthority: (authority: string) => boolean;
   hasAnyAuthority: (...authorities: string[]) => boolean;
-  clearError: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -28,17 +28,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   // mid-login and breaks the post-login navigate().
   isLoading: true,
   isSubmitting: false,
-  error: null,
 
   login: async (email, password) => {
-    set({ isSubmitting: true, error: null });
+    set({ isSubmitting: true });
     try {
       await authApi.login({ email, password });
       await get().fetchMe();
       return true;
     } catch (e) {
-      const message = e instanceof ApiError ? e.body.message : 'Login failed';
-      set({ error: message });
+      // Auth failures (bad credentials, locked account) surface as a toast — they are
+      // not field-level validation.
+      notify.error(e instanceof ApiError ? e.body.message : t('auth.loginFailed'));
       return false;
     } finally {
       set({ isSubmitting: false });
@@ -48,7 +48,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   fetchMe: async () => {
     try {
       const user = await authApi.me();
-      set({ user, isAuthenticated: true, isLoading: false, error: null });
+      set({ user, isAuthenticated: true, isLoading: false });
     } catch {
       set({ user: null, isAuthenticated: false, isLoading: false });
     }
@@ -58,7 +58,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       await authApi.logout();
     } finally {
-      set({ user: null, isAuthenticated: false, error: null });
+      set({ user: null, isAuthenticated: false });
     }
   },
 
@@ -78,8 +78,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (!user?.authorities) return false;
     return authorities.some((a) => user.authorities.includes(a));
   },
-
-  clearError: () => set({ error: null }),
 }));
 
 // Wire apiFetch's "session unrecoverable" signal to the store. Decoupled via the

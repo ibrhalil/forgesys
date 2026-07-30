@@ -5,6 +5,7 @@ import com.ibrhalil.forgesys.entity.Role;
 import com.ibrhalil.forgesys.entity.User;
 import com.ibrhalil.forgesys.entity.UserAccount;
 import com.ibrhalil.forgesys.persistence.repository.UserRepository;
+import com.ibrhalil.forgesys.security.jwt.JwtTokenProvider;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.servlet.Filter;
@@ -26,7 +27,9 @@ import org.springframework.web.context.WebApplicationContext;
 import java.time.OffsetDateTime;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.UUID;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -61,6 +64,9 @@ class AuthControllerLoginTest {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private JwtTokenProvider jwtTokenProvider;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -126,6 +132,27 @@ class AuthControllerLoginTest {
                                 {"email":"admin@acme.com","password":"wrong"}"""))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("auth_bad_credentials"));
+    }
+
+    /**
+     * Side-fix (last-admin session): a DISABLED account with CORRECT credentials must
+     * not receive a token. The check runs after the password compare so an unknown
+     * email vs disabled account cannot be distinguished without valid credentials.
+     */
+    @Test
+    void disabledAccountWithCorrectPasswordReturns401() throws Exception {
+        User user = userRepository.findByEmail(EMAIL).orElseThrow();
+        user.getUserAccount().setEnabled(false);
+        userRepository.save(user);
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"admin@acme.com","password":"password123"}"""))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("auth_account_disabled"));
     }
 
     @Test
@@ -275,6 +302,44 @@ class AuthControllerLoginTest {
         UserAccount refreshed = userRepository.findByEmail(EMAIL).orElseThrow().getUserAccount();
         assertThat(refreshed.getFailedLoginAttempts()).isZero();
         assertThat(refreshed.getLockedUntil()).isNull();
+    }
+
+    /**
+     * [RISK-22] Admin unlock: an actively locked account becomes loginable
+     * IMMEDIATELY after {@code DELETE /users/{id}/lock} — no waiting out the window.
+     */
+    @Test
+    void adminUnlockAllowsLoginImmediately() throws Exception {
+        User user = userRepository.findByEmail(EMAIL).orElseThrow();
+        UserAccount account = user.getUserAccount();
+        account.setLockedUntil(OffsetDateTime.now().plusMinutes(10));
+        account.setFailedLoginAttempts(5);
+        userRepository.save(user);
+        entityManager.flush();
+        entityManager.clear();
+
+        // Locked: even the correct password is rejected.
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"admin@acme.com","password":"password123"}"""))
+                .andExpect(status().isLocked());
+
+        String token = jwtTokenProvider.generateAccessToken(
+                UUID.randomUUID().toString(), "admin-writer@acme.com", "public",
+                java.util.List.of("iam:user:write"));
+        User lockedUser = userRepository.findByEmail(EMAIL).orElseThrow();
+        mockMvc.perform(delete("/api/v1/users/{id}/lock", lockedUser.getId())
+                        .cookie(new Cookie(ACCESS_COOKIE, token)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.lockedUntil").value(org.hamcrest.Matchers.nullValue()));
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"admin@acme.com","password":"password123"}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value(EMAIL));
     }
 
     private String loginAndGetToken() throws Exception {

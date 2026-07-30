@@ -6,19 +6,31 @@ import com.ibrhalil.forgesys.dto.PermissionResponse;
 import com.ibrhalil.forgesys.dto.RoleRequest;
 import com.ibrhalil.forgesys.dto.RoleResponse;
 import com.ibrhalil.forgesys.dto.RoleSummary;
+import com.ibrhalil.forgesys.entity.AuditEntity_;
+import com.ibrhalil.forgesys.entity.Group;
 import com.ibrhalil.forgesys.entity.Permission;
 import com.ibrhalil.forgesys.entity.Role;
+import com.ibrhalil.forgesys.entity.Role_;
+import com.ibrhalil.forgesys.entity.User;
 import com.ibrhalil.forgesys.exception.BusinessException;
 import com.ibrhalil.forgesys.exception.ErrorCode;
 import com.ibrhalil.forgesys.exception.ResourceNotFoundException;
+import com.ibrhalil.forgesys.persistence.repository.GroupRepository;
 import com.ibrhalil.forgesys.persistence.repository.PermissionRepository;
 import com.ibrhalil.forgesys.persistence.repository.RoleRepository;
+import com.ibrhalil.forgesys.persistence.repository.UserRepository;
 import com.ibrhalil.forgesys.security.SessionRevocationService;
+import com.ibrhalil.forgesys.security.LastAdminGuard;
+import com.ibrhalil.forgesys.web.filter.FilterFieldSet;
+import com.ibrhalil.forgesys.web.filter.FilterFieldType;
+import com.ibrhalil.forgesys.web.filter.FilterSpecifications;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.util.Comparator;
 import java.util.LinkedHashSet;
@@ -30,14 +42,30 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class RoleService {
 
+    /** Filterable/sortable direct attributes of the role list; {@code q} matches {@code name}. */
+    public static final FilterFieldSet FILTER_FIELDS = FilterFieldSet.builder()
+            .field(Role_.NAME, FilterFieldType.STRING, true)
+            .field(Role_.DESCRIPTION, FilterFieldType.STRING, false)
+            .field(Role_.ALL_PERMISSIONS, FilterFieldType.BOOLEAN, false)
+            .field(AuditEntity_.CREATED_DATE, FilterFieldType.TEMPORAL, false)
+            .field(AuditEntity_.UPDATED_AT, FilterFieldType.TEMPORAL, false)
+            .build();
+
     private final RoleRepository roleRepository;
     private final PermissionRepository permissionRepository;
+    private final UserRepository userRepository;
+    private final GroupRepository groupRepository;
     private final AuditService auditService;
     private final SessionRevocationService sessionRevocationService;
+    private final LastAdminGuard lastAdminGuard;
+
+    /** Audit-delta sentinel marking that a role carries the {@code all_permissions} flag. */
+    private static final String ALL_PERMISSIONS_SENTINEL = "ALL_PERMISSIONS";
 
     @Transactional(readOnly = true)
-    public Page<RoleResponse> findAll(Pageable pageable) {
-        return roleRepository.findAll(pageable).map(this::toResponse);
+    public Page<RoleResponse> search(String q, Pageable pageable) {
+        Specification<Role> spec = FilterSpecifications.from(FILTER_FIELDS, StringUtils.hasText(q) ? q.trim() : null, List.of());
+        return roleRepository.findAll(spec, pageable).map(this::toResponse);
     }
 
     @Transactional(readOnly = true)
@@ -73,43 +101,78 @@ public class RoleService {
 
     @Transactional
     public void delete(UUID id) {
-        if (!roleRepository.existsById(id)) {
-            throw new ResourceNotFoundException("Role not found: " + id);
+        Role role = getRoleOrThrow(id);
+        // Detach the role from every referencing collection BEFORE the soft-delete.
+        // t_user_roles/t_group_roles are owned by User.roles/Group.roles; leaving the
+        // join rows behind keeps managed collections referencing a deleted role, which
+        // fails the flush with TransientPropertyValueException (and leaves orphan rows).
+        for (User holder : userRepository.findUsersByRole(id)) {
+            holder.getRoles().remove(role);
         }
-        // Faz 1: revoke BEFORE the soft-delete. findUserIdsByRole joins through the role
-        // entity, which @SQLRestriction filters out once is_deleted=true — so resolving
-        // bearers after deleteById would return nobody and the revoke would silently miss
-        // every holder. Every bearer's outstanding tokens still carry the removed role's
-        // permissions until their next issue, so kill their sessions now.
-        sessionRevocationService.revokeRoleHolders(id);
-        roleRepository.deleteById(id);
+        for (Group carrier : groupRepository.findGroupsByRole(id)) {
+            carrier.getRoles().remove(role);
+        }
+        // Resolve revoke targets (direct + via active groups) while the role is still
+        // visible to the queries; the revoke itself fires after the guard.
+        List<UUID> holderIds = sessionRevocationService.resolveRoleHolderIds(id);
+        roleRepository.delete(role);
+        // Last-admin guard AFTER the soft-delete (auto-flushed): the deleted role is
+        // invisible to the admin-closure queries, so deleting the last admin-capable
+        // role — or one whose only remaining enabled holder was its last admin — is
+        // rejected and the whole tx rolls back. Runs BEFORE the revoke so a rejected
+        // delete leaves no Redis-side refresh-token carnage behind.
+        lastAdminGuard.assertActiveAdminExists();
+        sessionRevocationService.revokeUsers(holderIds);
         auditService.record("role_deleted", "Role", id, null);
     }
 
     @Transactional
     public RoleResponse setPermissions(UUID roleId, AssignPermissionsRequest request) {
         Role role = getRoleOrThrow(roleId);
-        List<UUID> requestedIds = request.permissionIds();
-        List<Permission> permissions = requestedIds.isEmpty()
-                ? List.of()
-                : permissionRepository.findAllById(requestedIds);
-        if (permissions.size() != requestedIds.size()) {
-            throw new ResourceNotFoundException("One or more permissions not found");
+        boolean all = Boolean.TRUE.equals(request.all());
+        // Capture the before-state for the audit delta (ALL_PERMISSIONS sentinel flags the
+        // all-permissions mode; otherwise the explicit permission-name set).
+        java.util.Set<String> beforeNames = role.isAllPermissions()
+                ? java.util.Set.of(ALL_PERMISSIONS_SENTINEL)
+                : role.getPermissions().stream()
+                        .map(Permission::getName).collect(java.util.stream.Collectors.toSet());
+        if (all) {
+            role.setAllPermissions(true);
+            role.getPermissions().clear();
+        } else {
+            List<UUID> requestedIds = request.permissionIds();
+            if (requestedIds == null) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                        "permissionIds must be present when 'all' is not true");
+            }
+            List<Permission> permissions = requestedIds.isEmpty()
+                    ? List.of()
+                    : permissionRepository.findAllById(requestedIds);
+            if (permissions.size() != requestedIds.size()) {
+                throw new ResourceNotFoundException("One or more permissions not found");
+            }
+            role.setAllPermissions(false);
+            // Mutate the persistent collection (don't replace the reference).
+            role.getPermissions().clear();
+            role.getPermissions().addAll(permissions);
         }
-        java.util.Set<String> beforeNames = role.getPermissions().stream()
-                .map(Permission::getName).collect(java.util.stream.Collectors.toSet());
-        // Mutate the persistent collection (don't replace the reference).
-        role.getPermissions().clear();
-        role.getPermissions().addAll(permissions);
+        // Last-admin guard BEFORE save: clearing the {@code all_permissions} flag (or
+        // emptying the role) may drop every admin below the one-active-admin floor —
+        // the closure queries auto-flush the pending flag/collection change first.
+        lastAdminGuard.assertActiveAdminExists();
         Role saved = roleRepository.save(role);
         // Faz 1: a permission delta on this role changes what every bearer can do, but
         // their outstanding tokens still embed the old permission set — revoke so the
         // delta is enforced on the next request, not at access-token TTL.
         sessionRevocationService.revokeRoleHolders(saved.getId());
         // Faz 2b: record the before/after permission set.
+        java.util.Set<String> afterNames = saved.isAllPermissions()
+                ? java.util.Set.of(ALL_PERMISSIONS_SENTINEL)
+                : saved.getPermissions().stream()
+                        .map(Permission::getName).collect(java.util.stream.Collectors.toSet());
         auditService.recordDelta("role_permissions_updated", "Role", saved.getId(), saved.getName(),
                 AuditService.namesJson(beforeNames),
-                AuditService.namesJson(permissions.stream().map(Permission::getName).collect(java.util.stream.Collectors.toSet())));
+                AuditService.namesJson(afterNames));
         return toResponse(saved);
     }
 
@@ -142,6 +205,10 @@ public class RoleService {
                 .map(Role::getName).collect(java.util.stream.Collectors.toSet());
         role.getParentRoles().clear();
         role.getParentRoles().addAll(parents);
+        // Last-admin guard: breaking an inheritance edge (e.g. removing an
+        // all-permissions parent) strips admin-capability from this role's holders —
+        // the downward-closure query auto-flushes the pending t_role_parents change.
+        lastAdminGuard.assertActiveAdminExists();
         Role saved = roleRepository.save(role);
         sessionRevocationService.revokeRoleHolders(saved.getId());
         auditService.recordDelta("role_parents_updated", "Role", saved.getId(), saved.getName(),
@@ -188,6 +255,7 @@ public class RoleService {
                 .map(p -> new RoleSummary(p.getId(), p.getName()))
                 .sorted(Comparator.comparing(RoleSummary::name))
                 .toList();
-        return new RoleResponse(role.getId(), role.getName(), role.getDescription(), permissions, parents);
+        return new RoleResponse(role.getId(), role.getName(), role.getDescription(),
+                role.isAllPermissions(), permissions, parents);
     }
 }

@@ -36,6 +36,17 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- JPA canonical metamodel generator (compile-time, never on the runtime
+             classpath of consumers). Feeds the typed sort/filter whitelists in the
+             backend web layer; generated sources land in
+             target/generated-sources/annotations. -->
+        <dependency>
+            <groupId>org.hibernate.orm</groupId>
+            <artifactId>hibernate-jpamodelgen</artifactId>
+            <version>${hibernate-jpamodelgen.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
@@ -62,5 +73,33 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <!-- The parent pluginManagement registers Lombok as the only annotation
+                 processor (which disables classpath processor discovery), and a child
+                 declaration REPLACES that list — so both processors must be declared
+                 here explicitly: Lombok (getters/setters) + the JPA metamodel
+                 generator (User_ etc. for typed sort/filter whitelists). -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                        <path>
+                            <groupId>org.hibernate.orm</groupId>
+                            <artifactId>hibernate-jpamodelgen</artifactId>
+                            <version>${hibernate-jpamodelgen.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 
 </project>

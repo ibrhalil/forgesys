@@ -45,7 +45,7 @@ class AuditControllerTest extends AbstractRbacWebTest {
                 // Membership (not position): other @SpringBootTest classes share this H2 and their
                 // REQUIRES_NEW audit writes survive @Transactional rollback, so the seeded row may
                 // not be at content[0].
-                .andExpect(jsonPath("$.content[*].actorName").value(hasItem("audit_seeded_actor@example.com")));
+                .andExpect(jsonPath("$.data[*].actorName").value(hasItem("audit_seeded_actor@example.com")));
     }
 
     @Test
@@ -62,8 +62,70 @@ class AuditControllerTest extends AbstractRbacWebTest {
                         .param("action", "test_probe_audit_filter")
                         .cookie(auth("reader@tenant.test", "iam:audit:read")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalElements").value(1))
-                .andExpect(jsonPath("$.content[0].action").value("test_probe_audit_filter"));
+                .andExpect(jsonPath("$.meta.totalElements").value(1))
+                .andExpect(jsonPath("$.data[0].action").value("test_probe_audit_filter"));
+    }
+
+    @Test
+    void auditLogsCombineActionAndActorFilters() throws Exception {
+        // First-match dispatch is gone: both filters must apply (AND). Two probes share
+        // the action but differ in actor — only the matching pair survives.
+        java.util.UUID actorA = java.util.UUID.randomUUID();
+        java.util.UUID actorB = java.util.UUID.randomUUID();
+        AuditLog probeA = new AuditLog();
+        probeA.setAction("test_probe_combined_filter");
+        probeA.setActorId(actorA);
+        probeA.setActorName("combined_a@example.com");
+        probeA.setEntityType("User");
+        entityManager.persist(probeA);
+        AuditLog probeB = new AuditLog();
+        probeB.setAction("test_probe_combined_filter");
+        probeB.setActorId(actorB);
+        probeB.setActorName("combined_b@example.com");
+        probeB.setEntityType("User");
+        entityManager.persist(probeB);
+
+        mockMvc.perform(get("/api/v1/audit-logs")
+                        .param("action", "test_probe_combined_filter")
+                        .param("actorId", actorA.toString())
+                        .cookie(auth("reader@tenant.test", "iam:audit:read")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.meta.totalElements").value(1))
+                .andExpect(jsonPath("$.data[0].actorName").value("combined_a@example.com"));
+    }
+
+    @Test
+    void auditLogsRejectSortOutsideWhitelist() throws Exception {
+        mockMvc.perform(get("/api/v1/audit-logs")
+                        .param("sort", "requestBody")
+                        .cookie(auth("reader@tenant.test", "iam:audit:read")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("validation_error"));
+    }
+
+    @Test
+    void auditLogsSearchByQMatchesAction() throws Exception {
+        // Unique sentinels: other @SpringBootTest classes' REQUIRES_NEW audit writes survive
+        // rollback in the shared H2, so real action keys (user_created etc.) cannot be
+        // asserted by absence — only these probes can.
+        AuditLog probe = new AuditLog();
+        probe.setAction("q_probe_action_alpha");
+        probe.setActorName("q_probe@example.com");
+        probe.setEntityType("User");
+        entityManager.persist(probe);
+        AuditLog other = new AuditLog();
+        other.setAction("q_probe_action_beta");
+        other.setActorName("q_probe@example.com");
+        other.setEntityType("Role");
+        entityManager.persist(other);
+
+        // q reaches the action key — replaces the old exact-match action filter form.
+        mockMvc.perform(get("/api/v1/audit-logs")
+                        .param("q", "alpha")
+                        .cookie(auth("reader@tenant.test", "iam:audit:read")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[*].action").value(hasItem("q_probe_action_alpha")))
+                .andExpect(jsonPath("$.data[*].action").value(not(hasItem("q_probe_action_beta"))));
     }
 
     @Test
@@ -90,7 +152,7 @@ class AuditControllerTest extends AbstractRbacWebTest {
 
         mockMvc.perform(get("/api/v1/login-history").cookie(auth("reader@tenant.test", "iam:audit:read")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content[*].username").value(hasItem("login_seeded@example.com")));
+                .andExpect(jsonPath("$.data[*].username").value(hasItem("login_seeded@example.com")));
     }
 
     @Test
@@ -112,7 +174,7 @@ class AuditControllerTest extends AbstractRbacWebTest {
                 // The failure probe must appear and the success probe must not — proving the
                 // success=false filter both includes failures and excludes successes, regardless
                 // of other failed-login rows left by prior tests.
-                .andExpect(jsonPath("$.content[*].username").value(hasItem("login_failure_probe@example.com")))
-                .andExpect(jsonPath("$.content[*].username").value(not(hasItem("login_success_probe@example.com"))));
+                .andExpect(jsonPath("$.data[*].username").value(hasItem("login_failure_probe@example.com")))
+                .andExpect(jsonPath("$.data[*].username").value(not(hasItem("login_success_probe@example.com"))));
     }
 }

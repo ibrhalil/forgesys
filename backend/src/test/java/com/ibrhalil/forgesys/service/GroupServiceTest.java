@@ -9,6 +9,7 @@ import com.ibrhalil.forgesys.persistence.repository.GroupRepository;
 import com.ibrhalil.forgesys.persistence.repository.RoleRepository;
 import com.ibrhalil.forgesys.persistence.repository.UserRepository;
 import com.ibrhalil.forgesys.security.SessionRevocationService;
+import com.ibrhalil.forgesys.security.CustomUserDetailsService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,6 +23,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -41,12 +43,16 @@ class GroupServiceTest {
     private AuditService auditService;
     @Mock
     private SessionRevocationService sessionRevocationService;
+    @Mock
+    private CustomUserDetailsService customUserDetailsService;
+    @Mock
+    private com.ibrhalil.forgesys.security.LastAdminGuard lastAdminGuard;
 
     private GroupService groupService;
 
     @BeforeEach
     void setUp() {
-        groupService = new GroupService(groupRepository, roleRepository, userRepository, auditService, sessionRevocationService);
+        groupService = new GroupService(groupRepository, roleRepository, userRepository, auditService, sessionRevocationService, customUserDetailsService, lastAdminGuard);
     }
 
     @Test
@@ -77,11 +83,13 @@ class GroupServiceTest {
     @Test
     void deleteRecordsAudit() {
         UUID id = UUID.randomUUID();
-        when(groupRepository.existsById(id)).thenReturn(true);
+        Group group = groupFixture(id, "Engineers");
+        when(groupRepository.findById(id)).thenReturn(Optional.of(group));
+        when(userRepository.findGroupMembers(id)).thenReturn(List.of());
 
         groupService.delete(id);
 
-        verify(groupRepository).deleteById(id);
+        verify(groupRepository).delete(group);
         verify(auditService).record("group_deleted", "Group", id, null);
     }
 
@@ -127,13 +135,21 @@ class GroupServiceTest {
     @Test
     void deleteRevokesMembers() {
         UUID id = UUID.randomUUID();
-        when(groupRepository.existsById(id)).thenReturn(true);
+        Group group = groupFixture(id, "Engineers");
+        UUID memberId = UUID.randomUUID();
+        User member = new User();
+        member.setId(memberId);
+        member.getGroups().add(group);
+        when(groupRepository.findById(id)).thenReturn(Optional.of(group));
+        when(userRepository.findGroupMembers(id)).thenReturn(List.of(member));
 
         groupService.delete(id);
 
-        // Revoked BEFORE the soft-delete (findUserIdsByGroup filters deleted groups).
-        verify(sessionRevocationService).revokeGroupMembers(id);
-        verify(groupRepository).deleteById(id);
+        // Membership detached (join rows owned by User.groups) and the member's
+        // sessions revoked AFTER the last-admin guard.
+        assertThat(member.getGroups()).isEmpty();
+        verify(sessionRevocationService).revokeUsers(List.of(memberId));
+        verify(groupRepository).delete(group);
     }
 
     @Test

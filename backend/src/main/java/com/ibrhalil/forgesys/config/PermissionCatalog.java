@@ -14,9 +14,11 @@ import java.util.List;
  *       for the system tenant admin; enforced on {@code /api/v1/platform/**}.</li>
  * </ul>
  *
- * <p>The built-in {@code Admin} role is granted every permission in {@link #ALL}, so growing
- * this catalog automatically keeps Admin complete (the seeder re-syncs the role's permission
- * set on every startup).
+ * <p>The built-in {@code Admin} role implicitly holds every permission via the
+ * {@code all_permissions} flag (set by {@code RbacSeeder}, resolved dynamically by
+ * {@code CustomUserDetailsService} — no per-permission grant rows), so it stays complete
+ * without the seeder re-syncing explicit grants. {@link #ALL} only drives which permission
+ * <em>rows</em> are seeded into {@code t_permissions}.
  */
 public final class PermissionCatalog {
 
@@ -25,11 +27,14 @@ public final class PermissionCatalog {
     public static final String IAM_USER_READ = "iam:user:read";
     public static final String IAM_USER_WRITE = "iam:user:write";
     public static final String IAM_USER_DELETE = "iam:user:delete";
+    /** Scoped read: see the members of one's own groups (+ self) instead of the whole tenant. */
+    public static final String IAM_GROUP_MEMBER_READ = "iam:group-member:read";
     public static final String IAM_ROLE_READ = "iam:role:read";
     public static final String IAM_ROLE_WRITE = "iam:role:write";
     public static final String IAM_ROLE_DELETE = "iam:role:delete";
     public static final String IAM_PERMISSION_READ = "iam:permission:read";
     public static final String IAM_PERMISSION_WRITE = "iam:permission:write";
+    public static final String IAM_PERMISSION_DELETE = "iam:permission:delete";
     public static final String IAM_GROUP_READ = "iam:group:read";
     public static final String IAM_GROUP_WRITE = "iam:group:write";
     public static final String IAM_GROUP_DELETE = "iam:group:delete";
@@ -53,11 +58,13 @@ public final class PermissionCatalog {
             new PermissionDefinition(IAM_USER_READ, "Read tenant users"),
             new PermissionDefinition(IAM_USER_WRITE, "Create or update tenant users"),
             new PermissionDefinition(IAM_USER_DELETE, "Delete tenant users"),
+            new PermissionDefinition(IAM_GROUP_MEMBER_READ, "Read members of own groups (scoped user visibility)"),
             new PermissionDefinition(IAM_ROLE_READ, "Read tenant roles"),
             new PermissionDefinition(IAM_ROLE_WRITE, "Create or update tenant roles"),
             new PermissionDefinition(IAM_ROLE_DELETE, "Delete tenant roles"),
             new PermissionDefinition(IAM_PERMISSION_READ, "Read tenant permissions"),
             new PermissionDefinition(IAM_PERMISSION_WRITE, "Create or update tenant permissions"),
+            new PermissionDefinition(IAM_PERMISSION_DELETE, "Delete tenant permissions"),
             new PermissionDefinition(IAM_GROUP_READ, "Read tenant groups"),
             new PermissionDefinition(IAM_GROUP_WRITE, "Create or update tenant groups"),
             new PermissionDefinition(IAM_GROUP_DELETE, "Delete tenant groups"),

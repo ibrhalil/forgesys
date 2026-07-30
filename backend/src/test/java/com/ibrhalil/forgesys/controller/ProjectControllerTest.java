@@ -10,6 +10,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 
+import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -57,8 +59,28 @@ class ProjectControllerTest extends AbstractRbacWebTest {
 
         mockMvc.perform(get("/api/v1/projects").cookie(auth("reader@tenant.test", "pm:project:read")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content[?(@.name=='Alpha')].type").value("TASKS"))
-                .andExpect(jsonPath("$.content[?(@.name=='Beta')].type").value("NOTES"));
+                .andExpect(jsonPath("$.data[?(@.name=='Alpha')].type").value("TASKS"))
+                .andExpect(jsonPath("$.data[?(@.name=='Beta')].type").value("NOTES"));
+    }
+
+    @Test
+    void listWithQFiltersByName() throws Exception {
+        seedProject("gamma_probe", ProjectType.TASKS);
+        seedProject("delta_probe", ProjectType.NOTES);
+
+        mockMvc.perform(get("/api/v1/projects").param("q", "GAMMA")
+                        .cookie(auth("reader@tenant.test", "pm:project:read")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[*].name").value(hasItem("gamma_probe")))
+                .andExpect(jsonPath("$.data[*].name").value(not(hasItem("delta_probe"))));
+    }
+
+    @Test
+    void listWithSortOutsideWhitelistReturns400() throws Exception {
+        mockMvc.perform(get("/api/v1/projects").param("sort", "notAField")
+                        .cookie(auth("reader@tenant.test", "pm:project:read")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("validation_error"));
     }
 
     @Test

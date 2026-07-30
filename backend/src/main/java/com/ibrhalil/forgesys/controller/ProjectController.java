@@ -1,11 +1,12 @@
 package com.ibrhalil.forgesys.controller;
 
+import com.ibrhalil.forgesys.dto.PageResponse;
 import com.ibrhalil.forgesys.dto.ProjectRequest;
 import com.ibrhalil.forgesys.dto.ProjectResponse;
 import com.ibrhalil.forgesys.service.ProjectService;
+import com.ibrhalil.forgesys.web.SortGuard;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
@@ -31,8 +33,11 @@ public class ProjectController {
 
     @GetMapping
     @PreAuthorize("hasAuthority('pm:project:read')")
-    public ResponseEntity<Page<ProjectResponse>> list(@PageableDefault(sort = "name") Pageable pageable) {
-        return ResponseEntity.ok(projectService.findAll(pageable));
+    public ResponseEntity<PageResponse<ProjectResponse>> list(
+            @PageableDefault(sort = "name") Pageable pageable,
+            @RequestParam(required = false) String q) {
+        SortGuard.require(pageable, ProjectService.FILTER_FIELDS);
+        return ResponseEntity.ok(PageResponse.of(projectService.search(q, pageable)));
     }
 
     @GetMapping("/{id}")
