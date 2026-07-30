@@ -296,9 +296,14 @@ public class TenantProvisioningService {
             user.setUserProfile(profile);
 
             userRepository.save(user);
-            // Seed RBAC (permission catalog + Admin role) and grant Admin to the new
-            // (role-less) user — runs in the tenant context set above. No-op in tests.
-            rbacSeederProvider.ifAvailable(RbacSeeder::seedForCurrentTenant);
+            // Seed RBAC (permission catalog + Admin role), then explicitly grant Admin
+            // to this first admin user — the ONLY place Admin is auto-assigned. Startup
+            // seeding never touches user roles (privilege-escalation fix, 2026-08-16).
+            // No-op in tests.
+            rbacSeederProvider.ifAvailable(seeder -> {
+                seeder.seedForCurrentTenant();
+                seeder.assignAdminTo(user);
+            });
             log.info("Admin user created for tenant schema: {}", schemaName);
         } finally {
             TenantContext.clear();

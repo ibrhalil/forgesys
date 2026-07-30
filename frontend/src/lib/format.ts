@@ -12,11 +12,25 @@ const DATETIME_FMT = new Intl.DateTimeFormat('en-GB', {
   minute: '2-digit',
 });
 
+const DATE_FMT = new Intl.DateTimeFormat('en-GB', {
+  year: 'numeric',
+  month: 'short',
+  day: '2-digit',
+});
+
 /** "30 Jul 2026, 14:05" — for table cells. Falls back to the raw input on parse failure. */
 export function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return '—';
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? iso : DATETIME_FMT.format(d);
+}
+
+/** "30 Jul 2026" — for date-only values (e.g. task due dates, yyyy-mm-dd). */
+export function formatDate(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  // Plain yyyy-mm-dd parses as UTC; keep the calendar date stable in local time.
+  const d = iso.length === 10 ? new Date(`${iso}T00:00:00`) : new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso : DATE_FMT.format(d);
 }
 
 /**
@@ -43,8 +57,8 @@ export function relativeTime(iso: string | null | undefined): string {
  * back to the raw string when nothing recognizable matches — precise UA parsing is out
  * of scope for the UI; this only needs to be human-readable.
  */
-export function describeUserAgent(ua: string | null | undefined): string {
-  if (!ua) return 'Unknown device';
+export function describeUserAgent(ua: string | null | undefined): string | null {
+  if (!ua) return null;
   const browser = /Edg\//.test(ua) ? 'Edge'
     : /Chrome\//.test(ua) ? 'Chrome'
     : /Firefox\//.test(ua) ? 'Firefox'

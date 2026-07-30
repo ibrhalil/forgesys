@@ -13,6 +13,7 @@ import com.ibrhalil.forgesys.persistence.repository.GroupRepository;
 import com.ibrhalil.forgesys.persistence.repository.RoleRepository;
 import com.ibrhalil.forgesys.persistence.repository.UserRepository;
 import com.ibrhalil.forgesys.security.SessionRevocationService;
+import com.ibrhalil.forgesys.security.CustomUserDetailsService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -26,6 +27,7 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -34,6 +36,10 @@ class UserServiceTest {
 
     @Mock
     private UserRepository userRepository;
+    @Mock
+    private com.ibrhalil.forgesys.persistence.repository.UserDirectoryViewRepository userDirectoryViewRepository;
+    @Mock
+    private com.ibrhalil.forgesys.persistence.repository.LoginHistoryRepository loginHistoryRepository;
     @Mock
     private RoleRepository roleRepository;
     @Mock
@@ -44,12 +50,16 @@ class UserServiceTest {
     private AuditService auditService;
     @Mock
     private SessionRevocationService sessionRevocationService;
+    @Mock
+    private CustomUserDetailsService customUserDetailsService;
+    @Mock
+    private com.ibrhalil.forgesys.security.LastAdminGuard lastAdminGuard;
 
     private UserService userService;
 
     @BeforeEach
     void setUp() {
-        userService = new UserService(userRepository, roleRepository, groupRepository, passwordEncoder, auditService, sessionRevocationService);
+        userService = new UserService(userRepository, userDirectoryViewRepository, loginHistoryRepository, roleRepository, groupRepository, passwordEncoder, auditService, sessionRevocationService, customUserDetailsService, lastAdminGuard);
     }
 
     @Test
@@ -60,7 +70,7 @@ class UserServiceTest {
         UUID savedId = UUID.randomUUID();
         when(userRepository.save(any(User.class))).thenReturn(userFixture(savedId, "new@example.com", "new"));
 
-        userService.create(new UserCreateRequest("new@example.com", "secret", null, "First", "Last", true));
+        userService.create(new UserCreateRequest("new@example.com", "secret", null, "First", "Last", true, null, null));
 
         verify(auditService).record("user_created", "User", savedId, "new@example.com");
     }
@@ -187,6 +197,48 @@ class UserServiceTest {
         userService.resetPassword(id, new AdminPasswordResetRequest("newpass123"));
 
         verify(sessionRevocationService).revokeUser(id);
+    }
+
+    /* ── last-admin guard wiring ── */
+
+    @Test
+    void deleteChecksSelfAndLastAdminAndRevokesSessions() {
+        UUID id = UUID.randomUUID();
+        when(userRepository.existsById(id)).thenReturn(true);
+
+        userService.delete(id);
+
+        verify(lastAdminGuard).assertNotSelf(id);
+        verify(lastAdminGuard).assertActiveAdminExists();
+        // Side-fix 2: the deleted user's outstanding tokens must die immediately.
+        verify(sessionRevocationService).revokeUser(id);
+    }
+
+    @Test
+    void updateDisablingChecksLastAdminAndRevokesSessions() {
+        UUID id = UUID.randomUUID();
+        User user = userFixture(id, "user@example.com", "user"); // account enabled
+        when(userRepository.findById(id)).thenReturn(Optional.of(user));
+        when(userRepository.save(any(User.class))).thenReturn(user);
+
+        userService.update(id, new UserUpdateRequest("First", "Last", false));
+
+        verify(lastAdminGuard).assertActiveAdminExists();
+        verify(sessionRevocationService).revokeUser(id);
+    }
+
+    @Test
+    void updateReenablingDoesNotCheckLastAdminOrRevoke() {
+        UUID id = UUID.randomUUID();
+        User user = userFixture(id, "user@example.com", "user");
+        user.getUserAccount().setEnabled(false);
+        when(userRepository.findById(id)).thenReturn(Optional.of(user));
+        when(userRepository.save(any(User.class))).thenReturn(user);
+
+        userService.update(id, new UserUpdateRequest("First", "Last", true));
+
+        verify(lastAdminGuard, never()).assertActiveAdminExists();
+        verify(sessionRevocationService, never()).revokeUser(any());
     }
 
     private User userFixture(UUID id, String email, String username) {

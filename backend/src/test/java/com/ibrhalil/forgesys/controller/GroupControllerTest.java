@@ -1,10 +1,9 @@
 package com.ibrhalil.forgesys.controller;
 
 import com.ibrhalil.forgesys.entity.Group;
+import com.ibrhalil.forgesys.entity.Permission;
 import com.ibrhalil.forgesys.entity.Role;
 import com.ibrhalil.forgesys.entity.User;
-import com.ibrhalil.forgesys.entity.UserAccount;
-import com.ibrhalil.forgesys.entity.UserProfile;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
@@ -13,6 +12,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 
+import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -64,16 +65,41 @@ class GroupControllerTest extends AbstractRbacWebTest {
         group.getRoles().add(role);
         entityManager.persist(group);
 
-        User member = seedUser("member@tenant.test", "member1");
+        User member = seedRbacUser("member@tenant.test", "member1");
         member.getGroups().add(group);
         entityManager.merge(member);
         entityManager.flush();
 
         mockMvc.perform(get("/api/v1/groups").cookie(auth("reader@tenant.test", "iam:group:read")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content[0].name").value("engineering"))
-                .andExpect(jsonPath("$.content[0].roles[0].name").value("viewer"))
-                .andExpect(jsonPath("$.content[0].memberCount").value(1));
+                .andExpect(jsonPath("$.data[0].name").value("engineering"))
+                .andExpect(jsonPath("$.data[0].roles[0].name").value("viewer"))
+                .andExpect(jsonPath("$.data[0].memberCount").value(1));
+    }
+
+    @Test
+    void listWithQFiltersByName() throws Exception {
+        Group eng = new Group();
+        eng.setName("engineering_probe");
+        entityManager.persist(eng);
+        Group sales = new Group();
+        sales.setName("sales_probe");
+        entityManager.persist(sales);
+        entityManager.flush();
+
+        mockMvc.perform(get("/api/v1/groups").param("q", "engineering")
+                        .cookie(auth("reader@tenant.test", "iam:group:read")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[*].name").value(hasItem("engineering_probe")))
+                .andExpect(jsonPath("$.data[*].name").value(not(hasItem("sales_probe"))));
+    }
+
+    @Test
+    void listWithNestedSortPropertyReturns400() throws Exception {
+        mockMvc.perform(get("/api/v1/groups").param("sort", "roles.name")
+                        .cookie(auth("reader@tenant.test", "iam:group:read")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("validation_error"));
     }
 
     /* ── create ── */
@@ -128,10 +154,34 @@ class GroupControllerTest extends AbstractRbacWebTest {
                 .andExpect(jsonPath("$.code").value("resource_not_found"));
     }
 
+    /* ── effective-permissions ── */
+
+    @Test
+    void effectivePermissionsResolvesGroupRolePermissions() throws Exception {
+        Permission perm = new Permission();
+        perm.setName("pm:project:read");
+        entityManager.persist(perm);
+        Role role = new Role();
+        role.setName("viewer");
+        role.getPermissions().add(perm);
+        entityManager.persist(role);
+        Group group = new Group();
+        group.setName("engineering");
+        group.getRoles().add(role);
+        entityManager.persist(group);
+        entityManager.flush();
+
+        mockMvc.perform(get("/api/v1/groups/" + group.getId() + "/effective-permissions")
+                        .cookie(auth("reader@tenant.test", "iam:group:read")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0]").value("pm:project:read"));
+    }
+
     /* ── setRoles ── */
 
     @Test
     void setRolesReplacesGroupRoleSet() throws Exception {
+        seedAdmin();
         Group group = new Group();
         group.setName("qa");
         entityManager.persist(group);
@@ -172,11 +222,12 @@ class GroupControllerTest extends AbstractRbacWebTest {
 
     @Test
     void setMembersReplacesGroupMembers() throws Exception {
+        seedAdmin();
         Group group = new Group();
         group.setName("devops");
         entityManager.persist(group);
 
-        User user = seedUser("alice@tenant.test", "alice");
+        User user = seedRbacUser("alice@tenant.test", "alice");
         entityManager.flush();
 
         mockMvc.perform(put("/api/v1/groups/" + group.getId() + "/members")
@@ -191,6 +242,7 @@ class GroupControllerTest extends AbstractRbacWebTest {
 
     @Test
     void deleteReturns204() throws Exception {
+        seedAdmin();
         Group group = new Group();
         group.setName("tmp");
         entityManager.persist(group);
@@ -201,26 +253,51 @@ class GroupControllerTest extends AbstractRbacWebTest {
                 .andExpect(status().isNoContent());
     }
 
-    /* ── helpers ── */
+    /* ── last-admin guard ── */
 
-    private User seedUser(String email, String username) {
-        User user = new User();
-        user.setUsername(username);
-        user.setEmail(email);
-        user.setPassword("$2a$12$dummyHashForTestingOnly00000000000000000000000000000");
-        user.setEmailVerified(false);
+    @Test
+    void removingLastAdminFromAdminCarryingGroupReturns409() throws Exception {
+        // The group is the tenant's only source of admin capacity: it carries the only
+        // all_permissions role and its only member is the only enabled holder.
+        Role adminRole = new Role();
+        adminRole.setName("Admin");
+        adminRole.setAllPermissions(true);
+        entityManager.persist(adminRole);
+        Group group = new Group();
+        group.setName("admins");
+        group.getRoles().add(adminRole);
+        entityManager.persist(group);
+        User member = seedRbacUser("admin@tenant.test", "admin");
+        member.getGroups().add(group);
+        entityManager.merge(member);
+        entityManager.flush();
 
-        UserAccount account = new UserAccount();
-        account.setUser(user);
-        user.setUserAccount(account);
+        mockMvc.perform(put("/api/v1/groups/" + group.getId() + "/members")
+                        .contentType(JSON)
+                        .cookie(auth("writer@tenant.test", "iam:group:write"))
+                        .content("{\"userIds\":[]}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("last_admin_required"));
+    }
 
-        UserProfile profile = new UserProfile();
-        profile.setUser(user);
-        profile.setFirstName("Test");
-        profile.setLastName("User");
-        user.setUserProfile(profile);
+    @Test
+    void deleteLastAdminCarryingGroupReturns409() throws Exception {
+        Role adminRole = new Role();
+        adminRole.setName("Admin");
+        adminRole.setAllPermissions(true);
+        entityManager.persist(adminRole);
+        Group group = new Group();
+        group.setName("admins");
+        group.getRoles().add(adminRole);
+        entityManager.persist(group);
+        User member = seedRbacUser("admin@tenant.test", "admin");
+        member.getGroups().add(group);
+        entityManager.merge(member);
+        entityManager.flush();
 
-        entityManager.persist(user);
-        return user;
+        mockMvc.perform(delete("/api/v1/groups/" + group.getId())
+                        .cookie(auth("deleter@tenant.test", "iam:group:delete")))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("last_admin_required"));
     }
 }

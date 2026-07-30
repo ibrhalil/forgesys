@@ -141,7 +141,17 @@ class TenantProvisioningServiceTest {
 
         verify(tenantMigrationSupport).migrateSchema(SCHEMA_NAME);
         verify(userRepository).save(any());
-        verify(rbacSeederProvider).ifAvailable(any());
+        // The provisioning callback must seed the catalog AND explicitly grant Admin to
+        // the new user — startup seeding no longer assigns roles (privilege-escalation
+        // fix, 2026-08-16), so this is the only Admin grant path.
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<java.util.function.Consumer<RbacSeeder>> seederCaptor =
+                ArgumentCaptor.forClass(java.util.function.Consumer.class);
+        verify(rbacSeederProvider).ifAvailable(seederCaptor.capture());
+        RbacSeeder seeder = org.mockito.Mockito.mock(RbacSeeder.class);
+        seederCaptor.getValue().accept(seeder);
+        verify(seeder).seedForCurrentTenant();
+        verify(seeder).assignAdminTo(any(com.ibrhalil.forgesys.entity.User.class));
         // [RISK-25] the claim UPDATE persists used_at; the service no longer re-saves the
         // token afterwards.
         verify(tokenRepository, never()).save(any(TenantVerificationToken.class));

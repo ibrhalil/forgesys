@@ -2,17 +2,26 @@ package com.ibrhalil.forgesys.service;
 
 import com.ibrhalil.forgesys.dto.ProjectRequest;
 import com.ibrhalil.forgesys.dto.ProjectResponse;
+import com.ibrhalil.forgesys.entity.AuditEntity_;
 import com.ibrhalil.forgesys.entity.Project;
+import com.ibrhalil.forgesys.entity.ProjectType;
+import com.ibrhalil.forgesys.entity.Project_;
 import com.ibrhalil.forgesys.exception.BusinessException;
 import com.ibrhalil.forgesys.exception.ErrorCode;
 import com.ibrhalil.forgesys.exception.ResourceNotFoundException;
 import com.ibrhalil.forgesys.persistence.repository.ProjectRepository;
+import com.ibrhalil.forgesys.web.filter.FilterFieldSet;
+import com.ibrhalil.forgesys.web.filter.FilterFieldType;
+import com.ibrhalil.forgesys.web.filter.FilterSpecifications;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -24,12 +33,22 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class ProjectService {
 
+    /** Filterable/sortable direct attributes of the project list; {@code q} matches {@code name}. */
+    public static final FilterFieldSet FILTER_FIELDS = FilterFieldSet.builder()
+            .field(Project_.NAME, FilterFieldType.STRING, true)
+            .field(Project_.DESCRIPTION, FilterFieldType.STRING, false)
+            .enumField(Project_.TYPE, ProjectType.class, false)
+            .field(AuditEntity_.CREATED_DATE, FilterFieldType.TEMPORAL, false)
+            .field(AuditEntity_.UPDATED_AT, FilterFieldType.TEMPORAL, false)
+            .build();
+
     private final ProjectRepository projectRepository;
     private final AuditService auditService;
 
     @Transactional(readOnly = true)
-    public Page<ProjectResponse> findAll(Pageable pageable) {
-        return projectRepository.findAll(pageable).map(this::toResponse);
+    public Page<ProjectResponse> search(String q, Pageable pageable) {
+        Specification<Project> spec = FilterSpecifications.from(FILTER_FIELDS, StringUtils.hasText(q) ? q.trim() : null, List.of());
+        return projectRepository.findAll(spec, pageable).map(this::toResponse);
     }
 
     @Transactional(readOnly = true)

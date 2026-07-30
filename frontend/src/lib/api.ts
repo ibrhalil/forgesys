@@ -137,28 +137,37 @@ export async function apiFetch<T>(
   return response.json();
 }
 
-/** Builds a `?page=&size=&sort=` query string from {@link PageParams} (empty string if none). */
+/**
+ * Builds a `?page=&size=&sort=&q=` query string from {@link PageParams} (empty string
+ * if none). Structured `sorts[]` is serialized as repeated `sort=field,dir` params
+ * (Spring Data multi-sort), alongside the legacy raw `sort` string.
+ */
 export function toQuery(params: PageParams = {}): string {
   const sp = new URLSearchParams();
   if (params.page != null) sp.set('page', String(params.page));
   if (params.size != null) sp.set('size', String(params.size));
   if (params.sort) sp.set('sort', params.sort);
+  (params.sorts ?? []).forEach((s) => sp.append('sort', `${s.field},${s.dir}`));
+  if (params.q) sp.set('q', params.q);
   const qs = sp.toString();
   return qs ? `?${qs}` : '';
 }
 
 /**
- * Normalizes a Spring Data {@link PageResponse} into the UI-facing {@link PageResult},
- * reading metadata from either the flat layout or the nested {@code page} object.
+ * Normalizes a backend {@link PageResponse} into the UI-facing {@link PageResult},
+ * reading metadata from the API-owned `data[] + meta` shape, falling back to the
+ * legacy Spring Data layouts during rollout.
  */
 export function normalizePage<T>(raw: PageResponse<T>): PageResult<T> {
-  const meta = raw.page;
+  const meta = raw.meta;
   return {
-    items: raw.content ?? [],
-    page: meta?.number ?? raw.number ?? 0,
-    size: meta?.size ?? raw.size ?? raw.content?.length ?? 0,
+    items: raw.data ?? raw.content ?? [],
+    page: meta?.page ?? raw.number ?? 0,
+    size: meta?.pageSize ?? raw.size ?? raw.content?.length ?? 0,
     totalElements: meta?.totalElements ?? raw.totalElements ?? raw.content?.length ?? 0,
-    totalPages: meta?.totalPages ?? raw.totalPages ?? 1,
+    totalPages: meta?.totalPages ?? raw.totalPages ?? (raw.content?.length ? 1 : 0),
+    hasNext: meta?.hasNext,
+    hasPrevious: meta?.hasPrevious,
   };
 }
 

@@ -3,13 +3,18 @@ package com.ibrhalil.forgesys.controller;
 import com.ibrhalil.forgesys.dto.AdminPasswordResetRequest;
 import com.ibrhalil.forgesys.dto.AssignGroupsRequest;
 import com.ibrhalil.forgesys.dto.AssignRolesRequest;
+import com.ibrhalil.forgesys.dto.PageResponse;
+import com.ibrhalil.forgesys.dto.SearchRequest;
+import com.ibrhalil.forgesys.dto.UserActivityResponse;
 import com.ibrhalil.forgesys.dto.UserCreateRequest;
+import com.ibrhalil.forgesys.dto.UserDirectoryViewResponse;
 import com.ibrhalil.forgesys.dto.UserResponse;
 import com.ibrhalil.forgesys.dto.UserUpdateRequest;
 import com.ibrhalil.forgesys.service.UserService;
+import com.ibrhalil.forgesys.web.SortGuard;
+import com.ibrhalil.forgesys.web.filter.SearchRequests;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
@@ -23,8 +28,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -34,16 +41,47 @@ public class UserController {
 
     private final UserService userService;
 
+    /** Read authority: full tenant visibility ({@code iam:user:read}) or own-groups scope ({@code iam:group-member:read}). */
+    private static final String READ_USERS = "hasAnyAuthority('iam:user:read', 'iam:group-member:read')";
+
     @GetMapping
-    @PreAuthorize("hasAuthority('iam:user:read')")
-    public ResponseEntity<Page<UserResponse>> list(@PageableDefault(sort = "email") Pageable pageable) {
-        return ResponseEntity.ok(userService.findAll(pageable));
+    @PreAuthorize(READ_USERS)
+    public ResponseEntity<PageResponse<UserDirectoryViewResponse>> list(
+            @PageableDefault(sort = "email") Pageable pageable,
+            @RequestParam(required = false) String q) {
+        SortGuard.require(pageable, UserService.FILTER_FIELDS);
+        return ResponseEntity.ok(PageResponse.of(userService.search(q, pageable)));
+    }
+
+    /**
+     * Reference endpoint of the filter engine: paging + multi-sort + structured filters
+     * + global {@code q} in one POST body. The GET list above stays for bookmarkable
+     * reads ({@code q} + sort query params).
+     */
+    @PostMapping("/search")
+    @PreAuthorize(READ_USERS)
+    public ResponseEntity<PageResponse<UserDirectoryViewResponse>> search(@Valid @RequestBody SearchRequest request) {
+        Pageable pageable = SearchRequests.toPageable(request, UserService.FILTER_FIELDS);
+        return ResponseEntity.ok(PageResponse.of(userService.search(request, pageable)));
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('iam:user:read')")
+    @PreAuthorize(READ_USERS)
     public ResponseEntity<UserResponse> get(@PathVariable UUID id) {
         return ResponseEntity.ok(userService.findById(id));
+    }
+
+    @GetMapping("/{id}/effective-permissions")
+    @PreAuthorize(READ_USERS)
+    public ResponseEntity<List<String>> effectivePermissions(@PathVariable UUID id) {
+        return ResponseEntity.ok(userService.effectivePermissions(id));
+    }
+
+    /** Temporal activity summary (creation/update stamps, last login, last failed login). */
+    @GetMapping("/{id}/activity")
+    @PreAuthorize(READ_USERS)
+    public ResponseEntity<UserActivityResponse> activity(@PathVariable UUID id) {
+        return ResponseEntity.ok(userService.activity(id));
     }
 
     @PostMapping
@@ -64,6 +102,13 @@ public class UserController {
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         userService.delete(id);
         return ResponseEntity.noContent().build();
+    }
+
+    /** Clears an active brute-force lockout ahead of its expiry ([RISK-22] admin unlock). */
+    @DeleteMapping("/{id}/lock")
+    @PreAuthorize("hasAuthority('iam:user:write')")
+    public ResponseEntity<UserResponse> unlock(@PathVariable UUID id) {
+        return ResponseEntity.ok(userService.unlock(id));
     }
 
     @PutMapping("/{id}/roles")

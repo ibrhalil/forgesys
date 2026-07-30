@@ -23,6 +23,10 @@ public class AuthException extends BusinessException {
         return new AuthException(ErrorCode.AUTH_ACCOUNT_LOCKED);
     }
 
+    public static AuthException accountDisabled() {
+        return new AuthException(ErrorCode.AUTH_ACCOUNT_DISABLED);
+    }
+
     public static AuthException refreshTokenInvalid() {
         return new AuthException(ErrorCode.AUTH_REFRESH_TOKEN_INVALID);
     }

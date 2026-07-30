@@ -14,7 +14,7 @@ export function TextAreaField({ label, error, hint, id, className, ...rest }: Te
       <textarea
         id={id}
         className={cn(
-          'w-full rounded-lg border bg-white/5 px-3 py-2 text-sm text-main placeholder:text-muted/50',
+          'w-full rounded-lg border bg-main/5 px-3 py-2 text-sm text-main placeholder:text-muted/50',
           'transition-colors focus:outline-none focus:ring-2 focus:ring-accent/50 resize-y min-h-[80px]',
           error ? 'border-danger/50' : 'border-glass',
           className,

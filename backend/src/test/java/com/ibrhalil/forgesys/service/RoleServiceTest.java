@@ -3,6 +3,7 @@ package com.ibrhalil.forgesys.service;
 import com.ibrhalil.forgesys.dto.AssignPermissionsRequest;
 import com.ibrhalil.forgesys.dto.AssignRolesRequest;
 import com.ibrhalil.forgesys.dto.RoleRequest;
+import com.ibrhalil.forgesys.dto.RoleResponse;
 import com.ibrhalil.forgesys.entity.Role;
 import com.ibrhalil.forgesys.exception.BusinessException;
 import com.ibrhalil.forgesys.persistence.repository.PermissionRepository;
@@ -23,6 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -34,15 +36,21 @@ class RoleServiceTest {
     @Mock
     private PermissionRepository permissionRepository;
     @Mock
+    private com.ibrhalil.forgesys.persistence.repository.UserRepository userRepository;
+    @Mock
+    private com.ibrhalil.forgesys.persistence.repository.GroupRepository groupRepository;
+    @Mock
     private AuditService auditService;
     @Mock
     private SessionRevocationService sessionRevocationService;
+    @Mock
+    private com.ibrhalil.forgesys.security.LastAdminGuard lastAdminGuard;
 
     private RoleService roleService;
 
     @BeforeEach
     void setUp() {
-        roleService = new RoleService(roleRepository, permissionRepository, auditService, sessionRevocationService);
+        roleService = new RoleService(roleRepository, permissionRepository, userRepository, groupRepository, auditService, sessionRevocationService, lastAdminGuard);
     }
 
     @Test
@@ -71,11 +79,15 @@ class RoleServiceTest {
     @Test
     void deleteRecordsAudit() {
         UUID id = UUID.randomUUID();
-        when(roleRepository.existsById(id)).thenReturn(true);
+        Role role = roleFixture(id, "Admin");
+        when(roleRepository.findById(id)).thenReturn(Optional.of(role));
+        org.mockito.Mockito.lenient().when(userRepository.findUsersByRole(id)).thenReturn(List.of());
+        org.mockito.Mockito.lenient().when(groupRepository.findGroupsByRole(id)).thenReturn(List.of());
+        org.mockito.Mockito.lenient().when(sessionRevocationService.resolveRoleHolderIds(id)).thenReturn(List.of());
 
         roleService.delete(id);
 
-        verify(roleRepository).deleteById(id);
+        verify(roleRepository).delete(role);
         verify(auditService).record("role_deleted", "Role", id, null);
     }
 
@@ -86,7 +98,7 @@ class RoleServiceTest {
         when(roleRepository.findById(id)).thenReturn(Optional.of(role));
         when(roleRepository.save(any(Role.class))).thenReturn(role);
 
-        roleService.setPermissions(id, new AssignPermissionsRequest(List.of()));
+        roleService.setPermissions(id, new AssignPermissionsRequest(List.of(), null));
 
         verify(auditService).recordDelta(eq("role_permissions_updated"), eq("Role"), eq(id), eq("Admin"), any(), any());
     }
@@ -98,7 +110,7 @@ class RoleServiceTest {
         when(roleRepository.findById(id)).thenReturn(Optional.of(role));
         when(roleRepository.save(any(Role.class))).thenReturn(role);
 
-        roleService.setPermissions(id, new AssignPermissionsRequest(List.of()));
+        roleService.setPermissions(id, new AssignPermissionsRequest(List.of(), null));
 
         // Faz 1: a permission delta must drop sessions of every bearer immediately.
         verify(sessionRevocationService).revokeRoleHolders(id);
@@ -107,13 +119,18 @@ class RoleServiceTest {
     @Test
     void deleteRevokesHolders() {
         UUID id = UUID.randomUUID();
-        when(roleRepository.existsById(id)).thenReturn(true);
+        UUID holderId = UUID.randomUUID();
+        Role role = roleFixture(id, "Admin");
+        when(roleRepository.findById(id)).thenReturn(Optional.of(role));
+        when(sessionRevocationService.resolveRoleHolderIds(id)).thenReturn(List.of(holderId));
 
         roleService.delete(id);
 
-        // Revoked BEFORE the soft-delete (findUserIdsByRole filters deleted roles).
-        verify(sessionRevocationService).revokeRoleHolders(id);
-        verify(roleRepository).deleteById(id);
+        // Bearers resolved BEFORE the soft-delete (queries filter deleted roles);
+        // the revoke itself fires after the last-admin guard.
+        verify(sessionRevocationService).resolveRoleHolderIds(id);
+        verify(sessionRevocationService).revokeUsers(List.of(holderId));
+        verify(roleRepository).delete(role);
     }
 
     @Test
@@ -127,6 +144,34 @@ class RoleServiceTest {
         roleService.update(id, new RoleRequest("Admin", "desc"));
 
         verify(sessionRevocationService, org.mockito.Mockito.never()).revokeRoleHolders(any());
+    }
+
+    /* ── all_permissions flag ── */
+
+    @Test
+    void setPermissionsAllSetsFlagClearsExplicitRevokesAndAudits() {
+        UUID id = UUID.randomUUID();
+        Role role = roleFixture(id, "Editor");
+        role.setAllPermissions(false);
+        when(roleRepository.findById(id)).thenReturn(Optional.of(role));
+        when(roleRepository.save(any(Role.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        RoleResponse response = roleService.setPermissions(id, new AssignPermissionsRequest(null, true));
+
+        assertThat(response.allPermissions()).isTrue();
+        verify(sessionRevocationService).revokeRoleHolders(id);
+        verify(auditService).recordDelta(eq("role_permissions_updated"), eq("Role"), eq(id), eq("Editor"), any(), any());
+    }
+
+    @Test
+    void setPermissionsExplicitWithoutIdsIsRejected() {
+        UUID id = UUID.randomUUID();
+        Role role = roleFixture(id, "Editor");
+        when(roleRepository.findById(id)).thenReturn(Optional.of(role));
+
+        assertThatThrownBy(() -> roleService.setPermissions(id, new AssignPermissionsRequest(null, null)))
+                .isInstanceOf(BusinessException.class);
+        verify(sessionRevocationService, never()).revokeRoleHolders(any());
     }
 
     /* ── Faz 4a role inheritance ── */

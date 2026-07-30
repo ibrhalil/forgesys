@@ -127,6 +127,25 @@ public class InMemoryRefreshTokenStore implements RefreshTokenStore {
     }
 
     @Override
+    public synchronized List<ActiveSession> listAllSessions(String tenant) {
+        // Aggregate listSessions across every user index for this tenant. Index keys are
+        // "<tenant>:<userId>"; prefix-scan the in-memory map.
+        String prefix = (tenant == null ? "" : tenant) + ":";
+        List<ActiveSession> sessions = new ArrayList<>();
+        for (String key : index.keySet()) {
+            if (!key.startsWith(prefix)) {
+                continue;
+            }
+            UUID userId = parseUserId(key.substring(prefix.length()));
+            if (userId != null) {
+                sessions.addAll(listSessions(userId, tenant));
+            }
+        }
+        sessions.sort(Comparator.comparing(ActiveSession::lastSeen, Comparator.nullsLast(Comparator.reverseOrder())));
+        return sessions;
+    }
+
+    @Override
     public synchronized boolean revokeSession(UUID userId, String tenant, UUID sessionId) {
         Set<String> set = index.get(indexKey(tenant, userId));
         if (set == null) {
@@ -165,6 +184,17 @@ public class InMemoryRefreshTokenStore implements RefreshTokenStore {
 
     private String indexKey(String tenant, UUID userId) {
         return (tenant == null ? "" : tenant) + ":" + userId;
+    }
+
+    private static UUID parseUserId(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        try {
+            return UUID.fromString(raw);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     private String generateToken() {

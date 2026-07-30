@@ -39,6 +39,17 @@ public class Role extends BaseEntity {
     @Column(length = 500)
     private String description;
 
+    /**
+     * Whether this role implicitly holds <em>every</em> permission in the tenant. When
+     * true, {@code CustomUserDetailsService.resolvePermissionNames} returns all
+     * permission names for any user whose effective-role closure includes this role,
+     * ignoring the explicit {@link #permissions} set (which is a subset). The built-in
+     * {@code Admin} role is seeded true; user-defined roles are toggled via the
+     * permissions UI ({@code AssignPermissionsRequest.all}). Backed by tenant V8.
+     */
+    @Column(name = "all_permissions", nullable = false)
+    private boolean allPermissions;
+
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
             name = "t_role_permissions",

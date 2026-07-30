@@ -1,5 +1,7 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { LuX } from 'react-icons/lu';
 import { cn } from '../../lib/cn';
+import { useT } from '../../lib/i18n';
 
 interface ModalProps {
   open: boolean;
@@ -9,6 +11,8 @@ interface ModalProps {
   footer?: ReactNode;
   /** Modal width; defaults to md. */
   size?: 'sm' | 'md' | 'lg';
+  /** id of the element describing the dialog, wired to aria-describedby. */
+  describedby?: string;
 }
 
 const SIZES = {
@@ -17,17 +21,62 @@ const SIZES = {
   lg: 'max-w-2xl',
 };
 
-export function Modal({ open, title, onClose, children, footer, size = 'md' }: ModalProps) {
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * Accessible dialog: `role="dialog"` + `aria-modal`, labelled by the title. On open
+ * the focus moves into the panel and is trapped (Tab/Shift+Tab cycle inside); on
+ * close it is restored to the opener. Escape and backdrop mousedown close as before.
+ */
+export function Modal({ open, title, onClose, children, footer, size = 'md', describedby }: ModalProps) {
+  const titleId = useId();
+  const panelRef = useRef<HTMLDivElement>(null);
+  const openerRef = useRef<Element | null>(null);
+  const { t } = useT();
+
   useEffect(() => {
     if (!open) return;
+    // Remember the opener so focus can return when the dialog closes.
+    openerRef.current = document.activeElement;
+    const panel = panelRef.current;
+    // Move focus into the dialog (first focusable, else the panel itself).
+    const first = panel?.querySelector<HTMLElement>(FOCUSABLE);
+    (first ?? panel)?.focus();
+
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      // Focus trap: cycle Tab/Shift+Tab within the dialog panel.
+      const focusables = Array.from(panel?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []);
+      if (focusables.length === 0) {
+        e.preventDefault();
+        panel?.focus();
+        return;
+      }
+      const firstEl = focusables[0];
+      const lastEl = focusables[focusables.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === firstEl || active === panel)) {
+        e.preventDefault();
+        lastEl.focus();
+      } else if (!e.shiftKey && active === lastEl) {
+        e.preventDefault();
+        firstEl.focus();
+      } else if (!panel?.contains(active)) {
+        e.preventDefault();
+        firstEl.focus();
+      }
     };
     document.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
     return () => {
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = '';
+      (openerRef.current as HTMLElement | null)?.focus?.();
     };
   }, [open, onClose]);
 
@@ -39,23 +88,27 @@ export function Modal({ open, title, onClose, children, footer, size = 'md' }: M
       onMouseDown={onClose}
     >
       <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={describedby}
+        tabIndex={-1}
         className={cn(
           'w-full rounded-2xl border border-glass bg-sidebar shadow-2xl shadow-black/50',
-          'flex max-h-[90vh] flex-col',
+          'flex max-h-[90vh] flex-col focus:outline-none',
           SIZES[size],
         )}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <header className="flex items-center justify-between border-b border-glass px-6 py-4">
-          <h2 className="text-lg font-semibold text-main">{title}</h2>
+          <h2 id={titleId} className="text-lg font-semibold text-main">{title}</h2>
           <button
             onClick={onClose}
-            className="rounded-md p-1 text-muted transition-colors hover:bg-white/5 hover:text-main"
-            aria-label="Close"
+            aria-label={t('common.close')}
+            className="rounded-md p-1 text-muted transition-colors hover:bg-main/5 hover:text-main focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M18 6 6 18M6 6l12 12" />
-            </svg>
+            <LuX size={18} aria-hidden />
           </button>
         </header>
         <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>

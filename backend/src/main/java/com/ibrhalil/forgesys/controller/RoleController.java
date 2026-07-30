@@ -2,12 +2,13 @@ package com.ibrhalil.forgesys.controller;
 
 import com.ibrhalil.forgesys.dto.AssignPermissionsRequest;
 import com.ibrhalil.forgesys.dto.AssignRolesRequest;
+import com.ibrhalil.forgesys.dto.PageResponse;
 import com.ibrhalil.forgesys.dto.RoleRequest;
 import com.ibrhalil.forgesys.dto.RoleResponse;
 import com.ibrhalil.forgesys.service.RoleService;
+import com.ibrhalil.forgesys.web.SortGuard;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
@@ -33,8 +35,11 @@ public class RoleController {
 
     @GetMapping
     @PreAuthorize("hasAuthority('iam:role:read')")
-    public ResponseEntity<Page<RoleResponse>> list(@PageableDefault(sort = "name") Pageable pageable) {
-        return ResponseEntity.ok(roleService.findAll(pageable));
+    public ResponseEntity<PageResponse<RoleResponse>> list(
+            @PageableDefault(sort = "name") Pageable pageable,
+            @RequestParam(required = false) String q) {
+        SortGuard.require(pageable, RoleService.FILTER_FIELDS);
+        return ResponseEntity.ok(PageResponse.of(roleService.search(q, pageable)));
     }
 
     @GetMapping("/{id}")

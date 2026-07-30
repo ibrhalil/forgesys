@@ -22,8 +22,9 @@ import java.util.UUID;
  * exposes active sessions for the "where am I logged in" UI; {@link #revokeSession}
  * ends a single session by id (remote revoke); {@link #activeSessionFor} resolves the
  * session behind a presented token so the service can flag the caller's current
- * device. Revoking a session kills its refresh token only — the matching short-lived
- * access token expires at its TTL (the jti is not stored per-session).
+ * device. The store itself only owns refresh tokens; the service layer
+ * ({@code SessionService}) additionally stamps {@code UserAccount.tokenInvalidBefore}
+ * on revoke so the device's outstanding access token dies immediately, not at TTL.
  */
 public interface RefreshTokenStore {
 
@@ -56,10 +57,21 @@ public interface RefreshTokenStore {
     List<ActiveSession> listSessions(UUID userId, String tenant);
 
     /**
+     * Lists <em>every</em> active session in the tenant (across all users), newest
+     * activity first — the admin "all sessions" view. Implemented without a write-path
+     * change by enumerating the tenant's per-user indexes (Redis SCAN /
+     * InMemory prefix scan) and aggregating {@link #listSessions(UUID, String)} per
+     * user. Bounded by the number of active refresh tokens (each expires); an
+     * admin-only, occasional read.
+     */
+    List<ActiveSession> listAllSessions(String tenant);
+
+    /**
      * Ends a single session by its stable {@code sessionId} (remote revoke). Returns
      * {@code true} if an active session matched and was removed. The session's refresh
-     * token is dropped, so it can no longer rotate; the device's outstanding access
-     * token expires at its TTL.
+     * token is dropped, so it can no longer rotate; {@code SessionService} additionally
+     * stamps {@code tokenInvalidBefore} so the device's outstanding access token dies on
+     * its next request (not at TTL).
      */
     boolean revokeSession(UUID userId, String tenant, UUID sessionId);
 

@@ -15,7 +15,7 @@ const TONES: Record<Tone, string> = {
   green: 'bg-accent-green/15 text-accent-green border border-accent-green/30',
   danger: 'bg-danger/15 text-danger border border-danger/30',
   warning: 'bg-warning/15 text-warning border border-warning/30',
-  muted: 'bg-white/5 text-muted border border-glass',
+  muted: 'bg-main/5 text-muted border border-glass',
 };
 
 export function Badge({ tone = 'muted', children, className }: BadgeProps) {

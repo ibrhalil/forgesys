@@ -2,8 +2,10 @@ package com.ibrhalil.forgesys.service;
 
 import com.ibrhalil.forgesys.common.tenant.TenantContext;
 import com.ibrhalil.forgesys.dto.ActiveSessionResponse;
+import com.ibrhalil.forgesys.dto.AdminSessionResponse;
 import com.ibrhalil.forgesys.exception.BusinessException;
 import com.ibrhalil.forgesys.exception.ErrorCode;
+import com.ibrhalil.forgesys.security.SessionRevocationService;
 import com.ibrhalil.forgesys.security.refresh.ActiveSession;
 import com.ibrhalil.forgesys.security.refresh.RefreshTokenStore;
 import lombok.RequiredArgsConstructor;
@@ -19,12 +21,14 @@ import java.util.UUID;
  * ({@link TenantContext}) and an owner user id; the self endpoints self-scope to the
  * authenticated principal, the admin endpoints take an explicit user id.
  *
- * <p>Revoke semantics: ending a session drops its refresh token so it can no longer
- * rotate (the device is signed out at the next access-token expiry). The matching
- * access token is NOT blacklisted — its short-lived {@code jti} is not stored
- * per-session — so a revoked device keeps its access token only until TTL (minutes).
- * Nuclear revoke ({@link #revokeAllUserSessions}) delegates to the store's
- * {@code revokeAllForUser} (used by password change / reuse elsewhere).
+ * <p>Revoke semantics: ending a session drops its refresh token <em>and</em> stamps
+ * {@code UserAccount.tokenInvalidBefore} (via {@link SessionRevocationService}) so the
+ * affected user's outstanding access tokens die immediately — the device is signed out on
+ * its next request, not at access-token TTL. For a single-session revoke the stamp is
+ * user-scoped (it is the only immediate lever available without per-session {@code jti}
+ * storage), so other devices of the same user briefly 401 then recover via their
+ * still-valid refresh token; the targeted device, whose refresh was dropped, is fully
+ * signed out. {@link #revokeAllUserSessions} additionally drops every refresh token.
  */
 @Service
 @RequiredArgsConstructor
@@ -33,6 +37,7 @@ public class SessionService {
     static final String ENTITY_TYPE = "Session";
 
     private final RefreshTokenStore refreshTokenStore;
+    private final SessionRevocationService sessionRevocationService;
     private final AuditService auditService;
 
     /**
@@ -56,6 +61,11 @@ public class SessionService {
         if (!refreshTokenStore.revokeSession(userId, currentTenant(), sessionId)) {
             throw notFound();
         }
+        // Kill the user's outstanding access tokens now (not at TTL) so the device is
+        // signed out on its next request. Revoking the current device logs it out
+        // immediately; revoking another own device briefly blips the current one (401 +
+        // silent refresh) and recovers.
+        sessionRevocationService.invalidateAccessTokens(userId);
         auditService.record("session_revoked", ENTITY_TYPE, sessionId, null);
     }
 
@@ -82,17 +92,34 @@ public class SessionService {
                 .toList();
     }
 
+    /**
+     * Admin tenant-wide view: every active session across all users of the request
+     * tenant (the "all sessions" table). Each row carries its owner (userId + email) so
+     * the admin can see who is signed in where.
+     */
+    @Transactional(readOnly = true)
+    public List<AdminSessionResponse> listAllSessions() {
+        return refreshTokenStore.listAllSessions(currentTenant()).stream()
+                .map(s -> new AdminSessionResponse(s.sessionId(), s.userId(), s.email(),
+                        nullIfBlank(s.userAgent()), nullIfBlank(s.ipAddress()), s.loginAt(), s.lastSeen()))
+                .toList();
+    }
+
     /** Admin ends a single session of another user. */
     public void revokeUserSession(UUID targetUserId, UUID sessionId) {
         if (!refreshTokenStore.revokeSession(targetUserId, currentTenant(), sessionId)) {
             throw notFound();
         }
+        // Kill the user's outstanding access tokens now (not at TTL) so the device is
+        // signed out on its next request. Sibling devices briefly 401 + silent-refresh.
+        sessionRevocationService.invalidateAccessTokens(targetUserId);
         auditService.record("session_revoked", ENTITY_TYPE, sessionId, null);
     }
 
     /** Admin ends every session of a user. */
     public void revokeAllUserSessions(UUID targetUserId) {
         refreshTokenStore.revokeAllForUser(targetUserId, currentTenant());
+        sessionRevocationService.invalidateAccessTokens(targetUserId);
         auditService.record("sessions_revoked_all", ENTITY_TYPE, targetUserId, null);
     }
 

@@ -2,11 +2,13 @@ package com.ibrhalil.forgesys.controller;
 
 import com.ibrhalil.forgesys.dto.ActiveSessionResponse;
 import com.ibrhalil.forgesys.security.CustomUserDetails;
+import com.ibrhalil.forgesys.security.jwt.JwtCookieProperties;
 import com.ibrhalil.forgesys.service.SessionService;
-import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.ResponseCookie;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.CookieValue;
@@ -33,9 +35,10 @@ import java.util.UUID;
  *       {@code iam:user:write} views or ends another user's sessions (remote revoke).</li>
  * </ul>
  *
- * <p>Ending a session drops its refresh token; the device's outstanding access token
- * expires at its TTL (its {@code jti} is not stored per-session). See
- * {@link SessionService}.
+ * <p>Ending a session drops its refresh token and stamps
+ * {@code tokenInvalidBefore} (via {@link SessionService} -> {@code SessionRevocationService})
+ * so the device's outstanding access token dies on its next request rather than at TTL.
+ * See {@link SessionService}.
  */
 @RestController
 @RequestMapping("/api/v1/users")
@@ -46,6 +49,7 @@ public class SessionController {
     static final String REFRESH_COOKIE = "sf_refresh_token";
 
     private final SessionService sessionService;
+    private final JwtCookieProperties cookieProperties;
 
     /* ── self ── */
 
@@ -97,10 +101,24 @@ public class SessionController {
         }
         boolean currentEnded = sessionService.isCurrentSession(refreshToken, sessionId);
         if (currentEnded) {
-            Cookie cookie = new Cookie(REFRESH_COOKIE, "");
-            cookie.setMaxAge(0);
-            cookie.setPath("/");
-            response.addCookie(cookie);
+            // The caller ended their own current device: clear BOTH cookies so the
+            // browser drops the (now server-side-dead) access token immediately for an
+            // instant logout, not just the refresh cookie.
+            response.addHeader(HttpHeaders.SET_COOKIE, expireCookie(
+                    cookieProperties.effectiveCookieName(), "/"));
+            response.addHeader(HttpHeaders.SET_COOKIE, expireCookie(
+                    cookieProperties.effectiveRefreshCookieName(), cookieProperties.effectiveRefreshCookiePath()));
         }
+    }
+
+    private String expireCookie(String name, String path) {
+        return ResponseCookie.from(name, "")
+                .httpOnly(true)
+                .secure(cookieProperties.effectiveCookieSecure())
+                .sameSite(cookieProperties.effectiveCookieSameSite())
+                .path(path)
+                .maxAge(0)
+                .build()
+                .toString();
     }
 }
