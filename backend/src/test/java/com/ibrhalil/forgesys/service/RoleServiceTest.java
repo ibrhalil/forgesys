@@ -1,8 +1,10 @@
 package com.ibrhalil.forgesys.service;
 
 import com.ibrhalil.forgesys.dto.AssignPermissionsRequest;
+import com.ibrhalil.forgesys.dto.AssignRolesRequest;
 import com.ibrhalil.forgesys.dto.RoleRequest;
 import com.ibrhalil.forgesys.entity.Role;
+import com.ibrhalil.forgesys.exception.BusinessException;
 import com.ibrhalil.forgesys.persistence.repository.PermissionRepository;
 import com.ibrhalil.forgesys.persistence.repository.RoleRepository;
 import com.ibrhalil.forgesys.security.SessionRevocationService;
@@ -14,8 +16,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -121,6 +126,53 @@ class RoleServiceTest {
         // A name/description change does not alter permissions — no revoke.
         roleService.update(id, new RoleRequest("Admin", "desc"));
 
+        verify(sessionRevocationService, org.mockito.Mockito.never()).revokeRoleHolders(any());
+    }
+
+    /* ── Faz 4a role inheritance ── */
+
+    @Test
+    void setParentsAssignsParentsRevokesHoldersAndAudits() {
+        UUID rId = UUID.randomUUID();
+        UUID pId = UUID.randomUUID();
+        Role child = roleFixture(rId, "Child");
+        Role parent = roleFixture(pId, "Parent");
+        when(roleRepository.findById(rId)).thenReturn(Optional.of(child));
+        when(roleRepository.findAllById(any())).thenReturn(List.of(parent));
+        when(roleRepository.save(any(Role.class))).thenReturn(child);
+
+        roleService.setParents(rId, new AssignRolesRequest(List.of(pId)));
+
+        assertThat(child.getParentRoles()).extracting(Role::getName).containsExactly("Parent");
+        verify(sessionRevocationService).revokeRoleHolders(rId);
+        verify(auditService).recordDelta(eq("role_parents_updated"), eq("Role"), eq(rId), eq("Child"), any(), any());
+    }
+
+    @Test
+    void setParentsRejectsSelfParent() {
+        UUID rId = UUID.randomUUID();
+        Role child = roleFixture(rId, "Child");
+        when(roleRepository.findById(rId)).thenReturn(Optional.of(child));
+        when(roleRepository.findAllById(any())).thenReturn(List.of(child));
+
+        assertThatThrownBy(() -> roleService.setParents(rId, new AssignRolesRequest(List.of(rId))))
+                .isInstanceOf(BusinessException.class);
+        verify(sessionRevocationService, org.mockito.Mockito.never()).revokeRoleHolders(any());
+    }
+
+    @Test
+    void setParentsRejectsInheritanceCycle() {
+        UUID rId = UUID.randomUUID();
+        UUID pId = UUID.randomUUID();
+        Role child = roleFixture(rId, "Child");
+        Role parent = roleFixture(pId, "Parent");
+        // Parent already inherits from Child -> assigning Child->Parent would close a cycle.
+        parent.setParentRoles(new java.util.HashSet<>(Set.of(child)));
+        when(roleRepository.findById(rId)).thenReturn(Optional.of(child));
+        when(roleRepository.findAllById(any())).thenReturn(List.of(parent));
+
+        assertThatThrownBy(() -> roleService.setParents(rId, new AssignRolesRequest(List.of(pId))))
+                .isInstanceOf(BusinessException.class);
         verify(sessionRevocationService, org.mockito.Mockito.never()).revokeRoleHolders(any());
     }
 

@@ -1,9 +1,11 @@
 package com.ibrhalil.forgesys.service;
 
 import com.ibrhalil.forgesys.dto.AssignPermissionsRequest;
+import com.ibrhalil.forgesys.dto.AssignRolesRequest;
 import com.ibrhalil.forgesys.dto.PermissionResponse;
 import com.ibrhalil.forgesys.dto.RoleRequest;
 import com.ibrhalil.forgesys.dto.RoleResponse;
+import com.ibrhalil.forgesys.dto.RoleSummary;
 import com.ibrhalil.forgesys.entity.Permission;
 import com.ibrhalil.forgesys.entity.Role;
 import com.ibrhalil.forgesys.exception.BusinessException;
@@ -19,7 +21,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -114,12 +118,76 @@ public class RoleService {
                 .orElseThrow(() -> new ResourceNotFoundException("Role not found: " + id));
     }
 
+    /**
+     * Faz 4a: replace this role's inherited parent roles. Acyclicity is enforced — no
+     * self-parent, and no candidate may transitively inherit from this role (else the
+     * assignment would create a cycle). A parent delta changes the effective permission
+     * set of every bearer, so holders are revoked (Faz 1) and the before/after parent set
+     * is audited (Faz 2b).
+     */
+    @Transactional
+    public RoleResponse setParents(UUID roleId, AssignRolesRequest request) {
+        Role role = getRoleOrThrow(roleId);
+        List<Role> parents = resolveParents(request.roleIds());
+        for (Role parent : parents) {
+            if (parent.getId().equals(role.getId())) {
+                throw new BusinessException(ErrorCode.ROLE_PARENT_CYCLE, "A role cannot inherit from itself");
+            }
+            if (reaches(parent, role.getId(), new java.util.HashSet<>())) {
+                throw new BusinessException(ErrorCode.ROLE_PARENT_CYCLE,
+                        "Parent role '" + parent.getName() + "' already inherits from '" + role.getName() + "'");
+            }
+        }
+        java.util.Set<String> beforeNames = role.getParentRoles().stream()
+                .map(Role::getName).collect(java.util.stream.Collectors.toSet());
+        role.getParentRoles().clear();
+        role.getParentRoles().addAll(parents);
+        Role saved = roleRepository.save(role);
+        sessionRevocationService.revokeRoleHolders(saved.getId());
+        auditService.recordDelta("role_parents_updated", "Role", saved.getId(), saved.getName(),
+                AuditService.namesJson(beforeNames),
+                AuditService.namesJson(parents.stream().map(Role::getName).collect(java.util.stream.Collectors.toSet())));
+        return toResponse(saved);
+    }
+
+    private List<Role> resolveParents(List<UUID> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        Set<UUID> distinct = new LinkedHashSet<>(ids);
+        List<Role> parents = roleRepository.findAllById(distinct);
+        if (parents.size() != distinct.size()) {
+            throw new ResourceNotFoundException("One or more parent roles not found");
+        }
+        return parents;
+    }
+
+    /** True if {@code targetId} is reachable from {@code start} by following parent links. */
+    private boolean reaches(Role start, UUID targetId, Set<UUID> visited) {
+        if (start == null || start.getId() == null || !visited.add(start.getId())) {
+            return false;
+        }
+        for (Role parent : start.getParentRoles()) {
+            if (targetId.equals(parent.getId())) {
+                return true;
+            }
+            if (reaches(parent, targetId, visited)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private RoleResponse toResponse(Role role) {
         List<PermissionResponse> permissions = role.getPermissions().stream()
                 .map(permission -> new PermissionResponse(
                         permission.getId(), permission.getName(), permission.getDescription()))
                 .sorted(Comparator.comparing(PermissionResponse::name))
                 .toList();
-        return new RoleResponse(role.getId(), role.getName(), role.getDescription(), permissions);
+        List<RoleSummary> parents = role.getParentRoles().stream()
+                .map(p -> new RoleSummary(p.getId(), p.getName()))
+                .sorted(Comparator.comparing(RoleSummary::name))
+                .toList();
+        return new RoleResponse(role.getId(), role.getName(), role.getDescription(), permissions, parents);
     }
 }

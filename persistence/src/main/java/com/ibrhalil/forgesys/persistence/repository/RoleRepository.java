@@ -15,25 +15,26 @@ public interface RoleRepository extends JpaRepository<Role, UUID> {
 
     boolean existsByName(String name);
 
-    @EntityGraph(attributePaths = {"permissions"})
+    @EntityGraph(attributePaths = {"permissions", "parentRoles"})
     Optional<Role> findByName(String name);
 
     /**
      * {@inheritDoc}
-     * Redeclared to attach an {@link EntityGraph} (permissions) so the paginated list
-     * query avoids N+1 when building {@code RoleResponse}.
+     * Redeclared to attach an {@link EntityGraph} (permissions + direct parents) so the
+     * paginated list query avoids N+1 when building {@code RoleResponse} (which exposes
+     * parents) — Faz 4a inheritance.
      */
     @Override
-    @EntityGraph(attributePaths = "permissions")
+    @EntityGraph(attributePaths = {"permissions", "parentRoles"})
     Page<Role> findAll(Pageable pageable);
 
     /**
      * Same {@link EntityGraph} as {@link #findAll(Pageable)} for the single-row lookup.
      * {@code RoleService.findById}/{@code getRoleOrThrow} resolve a {@code Role} and then
-     * read {@code permissions} when building {@code RoleResponse}; without this override
-     * that accessor fires an extra SELECT on the tenant schema.
+     * read {@code permissions}/{@code parentRoles} when building {@code RoleResponse};
+     * without this override each accessor fires an extra SELECT on the tenant schema.
      */
     @Override
-    @EntityGraph(attributePaths = "permissions")
+    @EntityGraph(attributePaths = {"permissions", "parentRoles"})
     Optional<Role> findById(UUID id);
 }
