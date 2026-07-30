@@ -56,6 +56,7 @@ class JwtTokenProviderTest {
         assertThat(jwt.getClaimAsString(JwtTokenProvider.CLAIM_TENANT)).isEqualTo("tenant_acme");
         assertThat(jwt.getClaimAsStringList(JwtTokenProvider.CLAIM_AUTHORITIES))
                 .containsExactlyInAnyOrder("iam:user:write", "iam:user:read");
+        assertThat(jwt.getId()).as("jti (K-34 blacklist key)").isNotNull();
         assertThat(jwt.getIssuer().toString()).isEqualTo(JwtTokenProvider.ISSUER);
         assertThat(jwt.getAudience()).containsExactly(JwtTokenProvider.AUDIENCE);
         assertThat(jwt.getIssuedAt()).isNotNull();

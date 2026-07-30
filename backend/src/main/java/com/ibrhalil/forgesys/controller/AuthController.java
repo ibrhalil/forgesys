@@ -7,6 +7,7 @@ import com.ibrhalil.forgesys.dto.CompanyVerifyResponse;
 import com.ibrhalil.forgesys.dto.LoginRequest;
 import com.ibrhalil.forgesys.dto.LoginResponse;
 import com.ibrhalil.forgesys.dto.MeResponse;
+import com.ibrhalil.forgesys.dto.RefreshRequest;
 import com.ibrhalil.forgesys.dto.SubdomainSuggestionRequest;
 import com.ibrhalil.forgesys.dto.SubdomainSuggestionResponse;
 import com.ibrhalil.forgesys.security.CustomUserDetails;
@@ -14,12 +15,12 @@ import com.ibrhalil.forgesys.security.jwt.JwtCookieProperties;
 import com.ibrhalil.forgesys.service.AuthService;
 import com.ibrhalil.forgesys.service.SubdomainSuggestionService;
 import com.ibrhalil.forgesys.service.TenantProvisioningService;
-import com.ibrhalil.forgesys.service.UserService;
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.GrantedAuthority;
@@ -30,7 +31,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Arrays;
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -39,7 +42,6 @@ public class AuthController {
 
     private final TenantProvisioningService tenantProvisioningService;
     private final AuthService authService;
-    private final UserService userService;
     private final SubdomainSuggestionService subdomainSuggestionService;
     private final JwtCookieProperties cookieProperties;
 
@@ -70,7 +72,24 @@ public class AuthController {
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request, HttpServletResponse response) {
         LoginResponse body = authService.login(request);
         response.addHeader(HttpHeaders.SET_COOKIE, buildAccessTokenCookie(body.accessToken(), body.expiresIn()));
+        response.addHeader(HttpHeaders.SET_COOKIE, buildRefreshTokenCookie(body.refreshToken()));
         return ResponseEntity.ok(body);
+    }
+
+    /**
+     * Rotates the refresh token (cookie or body) and mints a fresh access token (K-34).
+     * Public (no access token required) — the tenant is resolved by {@code TenantFilter}
+     * and the new access token is bound to it.
+     */
+    @PostMapping("/refresh")
+    public ResponseEntity<LoginResponse> refresh(@RequestBody(required = false) RefreshRequest body,
+                                                 HttpServletRequest request,
+                                                 HttpServletResponse response) {
+        String refreshToken = resolveRefreshToken(body, request);
+        LoginResponse bodyOut = authService.refresh(refreshToken);
+        response.addHeader(HttpHeaders.SET_COOKIE, buildAccessTokenCookie(bodyOut.accessToken(), bodyOut.expiresIn()));
+        response.addHeader(HttpHeaders.SET_COOKIE, buildRefreshTokenCookie(bodyOut.refreshToken()));
+        return ResponseEntity.ok(bodyOut);
     }
 
     @GetMapping("/me")
@@ -83,21 +102,21 @@ public class AuthController {
 
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(@AuthenticationPrincipal CustomUserDetails principal,
+                                       HttpServletRequest request,
                                        HttpServletResponse response) {
-        // [RISK-21] Stamp tokenInvalidBefore so outstanding access tokens stop
-        // authenticating (multi-device logout — granular revoke is Epic 2.6). The
-        // cookie is also expired client-side below so the browser drops it.
-        if (principal != null && principal.getUserId() != null) {
-            userService.revokeTokens(principal.getUserId());
+        // [K-34] Per-session logout: consume this device's refresh token + blacklist the
+        // current access token's jti (granular revoke). Other devices keep working — the
+        // user-scoped tokenInvalidBefore is reserved for password change/reset/reuse.
+        UUID userId = principal == null ? null : principal.getUserId();
+        String jti = principal == null ? null : principal.getJti();
+        String refreshToken = resolveRefreshToken(null, request);
+        if (userId != null) {
+            authService.logout(userId, jti, refreshToken);
         }
-        ResponseCookie expiredCookie = ResponseCookie.from(cookieProperties.effectiveCookieName(), "")
-                .httpOnly(true)
-                .secure(cookieProperties.effectiveCookieSecure())
-                .sameSite(cookieProperties.effectiveCookieSameSite())
-                .path("/")
-                .maxAge(0)
-                .build();
-        response.addHeader(HttpHeaders.SET_COOKIE, expiredCookie.toString());
+        response.addHeader(HttpHeaders.SET_COOKIE, expireCookie(
+                cookieProperties.effectiveCookieName(), "/"));
+        response.addHeader(HttpHeaders.SET_COOKIE, expireCookie(
+                cookieProperties.effectiveRefreshCookieName(), cookieProperties.effectiveRefreshCookiePath()));
         return ResponseEntity.noContent().build();
     }
 
@@ -110,5 +129,43 @@ public class AuthController {
                 .maxAge(expiresInSeconds)
                 .build()
                 .toString();
+    }
+
+    private String buildRefreshTokenCookie(String token) {
+        return ResponseCookie.from(cookieProperties.effectiveRefreshCookieName(), token)
+                .httpOnly(true)
+                .secure(cookieProperties.effectiveRefreshCookieSecure())
+                .sameSite(cookieProperties.effectiveCookieSameSite())
+                .path(cookieProperties.effectiveRefreshCookiePath())
+                .maxAge(cookieProperties.effectiveRefreshTokenTtlSeconds())
+                .build()
+                .toString();
+    }
+
+    private String expireCookie(String name, String path) {
+        return ResponseCookie.from(name, "")
+                .httpOnly(true)
+                .secure(cookieProperties.effectiveCookieSecure())
+                .sameSite(cookieProperties.effectiveCookieSameSite())
+                .path(path)
+                .maxAge(0)
+                .build()
+                .toString();
+    }
+
+    /** Body takes precedence; falls back to the {@code sf_refresh_token} cookie. */
+    private String resolveRefreshToken(RefreshRequest body, HttpServletRequest request) {
+        if (body != null && body.refreshToken() != null && !body.refreshToken().isBlank()) {
+            return body.refreshToken();
+        }
+        Cookie[] cookies = request.getCookies();
+        if (cookies == null) {
+            return null;
+        }
+        return Arrays.stream(cookies)
+                .filter(c -> cookieProperties.effectiveRefreshCookieName().equals(c.getName()))
+                .map(Cookie::getValue)
+                .findFirst()
+                .orElse(null);
     }
 }

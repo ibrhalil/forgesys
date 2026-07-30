@@ -32,11 +32,12 @@ public class CustomUserDetails implements UserDetails {
     private final boolean credentialsNonExpired;
     private final Set<GrantedAuthority> authorities;
     private final String tenantSchema;
+    private final String jti;
 
     public CustomUserDetails(UUID userId, String email, String password, boolean enabled,
                              boolean accountNonExpired, boolean accountNonLocked,
                              boolean credentialsNonExpired, Set<GrantedAuthority> authorities,
-                             String tenantSchema) {
+                             String tenantSchema, String jti) {
         this.userId = userId;
         this.email = email;
         this.password = password;
@@ -46,6 +47,7 @@ public class CustomUserDetails implements UserDetails {
         this.credentialsNonExpired = credentialsNonExpired;
         this.authorities = authorities;
         this.tenantSchema = tenantSchema;
+        this.jti = jti;
     }
 
     public static CustomUserDetails from(User user, UserAccount account, Set<GrantedAuthority> authorities, String tenantSchema) {
@@ -58,7 +60,8 @@ public class CustomUserDetails implements UserDetails {
                 account.isAccountNonLocked(),
                 account.isCredentialsNonExpired(),
                 authorities,
-                tenantSchema);
+                tenantSchema,
+                null);
     }
 
     public UUID getUserId() {
@@ -71,6 +74,15 @@ public class CustomUserDetails implements UserDetails {
 
     public String getEmail() {
         return email;
+    }
+
+    /**
+     * The JWT id ({@code jti}) of the access token this principal was reconstructed from
+     * (K-34). Used by per-session logout to blacklist the single token. {@code null} on
+     * principals built at login time (before a token exists).
+     */
+    public String getJti() {
+        return jti;
     }
 
     @Override

@@ -41,7 +41,7 @@ class AuditServiceTest {
     void setUp() {
         actorId = UUID.randomUUID();
         CustomUserDetails principal = new CustomUserDetails(
-                actorId, "admin@example.com", "pw", true, true, true, true, Set.of(), "tenant_test");
+                actorId, "admin@example.com", "pw", true, true, true, true, Set.of(), "tenant_test", null);
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(principal, null, Set.of()));
     }

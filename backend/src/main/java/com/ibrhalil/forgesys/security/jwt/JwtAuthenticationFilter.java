@@ -3,6 +3,7 @@ package com.ibrhalil.forgesys.security.jwt;
 import com.ibrhalil.forgesys.common.tenant.TenantContext;
 import com.ibrhalil.forgesys.persistence.repository.UserRepository;
 import com.ibrhalil.forgesys.security.CustomUserDetails;
+import com.ibrhalil.forgesys.security.TokenBlacklistService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.Cookie;
@@ -50,14 +51,15 @@ import java.util.stream.Collectors;
  * and the request proceeds unauthenticated; protected routes then get a uniform 401
  * from {@code RestAuthenticationEntryPoint}.
  *
- * <p><strong>Revocation ([RISK-21](../../../../../../docs/DECISIONS.md#risk-21)):</strong>
+ * <p><strong>Revocation ([RISK-21] + K-34):</strong>
  * after the tenant binding check, the filter reads {@code UserAccount.tokenInvalidBefore}
  * from the tenant schema (single-column projection — no JOIN, no lazy proxy). A token
  * whose {@code iat} predates {@code tokenInvalidBefore} was issued before the user
- * changed/reset their password or logged out, so it is rejected by clearing the
- * context (→ 401). Redis-backed access-token blacklist (granular revoke) is still
- * deferred to Epic 2.6; until then revocation is user-scoped (all of the user's
- * outstanding tokens) and per-request cost is one small indexed query.
+ * changed/reset their password, so it is rejected by clearing the context (→ 401) —
+ * this is the <em>user-scoped</em> revoke (all outstanding tokens). It is then checked
+ * against the Redis-backed access-token blacklist ({@code jti} set on per-session
+ * logout) for <em>granular</em> single-token revoke; per-request cost is one small
+ * indexed query plus one Redis lookup.
  */
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
@@ -66,13 +68,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtDecoder jwtDecoder;
     private final UserRepository userRepository;
+    private final TokenBlacklistService tokenBlacklistService;
     private final String cookieName;
 
     public JwtAuthenticationFilter(JwtDecoder jwtDecoder,
                                    UserRepository userRepository,
+                                   TokenBlacklistService tokenBlacklistService,
                                    @Value("${jwt.cookie-name:sf_access_token}") String cookieName) {
         this.jwtDecoder = jwtDecoder;
         this.userRepository = userRepository;
+        this.tokenBlacklistService = tokenBlacklistService;
         this.cookieName = cookieName;
     }
 
@@ -122,6 +127,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             SecurityContextHolder.clearContext();
             return;
         }
+        if (isBlacklisted(jwt)) {
+            SecurityContextHolder.clearContext();
+            return;
+        }
         SecurityContextHolder.getContext().setAuthentication(toAuthentication(jwt, ctxTenant));
     }
 
@@ -164,6 +173,24 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     userId, issuedAt, invalidBefore);
         }
         return revoked;
+    }
+
+    /**
+     * [K-34] Granular per-token revoke: a token whose {@code jti} was blacklisted on
+     * per-session logout is rejected by clearing the context (→ 401). Tokens without a
+     * {@code jti} (older clients) bypass this — they are still subject to the
+     * user-scoped {@code tokenInvalidBefore} check above.
+     */
+    private boolean isBlacklisted(Jwt jwt) {
+        String jti = jwt.getId();
+        if (jti == null || jti.isBlank()) {
+            return false;
+        }
+        if (tokenBlacklistService.isBlacklisted(jti)) {
+            log.debug("JWT jti {} is blacklisted (per-session logout); rejecting", jti);
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -214,7 +241,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 .map(SimpleGrantedAuthority::new)
                 .collect(Collectors.toSet());
 
-        CustomUserDetails principal = new CustomUserDetails(userId, email, null, true, true, true, true, authorities, tenantSchema);
+        CustomUserDetails principal = new CustomUserDetails(userId, email, null, true, true, true, true, authorities, tenantSchema, jwt.getId());
         return new UsernamePasswordAuthenticationToken(principal, null, authorities);
     }
 }

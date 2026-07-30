@@ -8,11 +8,18 @@ import com.ibrhalil.forgesys.entity.UserAccount;
 import com.ibrhalil.forgesys.exception.AuthException;
 import com.ibrhalil.forgesys.exception.ErrorCode;
 import com.ibrhalil.forgesys.persistence.repository.UserRepository;
+import com.ibrhalil.forgesys.security.CustomUserDetails;
 import com.ibrhalil.forgesys.security.CustomUserDetailsService;
+import com.ibrhalil.forgesys.security.TokenBlacklistService;
 import com.ibrhalil.forgesys.security.jwt.JwtTokenProvider;
+import com.ibrhalil.forgesys.security.refresh.IssuedRefresh;
+import com.ibrhalil.forgesys.security.refresh.RefreshSession;
+import com.ibrhalil.forgesys.security.refresh.RefreshTokenStore;
+import com.ibrhalil.forgesys.security.refresh.RotationResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Authentication operations. {@link #login(LoginRequest)} validates credentials
@@ -41,12 +49,15 @@ import java.util.Optional;
  * hash is a legacy pepper-less BCrypt hash is silently rehashed to the peppered format
  * and persisted inline (the user is already loaded, no extra round-trip).
  *
- * <p>Deferred: refresh tokens, logout (Redis blacklist — granular per-session revoke),
- * login-history write. Immediate session kill is now in place: changing/resetting the
- * password or logging out stamps {@code tokenInvalidBefore} and the
- * {@code JwtAuthenticationFilter} rejects tokens minted before that ([RISK-21]
- * resolved — user-scoped revoke, multi-device); granular single-session revoke is
- * Epic 2.6 (Redis access-token blacklist).
+ * <p><strong>Refresh + rotation + reuse detection (K-34):</strong> {@link #refresh(String)}
+ * consumes an opaque refresh token (Redis-backed, hash-at-rest), mints a fresh access
+ * token with freshly resolved authorities, and rotates the refresh token. Presenting an
+ * already-consumed token is treated as reuse/compromise and revokes all of the user's
+ * sessions (refresh tokens + {@code tokenInvalidBefore}). Per-session logout
+ * ({@link #logout(UUID, String, String)}) blacklists the single access token's
+ * {@code jti} and consumes the refresh token — other devices keep working.
+ *
+ * <p>Deferred: IP/tenant/email rate-limiting (Redis).
  */
 @Slf4j
 @Service
@@ -62,6 +73,9 @@ public class AuthService {
     private final JwtTokenProvider tokenProvider;
     private final UserRepository userRepository;
     private final LoginHistoryService loginHistoryService;
+    private final RefreshTokenStore refreshTokenStore;
+    private final CustomUserDetailsService userDetailsService;
+    private final TokenBlacklistService tokenBlacklistService;
 
     /**
      * Validates credentials and mints an access token. {@code noRollbackFor} is set so
@@ -124,9 +138,99 @@ public class AuthService {
         String tenantSchema = TenantContext.getCurrentTenant().orElse(null);
         String token = tokenProvider.generateAccessToken(
                 user.getId().toString(), user.getEmail(), tenantSchema, authorities);
+        IssuedRefresh refresh = refreshTokenStore.issue(user.getId(), user.getEmail(), tenantSchema);
         long expiresIn = tokenProvider.getAccessTokenTtlMinutes() * 60;
         loginHistoryService.record(user.getId(), user.getEmail(), true, null);
-        return new LoginResponse(token, "Bearer", expiresIn, user.getId(), user.getEmail(), authorities);
+        return new LoginResponse(token, refresh.token(), "Bearer", expiresIn, user.getId(), user.getEmail(), authorities);
+    }
+
+    /**
+     * Rotates a refresh token and mints a fresh access token (K-34). Authorities are
+     * re-resolved from the DB (so permission changes + locked/disabled state take effect
+     * at refresh) and the session tenant is bound to the request tenant (cross-tenant
+     * replay rejected, mirroring [RISK-19]). {@code noRollbackFor} keeps the reuse
+     * revocation writes committed even though reuse throws.
+     *
+     * <p>Reuse detection: an already-consumed (rotated) token revokes the user's refresh
+     * tokens and stamps {@code tokenInvalidBefore} so outstanding access tokens die too,
+     * then surfaces {@code auth_refresh_token_reuse}.
+     */
+    @Transactional(noRollbackFor = AuthException.class)
+    public LoginResponse refresh(String presentedRefreshToken) {
+        if (presentedRefreshToken == null || presentedRefreshToken.isBlank()) {
+            throw AuthException.refreshTokenInvalid();
+        }
+        String requestTenant = TenantContext.getCurrentTenant().orElse("public");
+        RotationResult result = refreshTokenStore.rotate(presentedRefreshToken);
+        return switch (result) {
+            case RotationResult.Rotated rotated -> {
+                RefreshSession session = rotated.issued().session();
+                String sessionTenant = session.tenant() == null ? "public" : session.tenant();
+                if (!sessionTenant.equals(requestTenant)) {
+                    // Cross-tenant replay: drop the freshly rotated token and reject.
+                    refreshTokenStore.revoke(rotated.issued().token());
+                    log.debug("Refresh token tenant [{}] != request tenant [{}]; rejecting",
+                            sessionTenant, requestTenant);
+                    throw AuthException.refreshTokenInvalid();
+                }
+                CustomUserDetails principal;
+                try {
+                    principal = userDetailsService.loadUserByUsername(session.email());
+                } catch (UsernameNotFoundException e) {
+                    throw AuthException.refreshTokenInvalid();
+                }
+                if (!principal.isEnabled() || !principal.isAccountNonLocked()) {
+                    loginHistoryService.record(principal.getUserId(), principal.getEmail(),
+                            false, ErrorCode.AUTH_REFRESH_TOKEN_INVALID.code());
+                    throw AuthException.refreshTokenInvalid();
+                }
+                List<String> authorities = principal.getAuthorities().stream()
+                        .map(GrantedAuthority::getAuthority)
+                        .toList();
+                String access = tokenProvider.generateAccessToken(
+                        principal.getUserId().toString(), principal.getEmail(), sessionTenant, authorities);
+                long expiresIn = tokenProvider.getAccessTokenTtlMinutes() * 60;
+                loginHistoryService.record(principal.getUserId(), principal.getEmail(), true, null);
+                yield new LoginResponse(access, rotated.issued().token(), "Bearer", expiresIn,
+                        principal.getUserId(), principal.getEmail(), authorities);
+            }
+            case RotationResult.ReuseDetected reuse -> {
+                invalidateAllTokens(reuse.userId());
+                refreshTokenStore.revokeAllForUser(reuse.userId(), reuse.tenant());
+                log.warn("Refresh token reuse for user {} tenant {}; revoked all sessions",
+                        reuse.userId(), reuse.tenant());
+                throw AuthException.refreshTokenReuse();
+            }
+            case RotationResult.Unknown ignored -> throw AuthException.refreshTokenInvalid();
+        };
+    }
+
+    /**
+     * Per-session logout (K-34): consumes the presented refresh token and blacklists the
+     * current access token's {@code jti}. Only this session is killed — other devices
+     * keep working. The user-scoped {@code tokenInvalidBefore} is NOT set here (that
+     * remains the nuclear path for password change/reset/reuse).
+     */
+    public void logout(UUID userId, String jti, String presentedRefreshToken) {
+        if (presentedRefreshToken != null && !presentedRefreshToken.isBlank()) {
+            refreshTokenStore.revoke(presentedRefreshToken);
+        }
+        long ttl = tokenProvider.getAccessTokenTtlMinutes() * 60;
+        tokenBlacklistService.blacklist(jti, ttl);
+    }
+
+    /**
+     * Stamps {@code tokenInvalidBefore = now()} for the user (kills all outstanding
+     * access tokens). Used on refresh-token reuse. Silent if the user/account is gone.
+     */
+    private void invalidateAllTokens(UUID userId) {
+        userRepository.findById(userId).ifPresent(user -> {
+            UserAccount account = user.getUserAccount();
+            if (account != null) {
+                account.setTokenInvalidBefore(OffsetDateTime.now());
+                userRepository.save(user);
+            }
+        });
     }
 
     /**
