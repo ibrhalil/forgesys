@@ -4,10 +4,13 @@ export interface LoginRequest {
   password: string;
 }
 
-// Backend LoginResponse: accessToken, tokenType, expiresIn, userId, email, authorities
-// (no tenant field — tenant comes from /me)
+// Backend LoginResponse: accessToken, refreshToken, tokenType, expiresIn, userId,
+// email, authorities (no tenant field — tenant comes from /me). Both tokens are also
+// set as httpOnly cookies (sf_access_token, sf_refresh_token); the body copies exist
+// for non-browser clients. The SPA relies on the cookies, not these fields.
 export interface LoginResponse {
   accessToken: string;
+  refreshToken?: string;
   tokenType: string;
   expiresIn: number;
   userId: string;

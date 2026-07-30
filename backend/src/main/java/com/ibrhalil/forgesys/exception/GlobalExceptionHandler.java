@@ -222,6 +222,7 @@ public class GlobalExceptionHandler {
         if (lower.contains("users_username")) return ErrorCode.USER_USERNAME_TAKEN;
         if (lower.contains("roles_name")) return ErrorCode.ROLE_NAME_TAKEN;
         if (lower.contains("groups_name")) return ErrorCode.GROUP_NAME_TAKEN;
+        if (lower.contains("projects_name")) return ErrorCode.PROJECT_NAME_TAKEN;
         if (lower.contains("companies_subdomain") || lower.contains("companies_schema_name")) {
             return ErrorCode.COMPANY_SUBDOMAIN_TAKEN;
         }
