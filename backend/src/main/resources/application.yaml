@@ -46,3 +46,12 @@ forgesys:
     # this many active sessions the oldest are evicted (login always succeeds). 0 =
     # unlimited (default). Caps the blast radius of a compromised account.
     max-sessions: ${MAX_SESSIONS:0}
+    # Faz 3 token-bucket rate limit on the public auth endpoints (/auth/login,
+    # /auth/company/verify, /auth/refresh), keyed by scope + tenant + client IP.
+    # Complements the per-account brute-force lockout (RISK-22) against credential
+    # stuffing from one IP. Disabled in the test profile.
+    rate-limit:
+      enabled: ${RATE_LIMIT_ENABLED:true}
+      capacity: ${RATE_LIMIT_CAPACITY:20}
+      refill-tokens: ${RATE_LIMIT_REFILL_TOKENS:20}
+      refill-period-seconds: ${RATE_LIMIT_REFILL_PERIOD_SECONDS:60}

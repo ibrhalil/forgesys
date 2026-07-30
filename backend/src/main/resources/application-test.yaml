@@ -21,4 +21,9 @@ forgesys:
     # Non-secret placeholder pepper for the test profile only. Lets the
     # PepperingPasswordEncoder bean load without a PASSWORD_PEPPER env var.
     password-pepper: test-pepper-not-a-real-secret
+    # Faz 3: rate limiting disabled in the test profile so the broad auth controller
+    # tests (which hit /auth/login many times from one IP) aren't throttled. The
+    # limiter is verified by dedicated unit tests instead.
+    rate-limit:
+      enabled: false
 

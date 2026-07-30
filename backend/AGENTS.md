@@ -16,7 +16,7 @@ Root package `com.ibrhalil.forgesys` (NOT a `.backend` subpackage):
 - `service/` — business logic: `TenantProvisioningService`, `TenantMigrationSupport` (shared programmatic tenant Flyway), `AuthService`, `UserService`/`RoleService`/`GroupService`/`PermissionService` (tenant-scoped RBAC), `PlatformCompanyService` (cross-tenant), `AuditService`/`AuditQueryService`/`LoginHistoryService` (K-19 audit). `[PHASE 3]` `modules/` subpackage.
 - `dto/` — request/response DTOs (`record`).
 - `exception/` — `GlobalExceptionHandler`, uniform error shape (`ApiErrorResponse`/`ApiFieldError`/`ApiErrorFactory`), `ErrorCode` (stable wire codes), `BusinessException` -> `AuthException`/`ResourceNotFoundException` hierarchy.
-- `security/` — Spring Security adapters: `RestAuthenticationEntryPoint` (401), `RestAccessDeniedHandler` (403), `PepperingPasswordEncoder` (K-23), `CustomUserDetails`/`CustomUserDetailsService`, `SessionRevocationService` (Faz 1 — privilege-change session revoke), `jwt/` (`JwtConfig`, `JwtTokenProvider`, `JwtAuthenticationFilter`, `RsaKeyProperties`, `RsaKeys`).
+- `security/` — Spring Security adapters: `RestAuthenticationEntryPoint` (401), `RestAccessDeniedHandler` (403), `PepperingPasswordEncoder` (K-23), `CustomUserDetails`/`CustomUserDetailsService`, `SessionRevocationService` (Faz 1 — privilege-change session revoke), `jwt/` (`JwtConfig`, `JwtTokenProvider`, `JwtAuthenticationFilter`, `RsaKeyProperties`, `RsaKeys`), `ratelimit/` (`RateLimitFilter` + Redis/In-memory token-bucket — Faz 3).
 - `config/` — `MultiTenancyJpaConfig`, `SecurityConfig` (`@EnableMethodSecurity` + filter chain + BCrypt/pepper + tenant-filter ordering), `CorsConfig`, `TenantMigrationRunner` (`ApplicationRunner`, `@Profile("!test")`), `RbacSeeder` (`ApplicationRunner`, `@Profile("!test")`), `PermissionCatalog` (built-in permission namespace), `SystemAdminBootstrapRunner` + `SystemAdminBootstrapProperties` (K-24).
 
 ## Tenant Context rules (CRITICAL)
@@ -137,6 +137,8 @@ Config profiles (dev/prod/test) are the single source: [ARCHITECTURE.md - Config
 - `forgesys.security.cors.allowed-origins` — comma-separated; cookie-based auth requires `allowCredentials=true`.
 - `forgesys.multi-tenancy.base-domain` — subdomain base for `TenantFilter` host resolution (default `localhost`, i.e. `*.localhost`).
 - `forgesys.bootstrap.system-admin.*` (K-24) — reserved system tenant + admin credentials, see `SystemAdminBootstrapProperties`. Defaults in `application-dev.yaml`; prod must override via env. Default password is a placeholder — never deploy to prod with it.
+- `forgesys.security.max-sessions` (Faz 5a) — max concurrent active sessions per user (0 = unlimited); oldest evicted on login.
+- `forgesys.security.rate-limit.*` (Faz 3) — `{enabled,capacity,refill-tokens,refill-period-seconds}` token-bucket on the public auth endpoints (login/verify/refresh), keyed by scope+tenant+IP; Redis Lua (dev/prod, fail-open) + in-memory (test, where it is disabled).
 
 ## Gotchas
 
