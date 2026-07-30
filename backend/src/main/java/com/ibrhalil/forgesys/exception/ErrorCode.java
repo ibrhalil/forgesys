@@ -19,6 +19,7 @@ public enum ErrorCode {
     USER_USERNAME_TAKEN(HttpStatus.BAD_REQUEST, "Username is already in use"),
     USER_PASSWORD_INCORRECT(HttpStatus.BAD_REQUEST, "Current password is incorrect"),
     ROLE_NAME_TAKEN(HttpStatus.BAD_REQUEST, "Role name is already in use"),
+    ROLE_PARENT_CYCLE(HttpStatus.BAD_REQUEST, "Cannot assign a parent role that would create an inheritance cycle"),
     GROUP_NAME_TAKEN(HttpStatus.BAD_REQUEST, "Group name is already in use"),
     PROJECT_NAME_TAKEN(HttpStatus.BAD_REQUEST, "Project name is already in use"),
     COMPANY_SUBDOMAIN_TAKEN(HttpStatus.BAD_REQUEST, "Subdomain is already taken"),

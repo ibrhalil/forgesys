@@ -16,7 +16,7 @@ Root package `com.ibrhalil.forgesys` (NOT a `.backend` subpackage):
 - `service/` — business logic: `TenantProvisioningService`, `TenantMigrationSupport` (shared programmatic tenant Flyway), `AuthService`, `UserService`/`RoleService`/`GroupService`/`PermissionService` (tenant-scoped RBAC), `PlatformCompanyService` (cross-tenant), `AuditService`/`AuditQueryService`/`LoginHistoryService` (K-19 audit). `[PHASE 3]` `modules/` subpackage.
 - `dto/` — request/response DTOs (`record`).
 - `exception/` — `GlobalExceptionHandler`, uniform error shape (`ApiErrorResponse`/`ApiFieldError`/`ApiErrorFactory`), `ErrorCode` (stable wire codes), `BusinessException` -> `AuthException`/`ResourceNotFoundException` hierarchy.
-- `security/` — Spring Security adapters: `RestAuthenticationEntryPoint` (401), `RestAccessDeniedHandler` (403), `PepperingPasswordEncoder` (K-23), `CustomUserDetails`/`CustomUserDetailsService`, `SessionRevocationService` (Faz 1 — privilege-change session revoke), `jwt/` (`JwtConfig`, `JwtTokenProvider`, `JwtAuthenticationFilter`, `RsaKeyProperties`, `RsaKeys`), `ratelimit/` (`RateLimitFilter` + Redis/In-memory token-bucket — Faz 3).
+- `security/` — Spring Security adapters: `RestAuthenticationEntryPoint` (401), `RestAccessDeniedHandler` (403), `PepperingPasswordEncoder` (K-23), `CustomUserDetails`/`CustomUserDetailsService` (Faz 4a — recursive parent-role authority resolution), `SessionRevocationService` (Faz 1 — privilege-change session revoke), `OwnershipGuard` (Faz 4b — ABAC ownership template), `jwt/` (`JwtConfig`, `JwtTokenProvider`, `JwtAuthenticationFilter`, `RsaKeyProperties`, `RsaKeys`), `ratelimit/` (`RateLimitFilter` + Redis/In-memory token-bucket — Faz 3).
 - `config/` — `MultiTenancyJpaConfig`, `SecurityConfig` (`@EnableMethodSecurity` + filter chain + BCrypt/pepper + tenant-filter ordering), `CorsConfig`, `TenantMigrationRunner` (`ApplicationRunner`, `@Profile("!test")`), `RbacSeeder` (`ApplicationRunner`, `@Profile("!test")`), `PermissionCatalog` (built-in permission namespace), `SystemAdminBootstrapRunner` + `SystemAdminBootstrapProperties` (K-24).
 
 ## Tenant Context rules (CRITICAL)
@@ -69,7 +69,7 @@ Root package `com.ibrhalil.forgesys` (NOT a `.backend` subpackage):
 | `POST` | `/api/v1/users` · `PUT /{id}` · `PUT /{id}/roles` · `PUT /{id}/groups` · `PATCH /{id}/password` | `iam:user:write` |
 | `DELETE` | `/api/v1/users/{id}` | `iam:user:delete` |
 | `GET` | `/api/v1/roles` (page) · `GET /{id}` | `iam:role:read` |
-| `POST` | `/api/v1/roles` · `PUT /{id}` · `PUT /{id}/permissions` | `iam:role:write` |
+| `POST` | `/api/v1/roles` · `PUT /{id}` · `PUT /{id}/permissions` · `PUT /{id}/parents` | `iam:role:write` |
 | `DELETE` | `/api/v1/roles/{id}` | `iam:role:delete` |
 | `GET` | `/api/v1/groups` (page) · `GET /{id}` | `iam:group:read` |
 | `POST` | `/api/v1/groups` · `PUT /{id}` · `PUT /{id}/roles` · `PUT /{id}/members` | `iam:group:write` |

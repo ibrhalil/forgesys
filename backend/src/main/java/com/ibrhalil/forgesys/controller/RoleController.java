@@ -1,6 +1,7 @@
 package com.ibrhalil.forgesys.controller;
 
 import com.ibrhalil.forgesys.dto.AssignPermissionsRequest;
+import com.ibrhalil.forgesys.dto.AssignRolesRequest;
 import com.ibrhalil.forgesys.dto.RoleRequest;
 import com.ibrhalil.forgesys.dto.RoleResponse;
 import com.ibrhalil.forgesys.service.RoleService;
@@ -66,5 +67,13 @@ public class RoleController {
     public ResponseEntity<RoleResponse> setPermissions(@PathVariable UUID id,
                                                        @Valid @RequestBody AssignPermissionsRequest request) {
         return ResponseEntity.ok(roleService.setPermissions(id, request));
+    }
+
+    /** Faz 4a: replace the roles this role inherits permissions from (role inheritance). */
+    @PutMapping("/{id}/parents")
+    @PreAuthorize("hasAuthority('iam:role:write')")
+    public ResponseEntity<RoleResponse> setParents(@PathVariable UUID id,
+                                                   @Valid @RequestBody AssignRolesRequest request) {
+        return ResponseEntity.ok(roleService.setParents(id, request));
     }
 }

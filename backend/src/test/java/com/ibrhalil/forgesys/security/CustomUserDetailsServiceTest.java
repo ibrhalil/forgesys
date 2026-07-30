@@ -77,6 +77,39 @@ class CustomUserDetailsServiceTest {
     }
 
     @Test
+    void resolvesPermissionsTransitivelyInheritedFromParentRoles() {
+        // Faz 4a: a role inherits its parent roles' permissions transitively.
+        Role grandparent = role("gp", Set.of(permission("a:read")));
+        Role parent = role("p", Set.of(permission("b:read")), Set.of(grandparent));
+        Role child = role("c", Set.of(permission("c:read")), Set.of(parent));
+        User user = user("u@acme.com", Set.of(child), Set.of());
+        when(userRepository.findByEmail("u@acme.com")).thenReturn(Optional.of(user));
+
+        CustomUserDetails details = userDetailsService.loadUserByUsername("u@acme.com");
+
+        Set<String> authorityNames = details.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority).collect(Collectors.toSet());
+        assertThat(authorityNames).containsExactlyInAnyOrder("a:read", "b:read", "c:read");
+    }
+
+    @Test
+    void inheritanceCycleTerminatesViaVisitedGuard() {
+        // Defense-in-depth: a malformed cycle (which setParents prevents) must not
+        // infinite-loop — the shared visited set breaks it.
+        Role a = role("a", Set.of(permission("a:x")));
+        Role b = role("b", Set.of(permission("b:y")), Set.of(a));
+        a.setParentRoles(new java.util.HashSet<>(Set.of(b))); // a -> b -> a
+        User user = user("u@acme.com", Set.of(a), Set.of());
+        when(userRepository.findByEmail("u@acme.com")).thenReturn(Optional.of(user));
+
+        CustomUserDetails details = userDetailsService.loadUserByUsername("u@acme.com");
+
+        Set<String> authorityNames = details.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority).collect(Collectors.toSet());
+        assertThat(authorityNames).containsExactlyInAnyOrder("a:x", "b:y");
+    }
+
+    @Test
     void unknownEmailThrowsUsernameNotFound() {
         when(userRepository.findByEmail("nobody@acme.com")).thenReturn(Optional.empty());
 
@@ -92,10 +125,15 @@ class CustomUserDetailsServiceTest {
     }
 
     private Role role(String name, Set<Permission> permissions) {
+        return role(name, permissions, Set.of());
+    }
+
+    private Role role(String name, Set<Permission> permissions, Set<Role> parents) {
         Role r = new Role();
         r.setId(UUID.randomUUID());
         r.setName(name);
         r.setPermissions(permissions);
+        r.setParentRoles(new java.util.HashSet<>(parents));
         return r;
     }
 

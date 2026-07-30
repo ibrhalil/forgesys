@@ -23,7 +23,7 @@ import lombok.ToString;
 @Getter
 @Setter
 @NoArgsConstructor
-@ToString(exclude = "permissions")
+@ToString(exclude = {"permissions", "parentRoles"})
 @Table(
         name = "t_roles",
         indexes = {
@@ -52,4 +52,26 @@ public class Role extends BaseEntity {
                     foreignKey = @ForeignKey(name = "fk_role_permissions_permission"))
     )
     private Set<Permission> permissions = new HashSet<>();
+
+    /**
+     * Faz 4a role inheritance: the roles whose permissions this role <em>inherits</em>.
+     * A role's effective permission set is its own {@link #permissions} plus the
+     * (transitive) permissions of every {@code parentRoles} entry. Resolved recursively
+     * by {@code CustomUserDetailsService.resolveAuthorities} with a visited-set guard, so
+     * even a malformed cycle can't infinite-loop. {@code RoleService.setParents} enforces
+     * acyclicity (no self-parent, no path back to the child) on assignment.
+     */
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "t_role_parents",
+            uniqueConstraints = @UniqueConstraint(
+                    name = "uk_role_parents_role_parent",
+                    columnNames = {"role_id", "parent_role_id"}
+            ),
+            joinColumns = @JoinColumn(name = "role_id",
+                    foreignKey = @ForeignKey(name = "fk_role_parents_role")),
+            inverseJoinColumns = @JoinColumn(name = "parent_role_id",
+                    foreignKey = @ForeignKey(name = "fk_role_parents_parent"))
+    )
+    private Set<Role> parentRoles = new HashSet<>();
 }
