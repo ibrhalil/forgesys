@@ -42,6 +42,9 @@ public final class PermissionCatalog {
     public static final String PM_PROJECT_READ = "pm:project:read";
     public static final String PM_PROJECT_WRITE = "pm:project:write";
     public static final String PM_PROJECT_DELETE = "pm:project:delete";
+    public static final String PM_TASK_READ = "pm:task:read";
+    public static final String PM_TASK_WRITE = "pm:task:write";
+    public static final String PM_TASK_DELETE = "pm:task:delete";
 
     public record PermissionDefinition(String name, String description) {
     }
@@ -63,7 +66,10 @@ public final class PermissionCatalog {
             new PermissionDefinition(PLATFORM_COMPANY_WRITE, "Update platform company status"),
             new PermissionDefinition(PM_PROJECT_READ, "Read tenant projects"),
             new PermissionDefinition(PM_PROJECT_WRITE, "Create or update tenant projects"),
-            new PermissionDefinition(PM_PROJECT_DELETE, "Delete tenant projects")
+            new PermissionDefinition(PM_PROJECT_DELETE, "Delete tenant projects"),
+            new PermissionDefinition(PM_TASK_READ, "Read project tasks"),
+            new PermissionDefinition(PM_TASK_WRITE, "Create or update project tasks"),
+            new PermissionDefinition(PM_TASK_DELETE, "Delete project tasks")
     );
 
     private PermissionCatalog() {
