@@ -10,7 +10,7 @@
 - `[BLOCKED]` — engelli (notu ile)
 - `CANCEL` — iptal (gerekçe ile)
 
-## Mevcut Durum (Faz 2 backend — auth/RBAC/audit/refresh tamamlandı — DONE)
+## Mevcut Durum (Faz 2 backend + IAM hardening + pm modülü + admin console — DONE)
 
 Backend altyapısı + auth/RBAC/platform management + iki-fazlı tenant signup tamamlandı:
 
@@ -39,9 +39,9 @@ Backend altyapısı + auth/RBAC/platform management + iki-fazlı tenant signup t
 - [x] `JwtTokenProvider` (RS256, oauth2-resource-server) + `JwtAuthenticationFilter` (cookie→SecurityContext)
 - [x] `CustomUserDetails(Service)` — authorities = direct roles + active group roles → permissions
 
-**Faz 2.5 (kısmen DONE) — Auth endpoints:**
+**Faz 2.5 (DONE) — Auth endpoints:**
 - [x] `POST /auth/login` (cookie + body access token), `GET /auth/me`, `POST /auth/logout` (cookie expire)
-- [ ] Refresh token + Redis blacklist (Epic 2.6 ile)
+- [x] Refresh token + Redis blacklist (K-34 — DONE; rotasyon + reuse detection + per-session logout, bkz. Epic 2.5/2.6 notu)
 
 **Faz 2.7-2.8 (kısmen DONE) — Wrap-up:**
 - [x] `SystemAdminBootstrapRunner` + `RbacSeeder` + `PermissionCatalog` (K-24, K-25)
@@ -188,23 +188,11 @@ Kod analizi sonucu keşfedilen P0 düzeltmeler. User CRUD / log'dan ÖNCE çöz�
 ### Epic 2.10 — Audit & Logging (K-19 + K-27/K-28/K-29/K-30 genişletmesi)
 > K-19 temel 3 katmanlı log (audit + login history + request/trace). K-27/K-28/K-29/K-30 genişletmeleriyle: başarısız login loglama, high-risk body loglama, anomaly detection, approval workflow, session management, notification subsystem, activity feed.
 
-**K-19 çekirdek (3 katmanlı log):**
-- `t_audit_logs` (actor/action/entity/old-new JSONB/request_body JSONB/ip/trace_id) + `t_login_history` (user/success/ip/user_agent/reason enum) — `tenant/V3__audit_login_history.sql`
-- `AuditLog` + `LoginHistory` entity + repository (tenant şeması)
-- `AuditService` + AOP `@AuditLog` annotation (admin aksiyonları otomatik yakala)
-- Login history yazımı — login/refresh/register/logout **+ başarısız denemeler** (K-27)
-- Görüntüleme endpoint'leri: `GET /audit-logs`, `GET /login-history`, `GET /request-logs` (admin `@PreAuthorize`, sayfalı + filtre)
-- Request log arama — traceId ile lookup
+**K-19 çekirdek (3 katmanlı log):** — **DONE (2026-07-27):** `t_audit_logs` + `t_login_history` (append-only V6 trigger + yetki değişim delta kaydı dahil, Faz IAM 2 ile), `GET /audit-logs` + `GET /login-history` (`iam:audit:read`, sayfalı + filtre + `q` araması). Kalan: request/trace **tablo** (`GET /request-logs`) + K-27'nin kalanı.
 
-**K-27 genişletme (audit/log/security hardening):**
-- High-risk endpoint (create/delete/admin `iam:*`/`platform:*`) request body loglama (maskeli: şifre/token `[REDACTED]`) — config-driven high-risk list
-- `t_pending_actions` tablosu + approval workflow (`@ApprovalRequired` veya servis çağrısı) — user/role delete default olarak çift onay
-- Anomaly detection passif (rate limit + unusual pattern → K-29 alert, block değil)
+**K-27 genişletme (audit/log/security hardening):** — kısmen DONE: audit append-only trigger + yetki değişim old/new delta kaydı (Faz IAM 2) geldi. Kalan: `@AuditLog` AOP, high-risk request body loglama, `t_pending_actions` approval workflow, anomaly detection.
 
-**K-28 session management (Epic 2.5/2.6 bağımlı):**
-- Redis active sessions (`session:{userId}:{sessionId}` → device/ip/user_agent/loginAt/lastSeen, TTL = refresh token)
-- `t_sessions_log` tablosu (tenant) — LOGIN/LOGOUT/SESSION_REVOKED/EXPIRED event'leri (kalıcı audit)
-- Endpoint: `/api/v1/users/me/sessions` (self) + `/api/v1/users/{id}/sessions` (admin, `iam:user:write`) + `DELETE .../sessions/{sessionId}` (remote revoke)
+**K-28 session management:** — **DONE (2026-07-30):** Redis active sessions + `/users/me/sessions` (self) + `/users/{id}/sessions` (admin) + `DELETE .../sessions/{sessionId}` (remote revoke — access token `tokenInvalidBefore` ile anında düşer) + max concurrent session limiti (`forgesys.security.max-sessions`). `t_sessions_log` ertelendi (`t_login_history`/`t_audit_logs` ile örtüşme).
 
 **K-29 notification subsystem:**
 - `t_notifications` (tenant) + `t_notification_preferences` (user bazlı kanal tercihleri)
@@ -220,6 +208,21 @@ Kod analizi sonucu keşfedilen P0 düzeltmeler. User CRUD / log'dan ÖNCE çöz�
 - UI (Faz 4) — activity feed ekranı admin panel'e (K-20) eklenir
 
 > **Sıralama:** K-19 çekirdek önce → K-27 genişletme → K-28 (Epic 2.5/2.6 sonrası) → K-29 notification (audit + anomaly'den beslenir) → K-30 activity (audit log'un user-friendly görselleştirmesi, UI Faz 4).
+
+### Epic 2.11 — IAM Hardening (DONE 2026-07-30 – 2026-08-17)
+
+> Detaylı faz kayıtları: kök [`AGENTS.md`](../AGENTS.md) "Faz IAM" bölümü.
+
+- [x] Yetki-sonrası session revoke — rol/izin/grup değişiminde etkilenen kullanıcıların access + refresh token'ları anında düşer (`SessionRevocationService`; privilege-retention penceresi kapandı)
+- [x] Max concurrent session limiti (`forgesys.security.max-sessions`, en eski session düşürülür)
+- [x] Audit append-only (V6 trigger) + yetki değişim delta kaydı (old/new JSON)
+- [x] App-level rate limiting — public auth endpoint'lerinde Redis Lua token-bucket (`RateLimitFilter`, JWT decode'dan önce; Nginx edge limit'i K-33 gateway epic'ine ertelendi)
+- [x] Rol kalıtımı (`t_role_parents`, V7; cycle guard + recursive authority çözümlemesi) + ABAC ownership şablonu (`Ownable` + `OwnershipGuard`)
+- [x] `all_permissions` bayrağı (V8) — Admin implicit süper-kullanıcı; `PUT /roles/{id}/permissions` `{all:true}` kısayolu
+- [x] Last-admin invariant ([RISK-35](DECISIONS.md#risk-35)) — self-delete koşulsuz yasak, son aktif admin kaybedilemez (11 write path)
+- [x] Permission CRUD + user/group effective-permissions endpoint'leri
+- [x] User directory read model (`UserDirectoryView` `@Subselect`) + `iam:group-member:read` scoped görünürlük + `GET /users/{id}/activity` + admin unlock (`DELETE /users/{id}/lock`) + audit/login-history araması
+- [x] Güvenlik düzeltmeleri: RbacSeeder startup privilege escalation kapandı ([RISK-36](DECISIONS.md#risk-36)); aktif lockout refresh'i de blokluyor; refresh revoke rotasyon zincirini takip ediyor
 
 ---
 
@@ -252,8 +255,8 @@ Kod analizi sonucu keşfedilen P0 düzeltmeler. User CRUD / log'dan ÖNCE çöz�
 - `GET/POST/PATCH/DELETE /api/v1/apps/{id}/records` + `/properties` + `/views`
 - MapStruct mappers (`AppMapper`, `RecordMapper`, `ViewMapper`)
 
-### Epic 3.1 — Built-in "Tasks" Modülü
-`tenant/V3__module_tasks.sql` (`t_tasks`, `t_task_comments`). Entity + repository. `TaskService` + `TaskController` (`/api/v1/tasks`) + `@PreAuthorize('tasks:task:*')`. Kanban board view API (group by status). CRUD + permission isolation testi.
+### Epic 3.1 — Built-in "Tasks" Modülü — DONE (pm modülü olarak)
+> Görev yönetimi standalone yerine **project-scoped** geldi (2026-08): `tenant/V4__module_projects.sql` + `V5__module_tasks.sql` — tip-bazlı proje yapısı (`t_projects`), TASKS tipinde `t_tasks` (proje-scoped) + Kanban board UI (Epic 4.1). `pm:*` permission namespace. Standalone Tasks modülü bu sayının yerini aldı; Notes/Warehouse/Logistics (3.2-3.4) planlandığı gibi.
 
 ### Epic 3.2 — Built-in "Notes" Modülü
 `tenant/V4__module_notes.sql` (`t_notes`, `t_note_categories`). Entity + service + controller (`/api/v1/notes`). Arama + kategori filtreleme.
@@ -264,9 +267,9 @@ Kod analizi sonucu keşfedilen P0 düzeltmeler. User CRUD / log'dan ÖNCE çöz�
 ### Epic 3.4 — Built-in "Logistics" Modülü
 `tenant/V6__module_logistics.sql` (`t_shipments`, `t_vehicles`, `t_drivers`, `t_routes`). Entity'ler (Shipment/Vehicle/Driver/Route) + service + controller. Sevkiyat durum makinesi (CREATED -> IN_TRANSIT -> DELIVERED).
 
-### Epic 3.X — Testcontainer + Rate Limit
-- Testcontainers: tenant signup + modül aktivasyon + CRUD + **veri izolasyonu** e2e (P0 — kritik yol sonu)
-- Rate limiting (Redis, IP + tenant bazlı)
+### Epic 3.X — Testcontainer + Rate Limit — DONE
+- [x] Testcontainers: iki gerçek tenant şeması + `SET search_path` izolasyonu + RISK-26 mid-tx switch doğrulaması (`CrossTenantIsolationTest`, `-Dforgesys.pg.it=true` gate'i)
+- [x] Rate limiting (Redis Lua token-bucket — Epic 2.11 ile app-level geldi; edge `limit_req` K-33 gateway epic'ine ertelendi)
 
 ---
 
@@ -279,21 +282,11 @@ Kod analizi sonucu keşfedilen P0 düzeltmeler. User CRUD / log'dan ÖNCE çöz�
 - Modül-bazlı sidebar (`GET /modules` -> aktif modüller) + aktivasyon ekranı
 - `App.tsx` parçala + React Router route yapısı
 
-### Epic 4.0.B — Admin/User/Log Management UI (K-20)
-> K-20: backend Faz 2 bitince gelir. Faz 4 core stack burada kurulur. Tenant-scoped. Built-in modül UI'ları Epic 4.1'de kalır.
+### Epic 4.0.B — Admin/User/Log Management UI (K-20) — DONE (2026-08)
+> Faz 4 core stack kuruldu ve tamamı ship edildi: login/register/verify sayfaları + Zustand auth store + axios interceptor (cookie, transparent refresh); data-driven lazy routing + permission-gated navigation (`RequirePermission`); users/roles/groups/permissions/sessions (self + admin)/audit-logs/login-history/projects sayfaları; user detail (aktivite geçmişi, unlock, effective-permissions, diff-based sequential save); profile page. Kalan: request-log sayfası (endpoint henüz yok — K-19 Kalan).
 
-- Login/Register sayfaları + Zustand auth store + axios interceptor (`withCredentials` cookie)
-- React Router + auth guard (rol/permission bazlı route koruma)
-- Admin panel — **User management** UI (CRUD + rol/grup atama)
-- Admin panel — **Role/Permission/Group yönetimi** UI
-- **User page** — profil düzenleme + email doğrulama durumu + kendi login geçmişi
-- **Audit log sayfası** (filtreli tablo: actor/action/entity/tarih)
-- **Login history sayfası** (user/başarı/IP/tarih filtre)
-- **Request log sayfası** (traceId arama + seviye filtre)
-- Rol-bazlı sidebar (permission'a göre menü göster/gizle)
-
-### Epic 4.1 — Built-in Modül UI'ları
-Tasks UI (liste + Kanban board), Notes UI (rich-text + kategori), Warehouse UI (ürün/stok tablosu + hareketler), Logistics UI (sevkiyat listesi + durum güncelleme).
+### Epic 4.1 — Built-in Modül UI'ları — kısmen DONE
+Tasks UI (liste + Kanban board — DONE, pm modülüyle birlikte). Notes UI (rich-text + kategori), Warehouse UI (ürün/stok tablosu + hareketler), Logistics UI (sevkiyat listesi + durum güncelleme) — TODO.
 
 ### Epic 4.2 — Custom App Builder UI (Notion-style — en iddialı)
 - App designer sihirbazı (isim/ikon/açıklama)
