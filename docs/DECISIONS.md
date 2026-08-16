@@ -418,6 +418,11 @@ Her kayıt:
   - Frontend: aktörün kendi satırında/sayfasında Delete butonu gizli (`UsersPage`/`UserDetailPage`, `user.id !== currentUserId`); 409 mesajları mevcut global toast ile gelir.
 - **Durum:** ÇÖZÜLDÜ (2026-08-15). 324 test yeşil (H2). Yeni `ErrorCode`'lar: `last_admin_required` (409), `self_delete_forbidden` (409), `auth_account_disabled` (401). Controller testleri: son admin delete/disable/role-boşaltma/group-üyelik-çekme → 409; ikinci admin varken → 204; self-delete (başka admin olsa bile) → 409; disabled admin invariant'a sayılmaz; disabled login → 401. Dosya:ref — `security/LastAdminGuard.java`, `UserRepository.existsEnabledByRoleIds`, `RoleRepository.findChildRoleIds`, `UserService.java` (delete/update/setRoles/setGroups), `RoleService.delete`, `GroupService.delete`.
 
+### RISK-36
+**RbacSeeder startup privilege escalation (P0)**
+- **Bağlam:** `RbacSeeder` her restart'ta `findByRolesEmpty` ile rol'süz tüm kullanıcıları bulup `all_permissions` bayraklı `Admin` rolüne atıyordu (provisioning admin'ini garanti altına alma niyetiyle). Kasıtlı olarak yetkisiz bırakılmış bir kullanıcı, uygulamanın her restart'ında sessizce tam admin yetkisine yükseliyordu. `SystemAdminBootstrapRunner`'daki system admin ataması da bu örtük yola bağımlıydı.
+- **Karar:** Seeder startup'ta ASLA kullanıcı rol ataması yapmaz; Admin yalnızca `TenantProvisioningService.createAdminUser` içinden explicit `RbacSeeder.assignAdminTo(user)` çağrısıyla, tenant provisioning'i sırasında verilir. `findByRolesEmpty` repository metodu kaldırıldı (dangling reference yok).
+- **Durum:** ÇÖZÜLDÜ (2026-08-16). `RbacSeederTest` regresyonu: seed sonrası rol'süz kullanıcı rol'süz kalır; provisioning yeni admin'e Admin atar. Yan düzeltmeler aynı sette: (1) aktif `lockedUntil` penceresi artık refresh'te de bloklu (`CustomUserDetails.isEffectivelyNonLocked` — önceden kilitli hesap 15 dk boyunca refresh ile yeni access token basabiliyordu); (2) `RedisRefreshTokenStore.revoke` rotasyon zincirini (`rotatedTo`) takip ediyor — rotate edilmiş token ile logout, halef token'ı da öldürüyor (logout↔silent-refresh yarışı). Bilinen açık P2'ler: `InMemoryRefreshTokenStore.revoke` zincir takibi prod paritesinde değil; revoke zincir yürüyüşü Redis tarafında da atomik değil (Lua değil).
 
 ---
 

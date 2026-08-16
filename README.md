@@ -5,7 +5,7 @@
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.0-brightgreen.svg)](https://spring.io/projects/spring-boot)
 [![React](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791.svg)](https://www.postgresql.org)
-[![Version](https://img.shields.io/badge/version-0.0.4-lightgrey.svg)]()
+[![Version](https://img.shields.io/badge/version-0.1.1-lightgrey.svg)]()
 
 **Modüler çok-kiracılı (multi-tenant) SaaS platformu.** Şirketler (tenant) kayıt olur, kendi ekiplerini yönetir ve ihtiyaç duydukları **modülleri** açar (Tasks, Notes, Warehouse, Logistics) ya da kendi **custom app'lerini** (Notion-style database builder) yaratır. Hibrit model: built-in modüller (Odoo/ERPNext mantığı) + tenant custom app'leri (Notion/Airtable mantığı). Modül aktivasyonu **plan bazlıdır** (Free/Pro/Enterprise). Kullanıcılar rol-bazlı erişim kontrolü (RBAC) ile giriş yapar.
 
@@ -13,25 +13,28 @@
 
 ## Özellikler
 
-**Mevcut (Faz 2.9 backend — DONE):**
+**Mevcut (IAM + admin console — DONE):**
 - Multi-module Maven yapısı (`common` <- `persistence` <- `backend` + `frontend`)
 - Schema-per-tenant multi-tenancy: subdomain çözümleme + Hibernate `SCHEMA` stratejisi
-- Flyway per-schema migration (public auto-config + tenant programmatik)
-- **Kimlik doğrulurma:** Spring Security + JWT (RS256, httpOnly cookie) + BCrypt(12) pepper'lı (K-23)
-- **RBAC:** User/Role/Permission/Group CRUD + `@PreAuthorize` method-level yetkilendirme (K-26)
+- Flyway per-schema migration (public auto-config + tenant programmatik + mevcut tenant'lar için startup runner)
+- **Kimlik doğrulurma:** Spring Security + JWT (RS256, httpOnly cookie) + BCrypt(12) pepper'lı (K-23); opak refresh token (Redis, hash-at-rest, rotasyon + reuse detection, K-34); per-session logout + jti blacklist + `tokenInvalidBefore` iki katmanlı revoke; brute-force lockout; public auth endpoint'lerinde rate limiting
+- **Oturum yönetimi:** aktif session listesi (self + admin remote revoke, token anında düşer), max concurrent session limiti
+- **RBAC:** User/Role/Permission/Group CRUD + `@PreAuthorize` (K-26); rol kalıtımı (parent roles); `all_permissions` bayrağı (Admin implicit süper-kullanıcı); effective-permissions çözümlemesi; last-admin koruması (son aktif admin kaybedilemez)
+- **Kullanıcı yönetimi:** DB-side user directory read model (rol/grup sayıları, N+1'siz), grup-üyesi scoped görünürlük (`iam:group-member:read`), hesap aktivite geçmişi, admin unlock
+- **Audit & log:** 3 katman (audit + login history + request/traceId); append-only DB trigger; yetki değişim delta kaydı ("kim kime ne verdi/aldı"); arama
+- **Projects & Tasks modülü:** tip-bazlı proje yapısı + TASKS tipinde görev yönetimi (Kanban board UI dahil)
+- **Admin console (frontend):** login/register/tenant-verify; users/roles/groups/permissions/sessions/audit/login-history/projects sayfaları; permission-gated lazy navigation
 - **Self-service:** `/users/me/**` (profil + şifre değiştirme) — her authenticated user kendi hesabını yönetir
 - **Platform admin:** `/platform/companies` cross-tenant yönetim (K-25) + rezerve `system` tenant bootstrap (K-24)
-- Tenant signup endpoint: `POST /api/v1/auth/company/register` — Company + schema + admin user oluşturur (tek-fazlı; iki fazlı K-21 ile planlandı)
+- **İki fazlı tenant signup (K-21):** `POST /api/v1/auth/company/register` → 202 + PROVISIONING + doğrulama maili → `POST /verify` → şema + Flyway + admin user → ACTIVE
 - Entity hiyerarşisi: UUID, soft delete, optimistic locking, Spring Data auditing
 - Merkezi hata yönetimi (`ApiErrorResponse` + `ErrorCode` — stable wire codes)
 - Docker: PostgreSQL + Redis + app (non-root), layered jars, actuator health
 
 **Planlanan (kararlar kilitlendi — yol haritası [`docs/ROADMAP.md`](docs/ROADMAP.md)):**
-- K-21: iki fazlı tenant signup (PROVISIONING → mail doğrulama → ACTIVE)
-- Refresh token + Redis blacklist (logout/token revoke)
-- 3 katmanlı log (audit + giriş geçmişi + request/trace)
-- **Built-in modüller:** Tasks, Notes, Warehouse, Logistics (plan bazlı aktivasyon)
+- **Built-in modüller:** Notes, Warehouse, Logistics (plan bazlı aktivasyon; Tasks pm modülü olarak geldi)
 - **Custom App Builder** (Notion-style, JSONB EAV)
+- Mail gönderimi (SMTP — doğrulama linkleri şu an log'a düşüyor)
 - Billing (Stripe/iyzico), Nginx gateway, CI/CD, LDAP/SSO
 
 ## Teknoloji Stack'i
