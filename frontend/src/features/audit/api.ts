@@ -1,6 +1,6 @@
 import { api, normalizePage } from '../../lib/api';
 import type { PageParams, PageResponse } from '../../types';
-import type { AuditLog, LoginHistory } from './types';
+import type { AuditLog, LoginHistory, RequestLog } from './types';
 
 export interface AuditLogParams extends PageParams {
   action?: string;
@@ -10,6 +10,14 @@ export interface AuditLogParams extends PageParams {
 export interface LoginHistoryParams extends PageParams {
   userId?: string;
   success?: boolean;
+}
+
+export interface RequestLogParams extends PageParams {
+  traceId?: string;
+  method?: string;
+  status?: number;
+  userId?: string;
+  username?: string;
 }
 
 /**
@@ -25,6 +33,11 @@ export const auditLogsApi = {
 export const loginHistoryApi = {
   list: (params: LoginHistoryParams = {}) =>
     api.get<PageResponse<LoginHistory>>(`/api/v1/login-history${buildQuery(params)}`).then(normalizePage),
+};
+
+export const requestLogsApi = {
+  list: (params: RequestLogParams = {}) =>
+    api.get<PageResponse<RequestLog>>(`/api/v1/request-logs${buildQuery(params)}`).then(normalizePage),
 };
 
 /**

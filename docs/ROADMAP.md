@@ -89,7 +89,7 @@ Cross-cutting iyileştirmeler. Auth işinden önce yapılmalı.
 - [x] `ApiErrorResponse`/`ApiFieldError`/`ApiErrorFactory` (uniform error shape + traceId)
 - [x] Exception hiyerarşisi: `BusinessException` -> `AuthException`/`ResourceNotFoundException` + stable error codes
 - [x] `sanitizeRejectedValue` (validation error'da password/token maskeleme)
-- [ ] `RequestLoggingFilter` + traceId (MDC) + `X-Request-Id` header + log pattern — `ApiErrorFactory` MDC traceId'yi zaten okuyor (filter yoksa UUID üretir); full request logging ertelendi
+- [x] `RequestLoggingFilter` + traceId (MDC) + `X-Request-Id` header + log pattern — `RequestMetadataFilter` (K-19, 2026-07-27) traceId/MDC/`X-Request-Id`'yi getirdi; full request logging de geldi (`RequestLogFilter` + `t_request_logs`, K-27/2026-08-23)
 - [ ] `PasswordEncodingListener` (JPA `@PrePersist`/`@PreUpdate`, şifre otomatik encode) — ertelendi
 
 ### Epic 2.0.B — Critical Fixes
@@ -188,9 +188,9 @@ Kod analizi sonucu keşfedilen P0 düzeltmeler. User CRUD / log'dan ÖNCE çöz�
 ### Epic 2.10 — Audit & Logging (K-19 + K-27/K-28/K-29/K-30 genişletmesi)
 > K-19 temel 3 katmanlı log (audit + login history + request/trace). K-27/K-28/K-29/K-30 genişletmeleriyle: başarısız login loglama, high-risk body loglama, anomaly detection, approval workflow, session management, notification subsystem, activity feed.
 
-**K-19 çekirdek (3 katmanlı log):** — **DONE (2026-07-27):** `t_audit_logs` + `t_login_history` (append-only V6 trigger + yetki değişim delta kaydı dahil, Faz IAM 2 ile), `GET /audit-logs` + `GET /login-history` (`iam:audit:read`, sayfalı + filtre + `q` araması). Kalan: request/trace **tablo** (`GET /request-logs`) + K-27'nin kalanı.
+**K-19 çekirdek (3 katmanlı log):** — **DONE (2026-07-27 + 2026-08-23):** `t_audit_logs` + `t_login_history` (append-only V6 trigger + yetki değişim delta kaydı dahil, Faz IAM 2 ile), `GET /audit-logs` + `GET /login-history` (`iam:audit:read`, sayfalı + filtre + `q` araması); 3. katmanın tablosu `t_request_logs` + `GET /request-logs` + admin UI 2026-08-23'te tamamlandı (K-27 kısmi uygulamasıyla).
 
-**K-27 genişletme (audit/log/security hardening):** — kısmen DONE: audit append-only trigger + yetki değişim old/new delta kaydı (Faz IAM 2) geldi. Kalan: `@AuditLog` AOP, high-risk request body loglama, `t_pending_actions` approval workflow, anomaly detection.
+**K-27 genişletme (audit/log/security hardening):** — **kısmen DONE (son parça 2026-08-23):** audit append-only trigger + yetki değişim old/new delta kaydı (Faz IAM 2); `@AuditLog` AOP, high-risk request body loglama (mask-first), request-logs tablosu/endpoint'i (`t_request_logs` + `GET /request-logs`) + admin UI (`RequestLogsPage`) 2026-08-23'te geldi. Bilinçli ertelenen: `t_pending_actions` approval workflow, anomaly detection.
 
 **K-28 session management:** — **DONE (2026-07-30):** Redis active sessions + `/users/me/sessions` (self) + `/users/{id}/sessions` (admin) + `DELETE .../sessions/{sessionId}` (remote revoke — access token `tokenInvalidBefore` ile anında düşer) + max concurrent session limiti (`forgesys.security.max-sessions`). `t_sessions_log` ertelendi (`t_login_history`/`t_audit_logs` ile örtüşme).
 
@@ -289,7 +289,7 @@ Kod analizi sonucu keşfedilen P0 düzeltmeler. User CRUD / log'dan ÖNCE çöz�
 - `App.tsx` parçala + React Router route yapısı
 
 ### Epic 4.0.B — Admin/User/Log Management UI (K-20) — DONE (2026-08)
-> Faz 4 core stack kuruldu ve tamamı ship edildi: login/register/verify sayfaları + Zustand auth store + axios interceptor (cookie, transparent refresh); data-driven lazy routing + permission-gated navigation (`RequirePermission`); users/roles/groups/permissions/sessions (self + admin)/audit-logs/login-history/projects sayfaları; user detail (aktivite geçmişi, unlock, effective-permissions, diff-based sequential save); profile page. Kalan: request-log sayfası (endpoint henüz yok — K-19 Kalan).
+> Faz 4 core stack kuruldu ve tamamı ship edildi: login/register/verify sayfaları + Zustand auth store + axios interceptor (cookie, transparent refresh); data-driven lazy routing + permission-gated navigation (`RequirePermission`); users/roles/groups/permissions/sessions (self + admin)/audit-logs/login-history/projects sayfaları; user detail (aktivite geçmişi, unlock, effective-permissions, diff-based sequential save); profile page; request-log sayfası 2026-08-23'te eklendi (K-27 ile) — epic tamamlandı.
 
 ### Epic 4.1 — Built-in Modül UI'ları — kısmen DONE
 Tasks UI (liste + Kanban board — DONE, pm modülüyle birlikte). Notes UI (rich-text + kategori), Warehouse UI (ürün/stok tablosu + hareketler), Logistics UI (sevkiyat listesi + durum güncelleme) — TODO.

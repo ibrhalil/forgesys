@@ -2,6 +2,7 @@ package com.ibrhalil.forgesys.service;
 
 import com.ibrhalil.forgesys.common.exception.TenantNotFoundException;
 import com.ibrhalil.forgesys.common.tenant.TenantContext;
+import com.ibrhalil.forgesys.audit.AuditLog;
 import com.ibrhalil.forgesys.config.ModuleDefinition;
 import com.ibrhalil.forgesys.config.ModuleProperties;
 import com.ibrhalil.forgesys.config.PermissionCatalog;
@@ -148,6 +149,7 @@ public class ModuleActivationService {
      * the provisioning transaction). Order: gate checks first, idempotent DDL +
      * permission seed next, activation record LAST (partial failure is retriable).
      */
+    @AuditLog(action = "module_activated", entityType = "Module", entityId = "#result.id", entityName = "#module.displayName()")
     public TenantModule doActivateForCompany(Company company, ModuleDefinition module) {
         Optional<TenantModule> existing = tenantModuleRepository.findByCompanyIdAndModuleKey(company.getId(), module.key());
         if (existing.isPresent() && existing.get().getStatus() == ModuleStatus.ACTIVE) {
@@ -170,7 +172,6 @@ public class ModuleActivationService {
         row.setActivatedAt(OffsetDateTime.now());
         TenantModule saved = tenantModuleRepository.save(row);
 
-        auditService.record("module_activated", "Module", saved.getId(), module.displayName());
         log.info("Module '{}' activated for company {}", module.key(), company.getId());
         return saved;
     }

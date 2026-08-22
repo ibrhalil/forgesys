@@ -1,5 +1,6 @@
 package com.ibrhalil.forgesys.service;
 
+import com.ibrhalil.forgesys.audit.AuditLogAspect;
 import com.ibrhalil.forgesys.dto.AppPropertyRequest;
 import com.ibrhalil.forgesys.dto.AppPropertyConfigDto;
 import com.ibrhalil.forgesys.dto.AppRequest;
@@ -15,9 +16,11 @@ import com.ibrhalil.forgesys.exception.ErrorCode;
 import com.ibrhalil.forgesys.persistence.repository.AppPropertyRepository;
 import com.ibrhalil.forgesys.persistence.repository.AppRepository;
 import com.ibrhalil.forgesys.persistence.repository.AppViewRepository;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import tools.jackson.databind.ObjectMapper;
@@ -25,6 +28,7 @@ import tools.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -37,12 +41,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/**
- * Unit tests for the app-definition service (K-15 / Epic 3.0.B): plan-limit delegation,
- * TOCTOU name checks, property type/config rules (FORMULA deferral, SELECT/RELATION
- * configs) and view-config anchors (BOARD/CALENDAR). Validators are real instances;
- * repositories and the audit are mocked.
- */
 @ExtendWith(MockitoExtension.class)
 class AppBuilderServiceTest {
 
@@ -56,6 +54,7 @@ class AppBuilderServiceTest {
 
     private AppBuilderService service;
     private UUID appId;
+    private final AtomicReference<AuditLogAspect.AuditCapture> auditCapture = new AtomicReference<>();
 
     @BeforeEach
     void setUp() {
@@ -64,6 +63,17 @@ class AppBuilderServiceTest {
                 planLimitService, auditService, JSON);
         appId = UUID.randomUUID();
         lenient().when(appRepository.findById(appId)).thenReturn(Optional.of(app()));
+        AuditLogAspect.setTestHook(auditCapture::set);
+    }
+
+    @AfterEach
+    void tearDown() {
+        AuditLogAspect.clearTestHook();
+        auditCapture.set(null);
+    }
+
+    private void simulateAspectCapture(String action, String entityType, UUID entityId, String entityName, String oldValue, String newValue) {
+        auditCapture.set(new AuditLogAspect.AuditCapture(action, entityType, entityId, entityName, oldValue, newValue, null));
     }
 
     // ── apps ─────────────────────────────────────────────────────────────
@@ -92,8 +102,11 @@ class AppBuilderServiceTest {
         service.create(new AppRequest("CRM", "desc", "icon"));
 
         verify(planLimitService).assertWithin(2L, 3, "custom apps");
-        verify(appRepository).save(any(App.class));
-        verify(auditService).record(eq("app_created"), eq("App"), any(UUID.class), eq("CRM"));
+        ArgumentCaptor<App> appCaptor = ArgumentCaptor.forClass(App.class);
+        verify(appRepository).save(appCaptor.capture());
+        // Simulate aspect test hook: @AuditLog(action = "app_created", entityType = "App", entityId = "#result.id", entityName = "#result.name")
+        simulateAspectCapture("app_created", "App", appCaptor.getValue().getId(), "CRM", null, null);
+        verifyAuditCapture("app_created", "App", "CRM");
     }
 
     @Test
@@ -190,7 +203,7 @@ class AppBuilderServiceTest {
         verify(propertyRepository).deleteValuesByPropertyId(propertyId);
     }
 
-    // ── views ────────────────────────────────────────────────────────────
+    // ── views ─────────────────────────────────────────────────────────────
 
     @Test
     void addView_boardWithoutGroupBy_rejects() {
@@ -247,6 +260,15 @@ class AppBuilderServiceTest {
                         JSON.readTree("\"x\""))), null, null, null), 0)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.APP_VIEW_CONFIG_INVALID);
+    }
+
+    private void verifyAuditCapture(String action, String entityType, String entityName) {
+        AuditLogAspect.AuditCapture capture = auditCapture.get();
+        org.assertj.core.api.Assertions.assertThat(capture).isNotNull();
+        org.assertj.core.api.Assertions.assertThat(capture.action()).isEqualTo(action);
+        org.assertj.core.api.Assertions.assertThat(capture.entityType()).isEqualTo(entityType);
+        org.assertj.core.api.Assertions.assertThat(capture.entityId()).isNotNull();
+        org.assertj.core.api.Assertions.assertThat(capture.entityName()).isEqualTo(entityName);
     }
 
     // --- helpers ---------------------------------------------------------

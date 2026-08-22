@@ -66,3 +66,24 @@ forgesys:
       capacity: ${RATE_LIMIT_CAPACITY:20}
       refill-tokens: ${RATE_LIMIT_REFILL_TOKENS:20}
       refill-period-seconds: ${RATE_LIMIT_REFILL_PERIOD_SECONDS:60}
+  audit:
+    # High-risk request body capture (K-27). Only mutating methods (POST/PUT/PATCH/DELETE)
+    # on these paths will have their request body captured and masked.
+    high-risk-paths:
+      - "/api/v1/users/**"
+      - "/api/v1/roles/**"
+      - "/api/v1/groups/**"
+      - "/api/v1/permissions/**"
+      - "/api/v1/platform/**"
+      - "/api/v1/modules/**"
+      - "/api/v1/apps/**"
+    # Case-insensitive key patterns that trigger masking to [REDACTED].
+    mask-patterns:
+      - "password"
+      - "token"
+      - "secret"
+      - "credential"
+      - "authorization"
+      - "apiKey"
+      - "accessKey"
+      - "clientSecret"

@@ -177,4 +177,55 @@ class AuditControllerTest extends AbstractRbacWebTest {
                 .andExpect(jsonPath("$.data[*].username").value(hasItem("login_failure_probe@example.com")))
                 .andExpect(jsonPath("$.data[*].username").value(not(hasItem("login_success_probe@example.com"))));
     }
+
+    @Test
+    void requestLogsSortByCreatedDateIsAllowed() throws Exception {
+        // The SPA's default sort — the entity attribute name, NOT the DTO's createdAt.
+        seedRequestLog("sort_probe_created", 100L);
+        seedRequestLog("sort_probe_created", 200L);
+
+        mockMvc.perform(get("/api/v1/request-logs")
+                        .param("sort", "createdDate,desc")
+                        .param("q", "sort_probe_created")
+                        .cookie(auth("reader@tenant.test", "iam:audit:read")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.meta.totalElements").value(2));
+    }
+
+    @Test
+    void requestLogsSortByDurationMsOrdersAscending() throws Exception {
+        seedRequestLog("sort_probe_duration", 200L);
+        seedRequestLog("sort_probe_duration", 100L);
+
+        mockMvc.perform(get("/api/v1/request-logs")
+                        .param("sort", "durationMs,asc")
+                        .param("q", "sort_probe_duration")
+                        .cookie(auth("reader@tenant.test", "iam:audit:read")))
+                .andExpect(status().isOk())
+                // The q sentinel isolates the two probes, so the order is deterministic.
+                .andExpect(jsonPath("$.meta.totalElements").value(2))
+                .andExpect(jsonPath("$.data[0].durationMs").value(100))
+                .andExpect(jsonPath("$.data[1].durationMs").value(200));
+    }
+
+    @Test
+    void requestLogsRejectSortOutsideWhitelist() throws Exception {
+        // The DTO wire name is NOT sortable — regression lock for the SPA bug where the
+        // default sort sent createdAt and every request 400'd.
+        mockMvc.perform(get("/api/v1/request-logs")
+                        .param("sort", "createdAt")
+                        .cookie(auth("reader@tenant.test", "iam:audit:read")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("validation_error"));
+    }
+
+    private void seedRequestLog(String pathSentinel, Long durationMs) {
+        com.ibrhalil.forgesys.entity.RequestLog entry = new com.ibrhalil.forgesys.entity.RequestLog();
+        entry.setTraceId(java.util.UUID.randomUUID().toString());
+        entry.setMethod("GET");
+        entry.setPath(pathSentinel);
+        entry.setStatus(200);
+        entry.setDurationMs(durationMs);
+        entityManager.persist(entry);
+    }
 }

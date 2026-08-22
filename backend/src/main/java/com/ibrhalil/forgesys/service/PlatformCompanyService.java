@@ -1,5 +1,6 @@
 package com.ibrhalil.forgesys.service;
 
+import com.ibrhalil.forgesys.audit.AuditLog;
 import com.ibrhalil.forgesys.common.tenant.TenantContext;
 import com.ibrhalil.forgesys.dto.CompanyResponse;
 import com.ibrhalil.forgesys.entity.Company;
@@ -44,6 +45,7 @@ public class PlatformCompanyService {
     }
 
     @Transactional
+    @AuditLog(action = "company_status_updated", entityType = "Company", entityId = "#result.id", entityName = "#result.name")
     public CompanyResponse updateStatus(UUID id, CompanyStatus status) {
         Company saved = executeWithoutTenantContext(() -> {
             Company company = companyRepository.findById(id)
@@ -59,10 +61,6 @@ public class PlatformCompanyService {
             return companyRepository.save(company);
         });
         log.info("Company status updated: id={}, newStatus={}", saved.getId(), saved.getStatus());
-        // Audited after executeWithoutTenantContext restores the caller's tenant context:
-        // platform actions operate on the public schema, but t_audit_logs is tenant-scoped,
-        // so the record is written to the platform admin's (system) tenant schema.
-        auditService.record("company_status_updated", "Company", saved.getId(), saved.getName());
         return mapToResponse(saved);
     }
 

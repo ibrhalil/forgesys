@@ -22,3 +22,19 @@ export interface LoginHistory {
   userAgent: string | null;
   createdAt: string;
 }
+
+// Request/trace log (K-19 layer 3 + K-27) — exposed by GET /request-logs
+export interface RequestLog {
+  id: string;
+  traceId: string | null;
+  method: string | null;
+  path: string | null;
+  status: number | null;
+  durationMs: number | null;
+  userId: string | null;
+  username: string | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+  requestBody: string | null;
+  createdAt: string;
+}

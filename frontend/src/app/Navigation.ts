@@ -54,6 +54,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { labelKey: 'nav.auditLogs', to: '/audit-logs', icon: LuFileText, authority: PERMISSIONS.AUDIT_READ },
       { labelKey: 'nav.loginHistory', to: '/login-history', icon: LuLogIn, authority: PERMISSIONS.AUDIT_READ },
+      { labelKey: 'nav.requestLogs', to: '/request-logs', icon: LuMonitor, authority: PERMISSIONS.AUDIT_READ },
       // Self-service sessions: any authenticated user.
       { labelKey: 'nav.sessions', to: '/sessions', icon: LuMonitor },
     ],

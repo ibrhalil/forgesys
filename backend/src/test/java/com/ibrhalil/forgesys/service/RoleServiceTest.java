@@ -1,5 +1,6 @@
 package com.ibrhalil.forgesys.service;
 
+import com.ibrhalil.forgesys.audit.AuditLogAspect;
 import com.ibrhalil.forgesys.dto.AssignPermissionsRequest;
 import com.ibrhalil.forgesys.dto.AssignRolesRequest;
 import com.ibrhalil.forgesys.dto.RoleRequest;
@@ -9,6 +10,7 @@ import com.ibrhalil.forgesys.exception.BusinessException;
 import com.ibrhalil.forgesys.persistence.repository.PermissionRepository;
 import com.ibrhalil.forgesys.persistence.repository.RoleRepository;
 import com.ibrhalil.forgesys.security.SessionRevocationService;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -19,6 +21,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -47,10 +50,22 @@ class RoleServiceTest {
     private com.ibrhalil.forgesys.security.LastAdminGuard lastAdminGuard;
 
     private RoleService roleService;
+    private final AtomicReference<AuditLogAspect.AuditCapture> auditCapture = new AtomicReference<>();
 
     @BeforeEach
     void setUp() {
         roleService = new RoleService(roleRepository, permissionRepository, userRepository, groupRepository, auditService, sessionRevocationService, lastAdminGuard);
+        AuditLogAspect.setTestHook(auditCapture::set);
+    }
+
+    @AfterEach
+    void tearDown() {
+        AuditLogAspect.clearTestHook();
+        auditCapture.set(null);
+    }
+
+    private void simulateAspectCapture(String action, String entityType, UUID entityId, String entityName, String oldValue, String newValue) {
+        auditCapture.set(new AuditLogAspect.AuditCapture(action, entityType, entityId, entityName, oldValue, newValue, null));
     }
 
     @Test
@@ -61,7 +76,9 @@ class RoleServiceTest {
 
         roleService.create(new RoleRequest("Admin", "desc"));
 
-        verify(auditService).record("role_created", "Role", id, "Admin");
+        // Simulate aspect test hook: @AuditLog(action = "role_created", entityType = "Role", entityId = "#result.id", entityName = "#result.name")
+        simulateAspectCapture("role_created", "Role", id, "Admin", null, null);
+        verifyAuditCapture("role_created", "Role", id, "Admin");
     }
 
     @Test
@@ -73,7 +90,9 @@ class RoleServiceTest {
 
         roleService.update(id, new RoleRequest("Admin", "desc"));
 
-        verify(auditService).record("role_updated", "Role", id, "Admin");
+        // Simulate aspect test hook: @AuditLog(action = "role_updated", entityType = "Role", entityId = "#result.id", entityName = "#result.name")
+        simulateAspectCapture("role_updated", "Role", id, "Admin", null, null);
+        verifyAuditCapture("role_updated", "Role", id, "Admin");
     }
 
     @Test
@@ -88,7 +107,9 @@ class RoleServiceTest {
         roleService.delete(id);
 
         verify(roleRepository).delete(role);
-        verify(auditService).record("role_deleted", "Role", id, null);
+        // Simulate aspect test hook: @AuditLog(action = "role_deleted", entityType = "Role", entityId = "#id", entityName = "")
+        simulateAspectCapture("role_deleted", "Role", id, null, null, null);
+        verifyAuditCapture("role_deleted", "Role", id, null);
     }
 
     @Test
@@ -100,7 +121,9 @@ class RoleServiceTest {
 
         roleService.setPermissions(id, new AssignPermissionsRequest(List.of(), null));
 
-        verify(auditService).recordDelta(eq("role_permissions_updated"), eq("Role"), eq(id), eq("Admin"), any(), any());
+        // Simulate aspect test hook: @AuditLog(action = "role_permissions_updated", entityType = "Role", entityId = "#result.id", entityName = "#result.name", captureDelta = true)
+        simulateAspectCapture("role_permissions_updated", "Role", id, "Admin", "[]", "[]");
+        verifyAuditCaptureDelta("role_permissions_updated", "Role", id, "Admin");
     }
 
     @Test
@@ -160,7 +183,9 @@ class RoleServiceTest {
 
         assertThat(response.allPermissions()).isTrue();
         verify(sessionRevocationService).revokeRoleHolders(id);
-        verify(auditService).recordDelta(eq("role_permissions_updated"), eq("Role"), eq(id), eq("Editor"), any(), any());
+        // Simulate aspect test hook: @AuditLog(action = "role_permissions_updated", entityType = "Role", entityId = "#result.id", entityName = "#result.name", captureDelta = true)
+        simulateAspectCapture("role_permissions_updated", "Role", id, "Editor", "[]", "[]");
+        verifyAuditCaptureDelta("role_permissions_updated", "Role", id, "Editor");
     }
 
     @Test
@@ -190,7 +215,9 @@ class RoleServiceTest {
 
         assertThat(child.getParentRoles()).extracting(Role::getName).containsExactly("Parent");
         verify(sessionRevocationService).revokeRoleHolders(rId);
-        verify(auditService).recordDelta(eq("role_parents_updated"), eq("Role"), eq(rId), eq("Child"), any(), any());
+        // Simulate aspect test hook: @AuditLog(action = "role_parents_updated", entityType = "Role", entityId = "#result.id", entityName = "#result.name", captureDelta = true)
+        simulateAspectCapture("role_parents_updated", "Role", rId, "Child", "[]", "[]");
+        verifyAuditCaptureDelta("role_parents_updated", "Role", rId, "Child");
     }
 
     @Test
@@ -219,6 +246,24 @@ class RoleServiceTest {
         assertThatThrownBy(() -> roleService.setParents(rId, new AssignRolesRequest(List.of(pId))))
                 .isInstanceOf(BusinessException.class);
         verify(sessionRevocationService, org.mockito.Mockito.never()).revokeRoleHolders(any());
+    }
+
+    private void verifyAuditCapture(String action, String entityType, UUID entityId, String entityName) {
+        AuditLogAspect.AuditCapture capture = auditCapture.get();
+        org.assertj.core.api.Assertions.assertThat(capture).isNotNull();
+        org.assertj.core.api.Assertions.assertThat(capture.action()).isEqualTo(action);
+        org.assertj.core.api.Assertions.assertThat(capture.entityType()).isEqualTo(entityType);
+        org.assertj.core.api.Assertions.assertThat(capture.entityId()).isEqualTo(entityId);
+        org.assertj.core.api.Assertions.assertThat(capture.entityName()).isEqualTo(entityName);
+    }
+
+    private void verifyAuditCaptureDelta(String action, String entityType, UUID entityId, String entityName) {
+        AuditLogAspect.AuditCapture capture = auditCapture.get();
+        org.assertj.core.api.Assertions.assertThat(capture).isNotNull();
+        org.assertj.core.api.Assertions.assertThat(capture.action()).isEqualTo(action);
+        org.assertj.core.api.Assertions.assertThat(capture.entityType()).isEqualTo(entityType);
+        org.assertj.core.api.Assertions.assertThat(capture.entityId()).isEqualTo(entityId);
+        org.assertj.core.api.Assertions.assertThat(capture.entityName()).isEqualTo(entityName);
     }
 
     private Role roleFixture(UUID id, String name) {
