@@ -52,6 +52,7 @@ function renderBoard(props: Partial<Parameters<typeof RecordBoard>[0]> = {}) {
         isLoading={false}
         resolve={resolve}
         onRequestDelete={vi.fn()}
+        onRequestEdit={vi.fn()}
         {...props}
       />
     </QueryClientProvider>,
@@ -112,6 +113,15 @@ describe('RecordBoard', () => {
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
     // Cards still render read-only.
     expect(screen.getByText('Fix login')).toBeInTheDocument();
+  });
+
+  it('opens the record form through the card edit action', async () => {
+    const user = userEvent.setup();
+    const onEdit = vi.fn();
+    renderBoard({ onRequestEdit: onEdit });
+
+    await user.click(screen.getAllByRole('button', { name: 'Edit' })[0]);
+    expect(onEdit).toHaveBeenCalledWith(R1);
   });
 
   it('falls back to an empty state when the groupBy property is gone', () => {

@@ -84,6 +84,7 @@ Root package `com.ibrhalil.forgesys` (NOT a `.backend` subpackage):
 | `POST` | `/api/v1/modules/{key}/activate` (idempotent) | `iam:module:write` |
 | `GET` | `/api/v1/users/{id}/effective-permissions` · `GET /api/v1/groups/{id}/effective-permissions` | `iam:user:read` / `iam:group:read` |
 | `GET` | `/api/v1/apps` (page; `?q=`) · `GET /{id}` (definition + properties + views) | `apps:app:read` |
+| `GET` | `/api/v1/apps/plan-limits` (plan usage values from the `PlanDefinition` registry — K-42) | `apps:app:read` |
 | `POST` | `/api/v1/apps` · `PUT /{id}` | `apps:app:write` |
 | `DELETE` | `/api/v1/apps/{id}` | `apps:app:delete` |
 | `GET` | `/api/v1/apps/{appId}/properties` · `/{appId}/views` | `apps:app:read` |

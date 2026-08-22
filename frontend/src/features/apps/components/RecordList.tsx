@@ -1,4 +1,4 @@
-import { LuTrash2 } from 'react-icons/lu';
+import { LuPencil, LuTrash2 } from 'react-icons/lu';
 import { DataTable, type Column } from '../../../components/ui/DataTable';
 import { RowMenu } from '../../../components/ui/RowMenu';
 import { useT } from '../../../lib/i18n';
@@ -22,14 +22,17 @@ export function RecordList({
   isLoading,
   resolve,
   onRequestDelete,
+  onRequestEdit,
 }: {
   app: AppDetail;
   records: AppRecord[];
   isLoading: boolean;
   resolve: ValueResolver;
   onRequestDelete: (record: AppRecord) => void;
+  onRequestEdit: (record: AppRecord) => void;
 }) {
   const { t } = useT();
+  const canWrite = useAuthStore((s) => s.hasAuthority(PERMISSIONS.APP_RECORD_WRITE));
   const canDelete = useAuthStore((s) => s.hasAuthority(PERMISSIONS.APP_RECORD_DELETE));
   const { paged, page, setPage, pageSize, setPageSize, totalElements, totalPages } = useClientPagination(records);
 
@@ -80,11 +83,14 @@ export function RecordList({
       actions={(r) => (
         <RowMenu
           ariaLabel={t('common.actions')}
-          items={
-            canDelete
+          items={[
+            ...(canWrite
+              ? [{ label: t('common.edit'), onClick: () => onRequestEdit(r), icon: LuPencil }]
+              : []),
+            ...(canDelete
               ? [{ label: t('common.delete'), onClick: () => onRequestDelete(r), icon: LuTrash2, danger: true }]
-              : []
-          }
+              : []),
+          ]}
         />
       )}
     />

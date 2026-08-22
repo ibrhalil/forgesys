@@ -16,6 +16,15 @@ const APPS_PAYLOAD = {
   meta: { page: 0, pageSize: 10, totalElements: 2, totalPages: 1, hasNext: false, hasPrevious: false },
 };
 
+/** GET /api/v1/apps/plan-limits payload (FREE). */
+const PLAN_LIMITS = { planKey: 'free', planName: 'Free', maxApps: 3, maxRecordsPerApp: 1000 };
+
+/** One-row usage probe payload (GET /apps?size=1). */
+const USAGE_PAYLOAD = {
+  data: [],
+  meta: { page: 0, pageSize: 1, totalElements: 2, totalPages: 2, hasNext: true, hasPrevious: false },
+};
+
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -33,7 +42,15 @@ describe('AppsPage', () => {
     useAuthStore.setState({ hasAuthority: () => true });
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => new Response(JSON.stringify(APPS_PAYLOAD), { status: 200, headers: { 'Content-Type': 'application/json' } })),
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        const body = url.includes('/plan-limits')
+          ? PLAN_LIMITS
+          : /size=1(&|$)/.test(url)
+            ? USAGE_PAYLOAD
+            : APPS_PAYLOAD;
+        return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }),
     );
   });
   afterEach(() => vi.unstubAllGlobals());
@@ -53,5 +70,11 @@ describe('AppsPage', () => {
     await user.click(await screen.findByRole('button', { name: '+ New App' }));
     expect(screen.getByLabelText(/name/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create' })).toBeInTheDocument();
+  });
+
+  it('shows the plan usage indicator from the plan-limits endpoint', async () => {
+    renderPage();
+
+    expect(await screen.findByText('2 / 3 apps')).toBeInTheDocument();
   });
 });

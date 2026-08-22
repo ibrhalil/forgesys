@@ -13,10 +13,10 @@ import { PERMISSIONS } from '../../../lib/permissions';
 import { useAuthStore } from '../../../store/authStore';
 import { errorMessage, notify } from '../../../lib/notify';
 import type { AppDetail, AppRecord, AppValueFilter, AppValueSort, AppView, ViewType } from '../types';
-import { useDeleteRecord, useDeleteView, useUpdateView, useViewRecords } from '../hooks';
+import { useDeleteRecord, useDeleteView, usePlanLimits, useRecords, useUpdateView, useViewRecords } from '../hooks';
 import { applyViewQuery } from '../viewQuery';
 import { useValueResolvers } from '../valueLabels';
-import { NewRecordModal } from './NewRecordModal';
+import { RecordFormModal } from './RecordFormModal';
 import { ViewModal } from './ViewModal';
 import { ViewFilters } from './ViewFilters';
 import { RecordTable } from './RecordTable';
@@ -58,6 +58,7 @@ export function RecordsPanel({ app }: { app: AppDetail }) {
   const [viewModal, setViewModal] = useState<{ mode: 'new' } | { mode: 'edit'; view: AppView } | null>(null);
   const [deletingView, setDeletingView] = useState<AppView | null>(null);
   const [creatingRecord, setCreatingRecord] = useState(false);
+  const [editingRecord, setEditingRecord] = useState<AppRecord | null>(null);
   const [deletingRecord, setDeletingRecord] = useState<AppRecord | null>(null);
 
   const delView = useDeleteView(app.id);
@@ -78,6 +79,10 @@ export function RecordsPanel({ app }: { app: AppDetail }) {
   const tableSelfMode = !activeView || (activeView.type === 'TABLE' && !hasQuery);
 
   const recordsQuery = useViewRecords(tableSelfMode ? undefined : app.id);
+  // Record usage indicator: totalElements from a one-row probe (uniform across
+  // self/client modes — the client-mode page is capped at 1000).
+  const { data: recordCount } = useRecords(app.id, { page: 0, size: 1 });
+  const { data: planLimits } = usePlanLimits();
   const resolve = useValueResolvers(app);
   const visible = useMemo(
     () => applyViewQuery(recordsQuery.data?.items ?? [], app.properties, effectiveFilters, effectiveSorts),
@@ -119,9 +124,15 @@ export function RecordsPanel({ app }: { app: AppDetail }) {
 
   const renderer = (() => {
     if (!activeView || (activeView.type === 'TABLE' && !hasQuery)) {
-      return <RecordTable app={app} />;
+      return <RecordTable app={app} onRequestEdit={setEditingRecord} />;
     }
-    const common = { records: visible, isLoading: recordsQuery.isLoading, resolve };
+    const common = {
+      records: visible,
+      isLoading: recordsQuery.isLoading,
+      resolve,
+      onRequestDelete: setDeletingRecord,
+      onRequestEdit: setEditingRecord,
+    };
     switch (activeView.type) {
       case 'TABLE':
         return (
@@ -129,16 +140,17 @@ export function RecordsPanel({ app }: { app: AppDetail }) {
             app={app}
             override={{ records: visible, isLoading: recordsQuery.isLoading }}
             onRequestDelete={setDeletingRecord}
+            onRequestEdit={setEditingRecord}
           />
         );
       case 'BOARD':
-        return <RecordBoard app={app} view={activeView} {...common} onRequestDelete={setDeletingRecord} />;
+        return <RecordBoard app={app} view={activeView} {...common} />;
       case 'CALENDAR':
-        return <RecordCalendar app={app} view={activeView} {...common} />;
+        return <RecordCalendar app={app} view={activeView} records={visible} isLoading={recordsQuery.isLoading} resolve={resolve} />;
       case 'LIST':
-        return <RecordList app={app} {...common} onRequestDelete={setDeletingRecord} />;
+        return <RecordList app={app} {...common} />;
       default:
-        return <RecordGallery app={app} {...common} onRequestDelete={setDeletingRecord} />;
+        return <RecordGallery app={app} {...common} />;
     }
   })();
 
@@ -240,6 +252,17 @@ export function RecordsPanel({ app }: { app: AppDetail }) {
 
         {renderer}
 
+        {planLimits && (
+          <p className="m-0 mt-3 text-xs text-muted/80">
+            {planLimits.maxRecordsPerApp >= 0
+              ? t('apps.planRecords', {
+                  used: recordCount?.totalElements ?? 0,
+                  max: planLimits.maxRecordsPerApp,
+                })
+              : t('apps.planRecordsUnlimited', { used: recordCount?.totalElements ?? 0 })}
+          </p>
+        )}
+
         {truncated && (
           <p className="m-0 mt-3 text-xs text-muted/80">{t('apps.truncated', { count: fetchedCount })}</p>
         )}
@@ -255,7 +278,11 @@ export function RecordsPanel({ app }: { app: AppDetail }) {
         />
       )}
 
-      {creatingRecord && <NewRecordModal app={app} onClose={() => setCreatingRecord(false)} />}
+      {creatingRecord && <RecordFormModal app={app} onClose={() => setCreatingRecord(false)} />}
+
+      {editingRecord && (
+        <RecordFormModal app={app} record={editingRecord} onClose={() => setEditingRecord(null)} />
+      )}
 
       <ConfirmDialog
         open={!!deletingRecord}

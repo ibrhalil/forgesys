@@ -41,12 +41,13 @@ const RECORDS: AppRecord[] = [
 ];
 
 const onRequestDelete = vi.fn();
+const onRequestEdit = vi.fn();
 
 function renderList(records: AppRecord[] = RECORDS) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <RecordList app={APP} records={records} isLoading={false} resolve={cellDisplay} onRequestDelete={onRequestDelete} />
+      <RecordList app={APP} records={records} isLoading={false} resolve={cellDisplay} onRequestDelete={onRequestDelete} onRequestEdit={onRequestEdit} />
     </QueryClientProvider>,
   );
 }
@@ -55,7 +56,7 @@ function renderGallery(records: AppRecord[] = RECORDS) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <RecordGallery app={APP} records={records} isLoading={false} resolve={cellDisplay} onRequestDelete={onRequestDelete} />
+      <RecordGallery app={APP} records={records} isLoading={false} resolve={cellDisplay} onRequestDelete={onRequestDelete} onRequestEdit={onRequestEdit} />
     </QueryClientProvider>,
   );
 }
@@ -65,6 +66,7 @@ describe('RecordList', () => {
     useLocaleStore.setState({ locale: 'en' });
     useAuthStore.setState({ hasAuthority: () => true });
     onRequestDelete.mockClear();
+    onRequestEdit.mockClear();
   });
   afterEach(() => vi.clearAllMocks());
 
@@ -98,6 +100,7 @@ describe('RecordGallery', () => {
     useLocaleStore.setState({ locale: 'en' });
     useAuthStore.setState({ hasAuthority: () => true });
     onRequestDelete.mockClear();
+    onRequestEdit.mockClear();
   });
   afterEach(() => vi.clearAllMocks());
 

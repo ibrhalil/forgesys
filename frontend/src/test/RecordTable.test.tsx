@@ -154,4 +154,19 @@ describe('RecordTable inline edit', () => {
     expect(screen.queryByRole('button', { name: 'jane@acme.com' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Old title' })).not.toBeInTheDocument();
   });
+
+  it('offers the record form through the row actions menu', async () => {
+    const user = userEvent.setup();
+    const onEdit = vi.fn();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <RecordTable app={APP} onRequestEdit={onEdit} />
+      </QueryClientProvider>,
+    );
+
+    await user.click((await screen.findAllByRole('button', { name: 'Actions' }))[0]);
+    await user.click(await screen.findByRole('menuitem', { name: 'Edit' }));
+    expect(onEdit).toHaveBeenCalledWith(RECORD);
+  });
 });

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LuPlus, LuTrash2 } from 'react-icons/lu';
+import { LuPencil, LuPlus, LuTrash2 } from 'react-icons/lu';
 import { DataTable, type Column } from '../../../components/ui/DataTable';
 import { RowMenu } from '../../../components/ui/RowMenu';
 import { Button } from '../../../components/ui/Button';
@@ -20,7 +20,7 @@ import { cellDisplay, cellEditValue, parseCellInput } from '../cellValue';
 import { useValueResolvers } from '../valueLabels';
 import { UserPicker } from './UserPicker';
 import { RelationPicker } from './RelationPicker';
-import { NewRecordModal } from './NewRecordModal';
+import { RecordFormModal } from './RecordFormModal';
 
 /** Cell being edited: which record × which property, plus the raw input draft. */
 interface EditState {
@@ -46,11 +46,14 @@ export function RecordTable({
   app,
   override,
   onRequestDelete,
+  onRequestEdit,
 }: {
   app: AppDetail;
   override?: ClientRecordsOverride;
   /** Delete affordance for override mode (the panel owns the confirm dialog). */
   onRequestDelete?: (record: AppRecord) => void;
+  /** Opens the panel-owned record form modal in edit mode (all modes delegate). */
+  onRequestEdit?: (record: AppRecord) => void;
 }) {
   const { t } = useT();
   const { page, setPage, pageSize, setPageSize, sort, toggleSort } =
@@ -225,8 +228,11 @@ export function RecordTable({
       actions={(r) => (
         <RowMenu
           ariaLabel={t('common.actions')}
-          items={
-            canDelete
+          items={[
+            ...(canWrite
+              ? [{ label: t('common.edit'), onClick: () => onRequestEdit?.(r), icon: LuPencil }]
+              : []),
+            ...(canDelete
               ? [
                   {
                     label: t('common.delete'),
@@ -235,8 +241,8 @@ export function RecordTable({
                     danger: true,
                   },
                 ]
-              : []
-          }
+              : []),
+          ]}
         />
       )}
     />
@@ -260,7 +266,7 @@ export function RecordTable({
       </div>
       {table}
 
-      {creating && <NewRecordModal app={app} onClose={() => setCreating(false)} />}
+      {creating && <RecordFormModal app={app} onClose={() => setCreating(false)} />}
 
       <ConfirmDialog
         open={!!deleting}

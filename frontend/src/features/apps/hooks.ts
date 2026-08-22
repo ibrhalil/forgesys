@@ -131,6 +131,15 @@ export function useViewRecords(appId: string | undefined) {
   return useRecords(appId, VIEW_RECORDS_PARAMS);
 }
 
+/**
+ * Plan limits for the usage indicators (GET /apps/plan-limits). Sits under the
+ * ['apps'] prefix, so app create/delete mutations refresh it for free. The
+ * indicator renders only when this resolves — a failing query simply hides it.
+ */
+export function usePlanLimits() {
+  return useQuery({ queryKey: ['apps', 'plan-limits'], queryFn: () => appsApi.planLimits() });
+}
+
 export function useCreateRecord(appId: string) {
   const qc = useQueryClient();
   return useMutation({

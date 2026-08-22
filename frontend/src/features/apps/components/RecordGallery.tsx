@@ -1,4 +1,4 @@
-import { LuEllipsisVertical, LuTrash2 } from 'react-icons/lu';
+import { LuEllipsisVertical, LuPencil, LuTrash2 } from 'react-icons/lu';
 import { RowMenu } from '../../../components/ui/RowMenu';
 import { EmptyState } from '../../../components/ui/EmptyState';
 import { useT } from '../../../lib/i18n';
@@ -23,14 +23,17 @@ export function RecordGallery({
   isLoading,
   resolve,
   onRequestDelete,
+  onRequestEdit,
 }: {
   app: AppDetail;
   records: AppRecord[];
   isLoading: boolean;
   resolve: ValueResolver;
   onRequestDelete: (record: AppRecord) => void;
+  onRequestEdit: (record: AppRecord) => void;
 }) {
   const { t } = useT();
+  const canWrite = useAuthStore((s) => s.hasAuthority(PERMISSIONS.APP_RECORD_WRITE));
   const canDelete = useAuthStore((s) => s.hasAuthority(PERMISSIONS.APP_RECORD_DELETE));
   const { paged, page, setPage, pageSize, totalElements, totalPages } =
     useClientPagination(records, GALLERY_PAGE_SIZE);
@@ -53,11 +56,18 @@ export function RecordGallery({
               <article key={r.id} className="flex flex-col gap-2 rounded-xl border border-glass bg-bg/40 p-4">
                 <div className="flex items-start justify-between gap-2">
                   <span className="min-w-0 break-words font-medium text-main">{recordTitle(r, titleProp, resolve)}</span>
-                  {canDelete && (
+                  {(canWrite || canDelete) && (
                     <RowMenu
                       ariaLabel={t('common.actions')}
                       icon={LuEllipsisVertical}
-                      items={[{ label: t('common.delete'), onClick: () => onRequestDelete(r), icon: LuTrash2, danger: true }]}
+                      items={[
+                        ...(canWrite
+                          ? [{ label: t('common.edit'), onClick: () => onRequestEdit(r), icon: LuPencil }]
+                          : []),
+                        ...(canDelete
+                          ? [{ label: t('common.delete'), onClick: () => onRequestDelete(r), icon: LuTrash2, danger: true }]
+                          : []),
+                      ]}
                     />
                   )}
                 </div>

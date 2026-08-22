@@ -3,6 +3,7 @@ import type { PageParams, PageResponse } from '../../types';
 import type {
   App,
   AppDetail,
+  AppPlanLimits,
   AppProperty,
   AppPropertyRequest,
   AppRecord,
@@ -20,6 +21,8 @@ export const appsApi = {
   create: (data: AppRequest) => api.post<App>('/api/v1/apps', data),
   update: (id: string, data: AppRequest) => api.put<App>(`/api/v1/apps/${id}`, data),
   delete: (id: string) => api.delete<void>(`/api/v1/apps/${id}`),
+  /** Plan limits for the usage indicators (values from the backend PlanDefinition registry). */
+  planLimits: () => api.get<AppPlanLimits>('/api/v1/apps/plan-limits'),
 
   // ─── Properties (all writes are apps:app:write) ───
   createProperty: (appId: string, data: AppPropertyRequest) =>

@@ -93,3 +93,50 @@ export function recordTitle(
   }
   return `#${shortenId(record.id)}`;
 }
+
+/** Result of diffing a form draft against a record (see {@link buildRecordPatch}). */
+export interface RecordPatchResult {
+  /** Property ids whose raw input failed type parsing (invalid — must not submit). */
+  invalid: string[];
+  /**
+   * Wire values following the PATCH partial-merge contract: only CHANGED keys are
+   * present; `null` clears a cell (required properties reject null server-side);
+   * untouched/unchanged keys are absent. Empty object = nothing to send.
+   */
+  values: Record<string, string | number | null>;
+}
+
+/**
+ * Diff a raw-string form draft against a record's stored values. For create, pass a
+ * record with an empty `values` map — every filled field then becomes a change.
+ * USER/RELATION drafts are picker-sourced ids and pass through without parsing
+ * (the server validates existence).
+ */
+export function buildRecordPatch(
+  properties: AppProperty[],
+  record: AppRecord,
+  draft: Record<string, string>,
+): RecordPatchResult {
+  const invalid: string[] = [];
+  const values: Record<string, string | number | null> = {};
+  for (const prop of properties) {
+    const raw = (draft[prop.id] ?? '').trim();
+    const current = record.values[prop.id];
+    const currentEmpty = current === undefined || current === null || current === '';
+    if (raw === '') {
+      // Emptying a filled cell clears it; an already-empty cell is a no-op.
+      if (!currentEmpty) values[prop.id] = null;
+      continue;
+    }
+    const parsed =
+      prop.type === 'USER' || prop.type === 'RELATION'
+        ? raw
+        : parseCellInput(prop, raw);
+    if (parsed === undefined || parsed === null) {
+      invalid.push(prop.id);
+      continue;
+    }
+    if (parsed !== (current ?? null)) values[prop.id] = parsed;
+  }
+  return { invalid, values };
+}

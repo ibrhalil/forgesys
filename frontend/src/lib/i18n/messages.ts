@@ -471,6 +471,21 @@ export const messages = {
     'apps.pickerNoOptions': 'Sonuç yok',
     'apps.relationTargetMissing': 'Hedef uygulama yapılandırılmamış',
 
+    // apps — record form (edit mode)
+    'apps.editRecord': 'Kaydı düzenle',
+    'apps.recordUpdated': 'Kayıt güncellendi',
+    'apps.cannotClearRequired': 'Bu zorunlu alan boşaltılamaz.',
+
+    // apps — plan usage
+    'apps.planUsage': '{used} / {max} uygulama',
+    'apps.planUsageUnlimited': '{used} uygulama · sınırsız',
+    'apps.planRecords': '{used} / {max} kayıt',
+    'apps.planRecordsUnlimited': '{used} kayıt · sınırsız',
+
+    // apps — icon
+    'apps.iconLabel': 'İkon',
+    'apps.iconNone': 'Yok',
+
     // extra shared
     'common.inactive': 'Pasif',
     'common.details': 'Ayrıntılar',
@@ -1051,6 +1066,21 @@ export const messages = {
     'apps.relationPickerPh': 'Search records…',
     'apps.pickerNoOptions': 'No results',
     'apps.relationTargetMissing': 'No target app configured',
+
+    // apps — record form (edit mode)
+    'apps.editRecord': 'Edit record',
+    'apps.recordUpdated': 'Record updated',
+    'apps.cannotClearRequired': 'This required property cannot be emptied.',
+
+    // apps — plan usage
+    'apps.planUsage': '{used} / {max} apps',
+    'apps.planUsageUnlimited': '{used} apps · unlimited',
+    'apps.planRecords': '{used} / {max} records',
+    'apps.planRecordsUnlimited': '{used} records · unlimited',
+
+    // apps — icon
+    'apps.iconLabel': 'Icon',
+    'apps.iconNone': 'None',
 
     // extra shared
     'common.inactive': 'Inactive',

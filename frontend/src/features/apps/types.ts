@@ -99,6 +99,17 @@ export interface AppDetail extends App {
 }
 
 /**
+ * Plan limits for the usage indicators (GET /apps/plan-limits). Values come from
+ * the backend PlanDefinition registry — never hardcoded client-side; -1 = unlimited.
+ */
+export interface AppPlanLimits {
+  planKey: string;
+  planName: string;
+  maxApps: number;
+  maxRecordsPerApp: number;
+}
+
+/**
  * Record cell values keyed by property id. JSON scalars per property type:
  * TEXT/SELECT/DATE/USER/RELATION → string, NUMBER → number.
  * Absent key = empty cell; JSON null = cleared value.
@@ -113,12 +124,6 @@ export interface AppRecord {
 }
 
 // ─── Requests ───
-
-export interface AppRequest {
-  name: string;
-  description?: string;
-  icon?: string;
-}
 
 export interface AppPropertyRequest {
   name: string;
@@ -143,4 +148,14 @@ export interface AppViewRequest {
   type: ViewType;
   config?: AppViewConfig;
   position: number;
+}
+
+/**
+ * App create/update payload. Full PUT: `icon: null` clears it (the backend sets
+ * the field unconditionally); omit only on create when empty.
+ */
+export interface AppRequest {
+  name: string;
+  description?: string;
+  icon?: string | null;
 }

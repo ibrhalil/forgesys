@@ -228,7 +228,7 @@ Kod analizi sonucu keşfedilen P0 düzeltmeler. User CRUD / log'dan ÖNCE çöz�
 
 ## Faz 3 — Modüler Platform (Module System + Built-in Modüller)
 
-> Hibrit modüler platform: önce Module System altyapısı (3.0), sonra built-in modüller (3.1-3.4). Custom App Builder backend altyapısı da 3.0 ile gelir; UI'sı Faz 4.2.
+> Hibrit modüler platform: önce Module System altyapısı (3.0), sonra built-in modüller (3.1-3.4). Custom App Builder backend altyapısı da 3.0 ile gelir; UI'sı Faz 4.2 (DONE).
 
 ### Epic 3.0.A — Module System & Plan/Subscription (K-16) — DONE (2026-08-22)
 > Uygulama kararları: [DECISIONS.md K-16](DECISIONS.md#k-16). Registry kodda (`ModuleDefinition`/`PlanDefinition` enum — `t_module_catalog` tablosu yapılmadı), modül-başı ayrı Flyway history (`db/migration/module/<key>` + `flyway_schema_history_mod_<key>`), `iam:module:read/write` + `GET /api/v1/modules` + `POST /modules/{key}/activate` (3.0.C'in modül parçası öne alındı). Gerçek PG doğrulaması: `ModuleActivationIT` (gated).
@@ -294,17 +294,19 @@ Kod analizi sonucu keşfedilen P0 düzeltmeler. User CRUD / log'dan ÖNCE çöz�
 ### Epic 4.1 — Built-in Modül UI'ları — kısmen DONE
 Tasks UI (liste + Kanban board — DONE, pm modülüyle birlikte). Notes UI (rich-text + kategori), Warehouse UI (ürün/stok tablosu + hareketler), Logistics UI (sevkiyat listesi + durum güncelleme) — TODO.
 
-### Epic 4.2 — Custom App Builder UI (Notion-style — en iddialı)
-- App designer sihirbazı (isim/ikon/açıklama)
-- Property editor (tip seçimi + config — select options/relation/formula)
-- Record editör (property type'a göre input widget'ları)
-- TABLE view renderer (kolon=property, satır=record)
-- BOARD view renderer (Kanban — group_by)
-- CALENDAR view renderer (date property'sine göre)
-- GALLERY + LIST view renderer
-- Filter/sort/group_by config UI (drag-drop, expression editor)
-- Relation picker (başka app lookup)
-- Plan limit göstergesi (kalan quota)
+### Epic 4.2 — Custom App Builder UI (Notion-style — en iddialı) — DONE (2026-08-23)
+> Uygulama kararları: [`DECISIONS.md K-42`](DECISIONS.md#k-42). 3 session'da ship edildi (1/3 temel `9a8004d`, 2/3 view renderer'lar `73e68c2`, 3/3 edit modalı + plan göstergesi + kapanış). Bilinçli yapılmayanlar: **drag-drop YOK** (kart taşıma TaskBoard emsalindeki select/move mover ile — PATCH), **expression editor YOK** (satır bazlı structured DSL — backend `AppQueryValidator`'ın 9 op'u, injection yüzeyi yok), CALENDAR'da kayıt aksiyonu yok (chip'ler yer kısıtlı; TABLE/BOARD/LIST/GALLERY'den düzenlenir). Filter/sort client-side uygulanır (`GET /records` tek sayfa, cap 1000 — `records/search` PG-only olduğu için; üstü "ilk 1000" notuyla).
+
+- [x] App designer (isim/açıklama + emoji ikon shortlist — sihirbaz değil modal; ikon list/detail'de gösterilir)
+- [x] Property editor (tip seçimi + config — SELECT options / RELATION target; FORMULA listelenir ama devre dışı)
+- [x] Record editör: satır içi düzenleme (TABLE) + tam form modalı (create + edit — prefill, PATCH partial-merge diff, required-clear satır-içi bloklu)
+- [x] TABLE view renderer (kolon=property, satır=record; server pagination / client-mode switch)
+- [x] BOARD view renderer (Kanban — groupBy SELECT options kolonlar + "değersiz" kovası; taşımayı yükleme `apps:record:write` ile geçilen taşıyıcıyı seç)
+- [x] CALENDAR view renderer (dateProperty'e göre ay/hafta ızgarası, Mon-first, bugün/önceki/sonraki)
+- [x] GALLERY + LIST view renderer (kart grid / kompakt satır + client pagination)
+- [x] Filter/sort config UI (satır bazlı DSL; op listesi property tipinden türetilir; "Uygula" anlık geçici filtre, "Görünüme kaydet" PUT) — drag-drop ve expression editor bilinçli yapılmadı (yukarıda)
+- [x] Relation picker (hedef app kayıt araması, ilk TEXT property başlık) + User picker (directory typeahead) + hücrelerde id→label çözümleme (email / hedef başlık)
+- [x] Plan limit göstergesi: `GET /api/v1/apps/plan-limits` (K-42 — sayılar backend `PlanDefinition` registry'sinden; frontend'e sabit kopya YOK) + AppsPage "x / y uygulama" progress'i + detayda "x / y kayıt" sayacı
 
 ---
 
