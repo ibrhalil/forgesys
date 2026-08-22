@@ -6,10 +6,15 @@ import com.ibrhalil.forgesys.dto.CompanyRegisterResponse;
 import com.ibrhalil.forgesys.dto.CompanyVerifyResponse;
 import com.ibrhalil.forgesys.entity.Company;
 import com.ibrhalil.forgesys.entity.CompanyStatus;
+import com.ibrhalil.forgesys.entity.Plan;
+import com.ibrhalil.forgesys.entity.Subscription;
+import com.ibrhalil.forgesys.entity.SubscriptionStatus;
 import com.ibrhalil.forgesys.entity.TenantVerificationToken;
 import com.ibrhalil.forgesys.exception.BusinessException;
 import com.ibrhalil.forgesys.exception.ErrorCode;
 import com.ibrhalil.forgesys.persistence.repository.CompanyRepository;
+import com.ibrhalil.forgesys.persistence.repository.PlanRepository;
+import com.ibrhalil.forgesys.persistence.repository.SubscriptionRepository;
 import com.ibrhalil.forgesys.persistence.repository.TenantVerificationTokenRepository;
 import com.ibrhalil.forgesys.persistence.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -57,9 +62,12 @@ class TenantProvisioningServiceTest {
     @Mock private CompanyRepository companyRepository;
     @Mock private UserRepository userRepository;
     @Mock private TenantVerificationTokenRepository tokenRepository;
+    @Mock private PlanRepository planRepository;
+    @Mock private SubscriptionRepository subscriptionRepository;
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private DataSource dataSource;
     @Mock private TenantMigrationSupport tenantMigrationSupport;
+    @Mock private ModuleActivationService moduleActivationService;
     @Mock private VerificationSender verificationSender;
     @Mock private ObjectProvider<RbacSeeder> rbacSeederProvider;
     @Mock private ObjectProvider<TenantProvisioningService> self;
@@ -71,8 +79,9 @@ class TenantProvisioningServiceTest {
         // Manual construction: Mockito's @InjectMocks can mis-assign the two
         // ObjectProvider<?> constructor params (type erasure → same raw type).
         service = new TenantProvisioningService(
-                companyRepository, userRepository, tokenRepository, passwordEncoder,
-                dataSource, tenantMigrationSupport, verificationSender, rbacSeederProvider, self);
+                companyRepository, userRepository, tokenRepository, planRepository, subscriptionRepository,
+                passwordEncoder, dataSource, tenantMigrationSupport, moduleActivationService,
+                verificationSender, rbacSeederProvider, self);
         ReflectionTestUtils.setField(service, "appBaseUrl", "http://test.local");
         ReflectionTestUtils.setField(service, "tokenTtlHours", 24L);
         // REQUIRES_NEW self-proxy: createAdminUser is invoked through self.getObject(),
@@ -132,6 +141,7 @@ class TenantProvisioningServiceTest {
         when(tokenRepository.claimToken(eq("good-token"), any(OffsetDateTime.class))).thenReturn(1);
         stubCreateSchema();
         when(companyRepository.save(any(Company.class))).thenAnswer(inv -> inv.getArgument(0));
+        stubFreePlan();
 
         CompanyVerifyResponse response = service.verifyAndProvision("good-token");
 
@@ -141,6 +151,13 @@ class TenantProvisioningServiceTest {
 
         verify(tenantMigrationSupport).migrateSchema(SCHEMA_NAME);
         verify(userRepository).save(any());
+        // K-16: provisioning writes the initial FREE subscription and activates the
+        // default modules for the new tenant.
+        ArgumentCaptor<Subscription> subscriptionCaptor = ArgumentCaptor.forClass(Subscription.class);
+        verify(subscriptionRepository).save(subscriptionCaptor.capture());
+        assertThat(subscriptionCaptor.getValue().getPlan().getKey()).isEqualTo("free");
+        assertThat(subscriptionCaptor.getValue().getStatus()).isEqualTo(SubscriptionStatus.ACTIVE);
+        verify(moduleActivationService).activateDefaultModules(company);
         // The provisioning callback must seed the catalog AND explicitly grant Admin to
         // the new user — startup seeding no longer assigns roles (privilege-escalation
         // fix, 2026-08-16), so this is the only Admin grant path.
@@ -233,6 +250,7 @@ class TenantProvisioningServiceTest {
         // [RISK-25] the auto-verify path also goes through the atomic claim.
         when(tokenRepository.claimToken(eq(token.getToken()), any(OffsetDateTime.class))).thenReturn(1);
         stubCreateSchema();
+        stubFreePlan();
         when(companyRepository.findById(any(UUID.class)))
                 .thenAnswer(inv -> Optional.of(companyWithStatus(CompanyStatus.ACTIVE)));
 
@@ -242,6 +260,26 @@ class TenantProvisioningServiceTest {
         // Bootstrap auto-verify must NOT email the verification link.
         verify(verificationSender, never()).send(anyString(), anyString());
         verify(tenantMigrationSupport).migrateSchema(SCHEMA_NAME);
+        verify(subscriptionRepository).save(any(Subscription.class));
+        verify(moduleActivationService).activateDefaultModules(any(Company.class));
+    }
+
+    /**
+     * K-16: provisioning fails fast when the FREE plan row is missing — PlanSyncRunner
+     * must have seeded plans; a silent skip would leave the tenant without a subscription.
+     */
+    @Test
+    void verifyAndProvision_missingFreePlan_failsFast() throws Exception {
+        TenantVerificationToken token = validToken(companyWithStatus(CompanyStatus.PROVISIONING));
+        when(tokenRepository.findByToken("good-token")).thenReturn(Optional.of(token));
+        when(tokenRepository.claimToken(eq("good-token"), any(OffsetDateTime.class))).thenReturn(1);
+        stubCreateSchema();
+        when(planRepository.findByKey("free")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.verifyAndProvision("good-token"))
+                .isInstanceOf(IllegalStateException.class);
+
+        verify(moduleActivationService, never()).activateDefaultModules(any());
     }
 
     // --- helpers ---------------------------------------------------------
@@ -288,5 +326,15 @@ class TenantProvisioningServiceTest {
         when(dataSource.getConnection()).thenReturn(connection);
         when(connection.createStatement()).thenReturn(statement);
         doNothing().when(tenantMigrationSupport).migrateSchema(anyString());
+    }
+
+    private void stubFreePlan() {
+        Plan plan = new Plan();
+        plan.setId(UUID.randomUUID());
+        plan.setKey("free");
+        plan.setName("Free");
+        plan.setRank(0);
+        plan.setActive(true);
+        when(planRepository.findByKey("free")).thenReturn(Optional.of(plan));
     }
 }

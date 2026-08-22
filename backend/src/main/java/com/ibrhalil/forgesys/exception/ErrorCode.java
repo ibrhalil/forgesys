@@ -40,6 +40,10 @@ public enum ErrorCode {
     SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "Session was not found or has already ended"),
     SELF_DELETE_FORBIDDEN(HttpStatus.CONFLICT, "You cannot delete your own account"),
     LAST_ADMIN_REQUIRED(HttpStatus.CONFLICT, "At least one active admin-capable user must remain in the tenant"),
+    MODULE_NOT_FOUND(HttpStatus.NOT_FOUND, "Unknown module key"),
+    MODULE_ALREADY_ACTIVE(HttpStatus.CONFLICT, "Module is already activated for this tenant"),
+    SUBSCRIPTION_NOT_FOUND(HttpStatus.CONFLICT, "Tenant has no active subscription"),
+    MODULE_PLAN_REQUIRED(HttpStatus.FORBIDDEN, "Module requires a higher subscription plan"),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred");
 
     private final HttpStatus status;

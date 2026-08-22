@@ -79,6 +79,16 @@ General engineering conduct. Project-specific rules above take precedence; the s
 
 Kapsamlı 4-katmanlı review (service/security/persistence/test) + Spring Boot 4.0 / Security 7 resmi migration kaynakları. Bulgular önem sırasına göre fazlara bölünmüş. Detay ve dosya:ref'ler: [`docs/DECISIONS.md`](docs/DECISIONS.md) RISK-19..RISK-34. Tüm fazlar uygulanacak (kullanıcı kararı), önem sırasıyla.
 
+### Faz 3.0.A — Module System & Plan/Subscription (K-16) — UYGULANDI (2026-08-22)
+
+Detay + uygulama kararları: [`docs/DECISIONS.md K-16`](docs/DECISIONS.md#k-16) · modül bazlı kurallar: [`persistence/AGENTS.md`](persistence/AGENTS.md) + [`backend/AGENTS.md`](backend/AGENTS.md).
+
+- Registry kodda (DB katalog tablosu YOK): `PlanDefinition` (FREE/PRO/ENTERPRISE, `PlanSyncRunner` `t_plans` upsert) + `ModuleDefinition` (key/displayName/minPlan/flywayLocation/permissions; `pm` modüle çevrildi — permission'ları modül sahipliğine taşındı).
+- `public/V2` migration: `t_plans`/`t_subscriptions`/`t_tenant_modules`. Modül migration'ları `db/migration/module/<key>` + `flyway_schema_history_mod_<key>` (modül-başı bağımsız versiyonlama; core `tenant/` ağacı DIŞINDA — recursive scan tuzağı).
+- `ModuleActivationService`: plan gate → modül Flyway → permission seed (`REQUIRES_NEW`) → aktivasyon kaydı (caller tx — provisioning FK deadlock önleme). `ModuleSyncRunner`: FREE backfill + default modüller + re-sync.
+- Endpoint'ler: `GET /api/v1/modules` (`iam:module:read`) + `POST /modules/{key}/activate` (`iam:module:write`, idempotent).
+- Testler: 398 H2 + `ModuleActivationIT` (gated gerçek PG — provisioning hook, permission seed, modül history izolasyonu).
+
 ### Faz A — Kritik Güvenlik (önce)
 - [x] **[P0 RISK-19]** JWT tenant binding — `JwtAuthenticationFilter`'da token tenant claim == request tenant (TenantContext) kontrolü; mismatch → SecurityContext temizle. Cross-tenant escalation kapatır.
 - [x] **[P1 RISK-21]** `tokenInvalidBefore` filter kontrolü + `changePassword`/`resetPassword`/`logout`'ta `tokenInvalidBefore = now()` set. (2026-07-24)

@@ -1,5 +1,6 @@
 import type { IconType } from 'react-icons';
 import {
+  LuBlocks,
   LuChartLine,
   LuFileText,
   LuFolder,
@@ -60,6 +61,7 @@ export const NAV_GROUPS: NavGroup[] = [
     labelKey: 'nav.admin',
     items: [
       { labelKey: 'nav.allSessions', to: '/all-sessions', icon: LuChartLine, authority: PERMISSIONS.USER_WRITE },
+      { labelKey: 'nav.modules', to: '/modules', icon: LuBlocks, authority: PERMISSIONS.MODULE_READ },
     ],
   },
 ];

@@ -25,7 +25,8 @@ import java.util.stream.Collectors;
 
 /**
  * Idempotent RBAC seed for tenant schemas. Ensures every tenant owns the built-in
- * permission catalog (see {@link PermissionCatalog}) and an {@code Admin} role that
+ * <em>core</em> permission catalog (see {@link PermissionCatalog#CORE} — module-owned
+ * permissions are seeded on module activation, K-16) and an {@code Admin} role that
  * carries the {@code all_permissions} flag (so it implicitly holds every permission,
  * resolved dynamically — no per-permission grant rows).
  *
@@ -91,7 +92,7 @@ public class RbacSeeder implements ApplicationRunner {
     }
 
     private Map<String, Permission> ensurePermissions() {
-        return PermissionCatalog.ALL.stream()
+        return PermissionCatalog.CORE.stream()
                 .map(this::ensurePermission)
                 .collect(Collectors.toUnmodifiableMap(Permission::getName, Function.identity()));
     }

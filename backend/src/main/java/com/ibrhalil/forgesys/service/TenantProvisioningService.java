@@ -1,12 +1,16 @@
 package com.ibrhalil.forgesys.service;
 
 import com.ibrhalil.forgesys.common.tenant.TenantContext;
+import com.ibrhalil.forgesys.config.PlanDefinition;
 import com.ibrhalil.forgesys.config.RbacSeeder;
 import com.ibrhalil.forgesys.dto.CompanyRegisterRequest;
 import com.ibrhalil.forgesys.dto.CompanyRegisterResponse;
 import com.ibrhalil.forgesys.dto.CompanyVerifyResponse;
 import com.ibrhalil.forgesys.entity.Company;
 import com.ibrhalil.forgesys.entity.CompanyStatus;
+import com.ibrhalil.forgesys.entity.Plan;
+import com.ibrhalil.forgesys.entity.Subscription;
+import com.ibrhalil.forgesys.entity.SubscriptionStatus;
 import com.ibrhalil.forgesys.entity.TenantVerificationToken;
 import com.ibrhalil.forgesys.entity.User;
 import com.ibrhalil.forgesys.entity.UserAccount;
@@ -14,6 +18,8 @@ import com.ibrhalil.forgesys.entity.UserProfile;
 import com.ibrhalil.forgesys.exception.BusinessException;
 import com.ibrhalil.forgesys.exception.ErrorCode;
 import com.ibrhalil.forgesys.persistence.repository.CompanyRepository;
+import com.ibrhalil.forgesys.persistence.repository.PlanRepository;
+import com.ibrhalil.forgesys.persistence.repository.SubscriptionRepository;
 import com.ibrhalil.forgesys.persistence.repository.TenantVerificationTokenRepository;
 import com.ibrhalil.forgesys.persistence.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -69,9 +75,12 @@ public class TenantProvisioningService {
     private final CompanyRepository companyRepository;
     private final UserRepository userRepository;
     private final TenantVerificationTokenRepository tokenRepository;
+    private final PlanRepository planRepository;
+    private final SubscriptionRepository subscriptionRepository;
     private final PasswordEncoder passwordEncoder;
     private final DataSource dataSource;
     private final TenantMigrationSupport tenantMigrationSupport;
+    private final ModuleActivationService moduleActivationService;
     private final VerificationSender verificationSender;
     // Optional: RbacSeeder is @Profile("!test") — absent in tests, which never exercise provisioning.
     private final ObjectProvider<RbacSeeder> rbacSeederProvider;
@@ -163,6 +172,12 @@ public class TenantProvisioningService {
         } finally {
             TenantContext.clear();
         }
+
+        // K-16 / Epic 3.0.A: FREE subscription + default module activations (permission
+        // seed + activation record; pm needs no extra migration — baseline tables).
+        // activateForCompany manages its own TenantContext + REQUIRES_NEW transaction.
+        createDefaultSubscription(company);
+        moduleActivationService.activateDefaultModules(company);
 
         company.setStatus(CompanyStatus.ACTIVE);
         Company saved = companyRepository.save(company);
@@ -332,5 +347,22 @@ public class TenantProvisioningService {
 
     private void runTenantMigrations(String schemaName) {
         tenantMigrationSupport.migrateSchema(schemaName);
+    }
+
+    /**
+     * Writes the new tenant's initial FREE subscription (K-16). Real plan selection /
+     * upgrades arrive in Faz 6. Fails fast when the plan row is missing —
+     * {@code PlanSyncRunner} seeds plans before any provisioning can run.
+     */
+    private void createDefaultSubscription(Company company) {
+        Plan freePlan = planRepository.findByKey(PlanDefinition.FREE.key())
+                .orElseThrow(() -> new IllegalStateException(
+                        "FREE plan row missing; PlanSyncRunner must seed plans before provisioning"));
+        Subscription subscription = new Subscription();
+        subscription.setCompany(company);
+        subscription.setPlan(freePlan);
+        subscription.setStatus(SubscriptionStatus.ACTIVE);
+        subscription.setStartedAt(OffsetDateTime.now(ZoneOffset.UTC));
+        subscriptionRepository.save(subscription);
     }
 }

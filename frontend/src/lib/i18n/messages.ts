@@ -34,6 +34,7 @@ export const messages = {
     'nav.loginHistory': 'Oturum Geçmişi',
     'nav.sessions': 'Oturumlar',
     'nav.allSessions': 'Tüm Oturumlar',
+    'nav.modules': 'Modüller',
     'nav.identity': 'Kimlik & Erişim',
     'nav.security': 'Güvenlik',
     'nav.admin': 'Yönetim',
@@ -320,6 +321,18 @@ export const messages = {
     'permissions.assignedTo': 'Atanmış roller ({count})',
     'permissions.noRoles': 'Bu izni şu anda veren rol yok.',
 
+    // modules
+    'modules.title': 'Modüller',
+    'modules.desc': 'Tenant modül kataloğu ve aktivasyon durumu. Plan yükseltmeleri Faz 6 ile gelecek.',
+    'modules.key': 'Anahtar',
+    'modules.minPlan': 'Min. Plan',
+    'modules.active': 'Aktif',
+    'modules.inactive': 'Pasif',
+    'modules.activate': 'Etkinleştir',
+    'modules.activated': '"{name}" modülü etkinleştirildi',
+    'modules.planRequired': 'Bu modül daha yüksek bir abonelik planı gerektirir',
+    'modules.empty': 'Katalogda modül yok',
+
     // extra shared
     'common.inactive': 'Pasif',
     'common.details': 'Ayrıntılar',
@@ -448,6 +461,7 @@ export const messages = {
     'nav.loginHistory': 'Login History',
     'nav.sessions': 'Sessions',
     'nav.allSessions': 'All Sessions',
+    'nav.modules': 'Modules',
     'nav.identity': 'Identity & Access',
     'nav.security': 'Security',
     'nav.admin': 'Admin',
@@ -734,6 +748,18 @@ export const messages = {
     'permissions.backToPerms': '← All permissions',
     'permissions.assignedTo': 'Assigned to roles ({count})',
     'permissions.noRoles': 'No role currently grants this permission.',
+
+    // modules
+    'modules.title': 'Modules',
+    'modules.desc': 'Tenant module catalog and activation state. Plan upgrades arrive in Phase 6.',
+    'modules.key': 'Key',
+    'modules.minPlan': 'Min. Plan',
+    'modules.active': 'Active',
+    'modules.inactive': 'Inactive',
+    'modules.activate': 'Activate',
+    'modules.activated': 'Module "{name}" activated',
+    'modules.planRequired': 'This module requires a higher subscription plan',
+    'modules.empty': 'No modules in the catalog',
 
     // extra shared
     'common.inactive': 'Inactive',
