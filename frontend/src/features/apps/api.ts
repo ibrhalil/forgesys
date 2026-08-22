@@ -1,6 +1,16 @@
 import { api, normalizePage, toQuery } from '../../lib/api';
 import type { PageParams, PageResponse } from '../../types';
-import type { App, AppDetail, AppProperty, AppPropertyRequest, AppRecord, AppRecordRequest, AppRequest } from './types';
+import type {
+  App,
+  AppDetail,
+  AppProperty,
+  AppPropertyRequest,
+  AppRecord,
+  AppRecordRequest,
+  AppRequest,
+  AppView,
+  AppViewRequest,
+} from './types';
 
 export const appsApi = {
   // ─── Apps ───
@@ -18,6 +28,15 @@ export const appsApi = {
     api.put<AppProperty>(`/api/v1/apps/${appId}/properties/${propertyId}`, data),
   deleteProperty: (appId: string, propertyId: string) =>
     api.delete<void>(`/api/v1/apps/${appId}/properties/${propertyId}`),
+
+  // ─── Views (writes are apps:app:write; list is apps:app:read) ───
+  listViews: (appId: string) => api.get<AppView[]>(`/api/v1/apps/${appId}/views`),
+  createView: (appId: string, data: AppViewRequest) =>
+    api.post<AppView>(`/api/v1/apps/${appId}/views`, data),
+  updateView: (appId: string, viewId: string, data: AppViewRequest) =>
+    api.put<AppView>(`/api/v1/apps/${appId}/views/${viewId}`, data),
+  deleteView: (appId: string, viewId: string) =>
+    api.delete<void>(`/api/v1/apps/${appId}/views/${viewId}`),
 
   // ─── Records ───
   listRecords: (appId: string, params: PageParams = {}) =>

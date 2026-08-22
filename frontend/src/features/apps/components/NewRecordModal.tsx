@@ -8,11 +8,13 @@ import { notify } from '../../../lib/notify';
 import type { AppDetail } from '../types';
 import { useCreateRecord } from '../hooks';
 import { parseCellInput } from '../cellValue';
+import { UserPicker } from './UserPicker';
+import { RelationPicker } from './RelationPicker';
 
 /**
- * Minimal record create modal — one control per property. USER/RELATION take a raw
- * id text input for now (pickers arrive in a later part). Only filled fields are
- * sent; every required property must carry a value (backend enforces it too).
+ * Record create modal — one control per property: scalar types get plain inputs,
+ * SELECT a dropdown, USER/RELATION their pickers. Only filled fields are sent;
+ * every required property must carry a value (the backend enforces it too).
  */
 export function NewRecordModal({ app, onClose }: { app: AppDetail; onClose: () => void }) {
   const { t } = useT();
@@ -32,6 +34,11 @@ export function NewRecordModal({ app, onClose }: { app: AppDetail; onClose: () =
       const raw = (draft[prop.id] ?? '').trim();
       if (raw === '') {
         if (prop.required) errors[prop.id] = t('apps.fieldRequired');
+        continue;
+      }
+      if (prop.type === 'USER' || prop.type === 'RELATION') {
+        // Picker-sourced ids — no client-side format check (server validates existence).
+        values[prop.id] = raw;
         continue;
       }
       const parsed = parseCellInput(prop, raw);
@@ -83,7 +90,29 @@ export function NewRecordModal({ app, onClose }: { app: AppDetail; onClose: () =
               />
             );
           }
-          const isIdType = prop.type === 'USER' || prop.type === 'RELATION';
+          if (prop.type === 'USER') {
+            return (
+              <UserPicker
+                key={prop.id}
+                label={label}
+                value={draft[prop.id] ? draft[prop.id] : null}
+                onChange={(v) => setValue(prop.id, v ?? '')}
+                error={fieldErrors[prop.id] ?? null}
+              />
+            );
+          }
+          if (prop.type === 'RELATION') {
+            return (
+              <RelationPicker
+                key={prop.id}
+                property={prop}
+                label={label}
+                value={draft[prop.id] ? draft[prop.id] : null}
+                onChange={(v) => setValue(prop.id, v ?? '')}
+                error={fieldErrors[prop.id] ?? null}
+              />
+            );
+          }
           return (
             <TextField
               key={prop.id}
@@ -92,8 +121,6 @@ export function NewRecordModal({ app, onClose }: { app: AppDetail; onClose: () =
               type={prop.type === 'NUMBER' ? 'number' : prop.type === 'DATE' ? 'date' : 'text'}
               value={draft[prop.id] ?? ''}
               onChange={(e) => setValue(prop.id, e.target.value)}
-              placeholder={isIdType ? t('apps.uuidPh') : undefined}
-              hint={isIdType ? t('apps.uuidHint') : undefined}
               error={fieldErrors[prop.id] ?? null}
             />
           );

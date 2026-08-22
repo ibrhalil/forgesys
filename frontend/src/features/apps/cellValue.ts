@@ -71,3 +71,25 @@ export function cellEditValue(prop: AppProperty, record: AppRecord): string {
   const value = record.values[prop.id];
   return value === undefined || value === null ? '' : String(value);
 }
+
+/** First TEXT property (position order) — the natural "primary field" of an app. */
+export function firstTextProperty(properties: AppProperty[]): AppProperty | undefined {
+  return properties.find((p) => p.type === 'TEXT');
+}
+
+/**
+ * Card title for the non-TABLE renderers (BOARD/CALENDAR/LIST/GALLERY): the first
+ * TEXT property's value, falling back to a shortened record id. `resolve` (when
+ * provided) lets callers swap in picker-aware labels (valueLabels resolver).
+ */
+export function recordTitle(
+  record: AppRecord,
+  titleProp: AppProperty | undefined,
+  resolve?: (prop: AppProperty, record: AppRecord) => string,
+): string {
+  if (titleProp) {
+    const label = resolve?.(titleProp, record) ?? cellDisplay(titleProp, record);
+    if (label !== '') return label;
+  }
+  return `#${shortenId(record.id)}`;
+}

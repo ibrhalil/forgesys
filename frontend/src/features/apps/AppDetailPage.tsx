@@ -18,7 +18,7 @@ import type { AppProperty } from './types';
 import { useApp, useDeleteApp, useDeleteProperty } from './hooks';
 import { AppFormModal } from './components/AppFormModal';
 import { PropertyModal } from './components/PropertyModal';
-import { RecordTable } from './components/RecordTable';
+import { RecordsPanel } from './components/RecordsPanel';
 
 export function AppDetailPage() {
   const { appId } = useParams<{ appId: string }>();
@@ -110,7 +110,7 @@ export function AppDetailPage() {
           )}
         </DetailPanel>
 
-        <RecordTable app={app} />
+        <RecordsPanel app={app} />
       </div>
 
       {editing && <AppFormModal app={app} onClose={() => setEditing(false)} />}

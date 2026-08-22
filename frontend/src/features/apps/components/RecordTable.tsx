@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { LuPlus, LuTrash2 } from 'react-icons/lu';
-import { DetailPanel } from '../../../components/detail/DetailPanel';
 import { DataTable, type Column } from '../../../components/ui/DataTable';
 import { RowMenu } from '../../../components/ui/RowMenu';
 import { Button } from '../../../components/ui/Button';
@@ -11,12 +10,16 @@ import { PAGE_SIZE_OPTIONS } from '../../../lib/pagination';
 import { formatDateTime } from '../../../lib/format';
 import { useT } from '../../../lib/i18n';
 import { useListPageState } from '../../../lib/useListPageState';
+import { useClientPagination } from '../../../lib/useClientPagination';
 import { PERMISSIONS } from '../../../lib/permissions';
 import { useAuthStore } from '../../../store/authStore';
 import { notify } from '../../../lib/notify';
 import type { AppDetail, AppRecord } from '../types';
 import { useRecords, usePatchRecord, useDeleteRecord } from '../hooks';
 import { cellDisplay, cellEditValue, parseCellInput } from '../cellValue';
+import { useValueResolvers } from '../valueLabels';
+import { UserPicker } from './UserPicker';
+import { RelationPicker } from './RelationPicker';
 import { NewRecordModal } from './NewRecordModal';
 
 /** Cell being edited: which record × which property, plus the raw input draft. */
@@ -26,31 +29,52 @@ interface EditState {
   draft: string;
 }
 
+/** Records fed by the parent (RecordsPanel) for client-mode TABLE views. */
+export interface ClientRecordsOverride {
+  records: AppRecord[];
+  isLoading: boolean;
+}
+
 /**
- * TABLE view renderer — column = property, row = record. Simple scalar cells
- * (TEXT/NUMBER/SELECT/DATE) edit inline on click; USER/RELATION show a shortened
- * raw id until their pickers arrive in a later part.
+ * TABLE view renderer — column = property, row = record. Two data modes:
+ * self (default) — own server pagination + section chrome + create/delete dialogs;
+ * override (client-mode) — RecordsPanel feeds filtered/sorted records, pagination
+ * is local, create/delete live in the panel. All scalar types edit inline on
+ * click; USER/RELATION cells edit through their pickers.
  */
-export function RecordTable({ app }: { app: AppDetail }) {
+export function RecordTable({
+  app,
+  override,
+  onRequestDelete,
+}: {
+  app: AppDetail;
+  override?: ClientRecordsOverride;
+  /** Delete affordance for override mode (the panel owns the confirm dialog). */
+  onRequestDelete?: (record: AppRecord) => void;
+}) {
   const { t } = useT();
   const { page, setPage, pageSize, setPageSize, sort, toggleSort } =
     useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' } });
-  const { data, isLoading, isFetching } = useRecords(app.id, { page, size: pageSize, sorts: [sort] });
+  // Self-mode server query is disabled while the panel feeds records (override).
+  const { data, isLoading, isFetching } = useRecords(override ? undefined : app.id, {
+    page,
+    size: pageSize,
+    sorts: [sort],
+  });
+  const client = useClientPagination(override?.records ?? []);
   const patch = usePatchRecord(app.id);
   const delRecord = useDeleteRecord(app.id);
   const canWrite = useAuthStore((s) => s.hasAuthority(PERMISSIONS.APP_RECORD_WRITE));
   const canDelete = useAuthStore((s) => s.hasAuthority(PERMISSIONS.APP_RECORD_DELETE));
+  const resolve = useValueResolvers(app);
 
   const [edit, setEdit] = useState<EditState | null>(null);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<AppRecord | null>(null);
 
   if (app.properties.length === 0) {
-    return (
-      <DetailPanel title={t('apps.recordsSection')}>
-        <EmptyState message={t('apps.emptyProperties')} />
-      </DetailPanel>
-    );
+    // The panel normally guards this; keeps a standalone render meaningful.
+    return <EmptyState message={t('apps.emptyProperties')} />;
   }
 
   const commit = (record: AppRecord, propertyId: string, raw: string) => {
@@ -65,6 +89,14 @@ export function RecordTable({ app }: { app: AppDetail }) {
     if (parsed === current) return;
     // Silent failure keeps the table on the old value; the global toast explains.
     patch.mutate({ recordId: record.id, data: { values: { [propertyId]: parsed } } });
+  };
+
+  /** Picker commit path (USER/RELATION): the picker hands over a raw id or null. */
+  const commitPicker = (record: AppRecord, propertyId: string, value: string | null) => {
+    setEdit(null);
+    const current = record.values[propertyId] ?? null;
+    if ((value ?? null) === (current || null)) return;
+    patch.mutate({ recordId: record.id, data: { values: { [propertyId]: value } } });
   };
 
   const columns: Column<AppRecord>[] = [
@@ -90,6 +122,33 @@ export function RecordTable({ app }: { app: AppDetail }) {
               />
             );
           }
+          if (prop.type === 'USER') {
+            const raw = record.values[prop.id];
+            return (
+              <div className="min-w-36">
+                <UserPicker
+                  value={raw ? String(raw) : null}
+                  valueLabel={raw ? resolve(prop, record) : undefined}
+                  onChange={(v) => commitPicker(record, prop.id, v)}
+                  size="sm"
+                />
+              </div>
+            );
+          }
+          if (prop.type === 'RELATION') {
+            const raw = record.values[prop.id];
+            return (
+              <div className="min-w-36">
+                <RelationPicker
+                  property={prop}
+                  value={raw ? String(raw) : null}
+                  valueLabel={raw ? resolve(prop, record) : undefined}
+                  onChange={(v) => commitPicker(record, prop.id, v)}
+                  size="sm"
+                />
+              </div>
+            );
+          }
           return (
             <input
               autoFocus
@@ -105,17 +164,23 @@ export function RecordTable({ app }: { app: AppDetail }) {
             />
           );
         }
-        const display = cellDisplay(prop, record);
         if (prop.type === 'USER' || prop.type === 'RELATION') {
-          // Raw id until pickers arrive — shortened, full id on hover.
-          return display ? (
-            <span className="font-mono text-xs text-muted" title={String(record.values[prop.id] ?? '')}>
-              {display}
-            </span>
-          ) : (
-            <span className="text-muted/50">—</span>
+          const display = resolve(prop, record);
+          if (!canWrite) {
+            return display ? <span>{display}</span> : <span className="text-muted/50">—</span>;
+          }
+          return (
+            <button
+              type="button"
+              title={t('common.edit')}
+              onClick={() => setEdit({ recordId: record.id, propertyId: prop.id, draft: cellEditValue(prop, record) })}
+              className="max-w-48 truncate rounded px-1 text-left text-sm text-main transition-colors hover:bg-accent/10 hover:text-accent"
+            >
+              {display || <span className="text-muted/50">—</span>}
+            </button>
           );
         }
+        const display = cellDisplay(prop, record);
         if (!canWrite) {
           return display ? <span>{display}</span> : <span className="text-muted/50">—</span>;
         }
@@ -139,8 +204,51 @@ export function RecordTable({ app }: { app: AppDetail }) {
     },
   ];
 
+  const table = (
+    <DataTable<AppRecord>
+      columns={columns}
+      data={override ? client.paged : (data?.items ?? [])}
+      rowKey={(r) => r.id}
+      loading={override ? override.isLoading : isLoading || (isFetching && !data)}
+      emptyMessage={t('apps.emptyRecords')}
+      page={override ? client.page : (data?.page ?? page)}
+      pageSize={override ? client.pageSize : (data?.size ?? pageSize)}
+      pageSizeOptions={PAGE_SIZE_OPTIONS}
+      onPageSizeChange={override ? client.setPageSize : setPageSize}
+      totalElements={override ? client.totalElements : (data?.totalElements ?? 0)}
+      totalPages={override ? client.totalPages : (data?.totalPages ?? 0)}
+      onPageChange={override ? client.setPage : setPage}
+      // Client-mode rows are already filtered/sorted by the panel — header sort
+      // stays bound to the server whitelist only in self mode.
+      {...(override ? {} : { sort, onSortChange: toggleSort })}
+      actionsHeader={t('common.actions')}
+      actions={(r) => (
+        <RowMenu
+          ariaLabel={t('common.actions')}
+          items={
+            canDelete
+              ? [
+                  {
+                    label: t('common.delete'),
+                    onClick: () => (override ? onRequestDelete?.(r) : setDeleting(r)),
+                    icon: LuTrash2,
+                    danger: true,
+                  },
+                ]
+              : []
+          }
+        />
+      )}
+    />
+  );
+
+  // Override mode: the panel owns the section chrome (tabs, description, create,
+  // delete dialog) — render the bare table. Self mode carries its own description
+  // + create/delete, still inside the panel provided by the parent.
+  if (override) return table;
+
   return (
-    <DetailPanel title={t('apps.recordsSection')}>
+    <>
       <div className="mb-4 flex items-center justify-between gap-3">
         <p className="m-0 text-sm text-muted">{t('apps.recordsDesc')}</p>
         {canWrite && (
@@ -150,33 +258,7 @@ export function RecordTable({ app }: { app: AppDetail }) {
           </Button>
         )}
       </div>
-      <DataTable<AppRecord>
-        columns={columns}
-        data={data?.items ?? []}
-        rowKey={(r) => r.id}
-        loading={isLoading || (isFetching && !data)}
-        emptyMessage={t('apps.emptyRecords')}
-        page={data?.page ?? page}
-        pageSize={data?.size ?? pageSize}
-        pageSizeOptions={PAGE_SIZE_OPTIONS}
-        onPageSizeChange={setPageSize}
-        totalElements={data?.totalElements ?? 0}
-        totalPages={data?.totalPages ?? 0}
-        onPageChange={setPage}
-        sort={sort}
-        onSortChange={toggleSort}
-        actionsHeader={t('common.actions')}
-        actions={(r) => (
-          <RowMenu
-            ariaLabel={t('common.actions')}
-            items={
-              canDelete
-                ? [{ label: t('common.delete'), onClick: () => setDeleting(r), icon: LuTrash2, danger: true }]
-                : []
-            }
-          />
-        )}
-      />
+      {table}
 
       {creating && <NewRecordModal app={app} onClose={() => setCreating(false)} />}
 
@@ -199,6 +281,6 @@ export function RecordTable({ app }: { app: AppDetail }) {
         }}
         onClose={() => setDeleting(null)}
       />
-    </DetailPanel>
+    </>
   );
 }
