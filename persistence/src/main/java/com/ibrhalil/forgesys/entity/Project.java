@@ -19,7 +19,7 @@ import lombok.ToString;
  *
  * <p>Soft-deletable, optimistic-locked, tenant-audited — same base as Role/Group. The
  * name uniqueness is a partial index ({@code WHERE is_deleted = false}) in
- * {@code tenant/V4}; the entity-side {@code unique = true} only shapes H2 create-drop
+ * {@code tenant/V1.3}; the entity-side {@code unique = true} only shapes H2 create-drop
  * in tests (Flyway owns the real schema, [RISK-17]).
  */
 @Entity

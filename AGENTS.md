@@ -48,7 +48,7 @@ Each module has its own `AGENTS.md` with module-specific rules.
 Not source code; runtime/operational files. Details in `infra/README.md`.
 
 - `infra/config/` — prod externalized override. Dropping an `application-prod.yaml` here overrides the one inside the jar (`SPRING_CONFIG_ADDITIONAL_LOCATION`). **Do not commit secrets.**
-- `infra/data/{postgres,redis}/` — bind-mount volume. **Not committed.** On macOS, for permission issues: postgres UID 70, redis UID 999.
+- `infra/data/` — bind-mount volumes (`postgres/` dev+prod; `redis/` prod only — dev redis uses a named volume). **Not committed.** Ownership is auto-fixed by the one-shot `data-init` compose service (postgres UID 70, redis UID 999); a wiped `infra/data` is recoverable with `docker compose up -d --force-recreate db`.
 - `infra/init-sql/` — Docker postgres `/docker-entrypoint-initdb.d/` scripts. Run **only on first DB creation** (extension, role). **Completely separate from Flyway migrations** — do not mix.
 - `infra/logs/` — Spring Boot file appender + container log bind-mount. **Not committed.**
 - `infra/ssl/` — TLS certificates / private keys. **NEVER commit** (conflicts with the "Limits / Never" rule below).
@@ -124,8 +124,8 @@ Kapsamlı 4-katmanlı review (service/security/persistence/test) + Spring Boot 4
 - [x] N+1 `findById` EntityGraph'lar (UserService/RoleService/GroupService — `UserRepository.findById` roles+groups+profile+account, `RoleRepository.findById` permissions, `GroupRepository.findById` roles).
 - [x] `resolveRoles`/`resolveGroups` duplicate-id `HashSet` dedupe.
 - [x] `@ToString` token/hash/userProfile/userAccount exclude (`TenantVerificationToken`, `RefreshToken`, `User`).
-- [ ] `version BIGINT` → `NOT NULL DEFAULT 0` (migration). *(erteledi: tenant migration)*
-- [ ] `RefreshToken` ölü kod + `t_refresh_tokens` tablosu kaldır. *(Epic 2.5/K-34 Redis-first refresh ile geldi — tablo KULLANILMIYOR, kalıcı vestigial. Silinmesi tenant migration (RISK-16) gerektirir; düşük öncelik.)*
+- [x] `version BIGINT` → `NOT NULL DEFAULT 0`. *(K-36 pre-1.0.0 migration squash'ı — V1.x baseline ailesine gömüldü, 2026-08-22)*
+- [x] `RefreshToken` ölü kod + `t_refresh_tokens` tablosu kaldır. *(K-36 — entity + repo + tablo V1.x baseline'ı dışında bırakılarak silindi; Redis-first refresh K-34'tü zaten)*
 - [x] Subdomain pattern constant (DTO + service DRY — `SubdomainRules`).
 - [ ] Password complexity policy (`@Pattern` mixed case/digit/symbol). *(ürün-politikası kararı; tüm test/bootstrap şifrelerini değiştirir)*
 - [x] `Assign*Request` `@Size(max=...)` bound.

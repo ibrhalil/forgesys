@@ -231,7 +231,7 @@ Kod analizi sonucu keşfedilen P0 düzeltmeler. User CRUD / log'dan ÖNCE çöz�
 > Hibrit modüler platform: önce Module System altyapısı (3.0), sonra built-in modüller (3.1-3.4). Custom App Builder backend altyapısı da 3.0 ile gelir; UI'sı Faz 4.2.
 
 ### Epic 3.0.A — Module System & Plan/Subscription (K-16)
-- `public/V2__plan_subscription_modules.sql`: `t_plans`, `t_subscriptions`, `t_tenant_modules`, `t_module_catalog`
+- `public` migration (sonraki versiyon — [K-36](DECISIONS.md#k-36) squash sonrası `V2`'den devam): `t_plans`, `t_subscriptions`, `t_tenant_modules`, `t_module_catalog`
 - `Plan`, `Subscription`, `TenantModuleActivation`, `ModuleCatalog` entity'leri
 - `Module` registry (enum/konfig — key, name, min_plan, flyway_path)
 - `ModuleActivationService` (plan kontrol -> Flyway tenant migration -> permission seed -> kayıt)
@@ -240,7 +240,7 @@ Kod analizi sonucu keşfedilen P0 düzeltmeler. User CRUD / log'dan ÖNCE çöz�
 - Module activation integration test (plan reject, Flyway, permission seed)
 
 ### Epic 3.0.B — Custom App Builder Backend (K-15, Notion-style)
-- `tenant/V2__app_builder.sql`: `t_apps`, `t_app_properties`, `t_app_records`, `t_app_record_values(value JSONB)`, `t_app_views`
+- `tenant` migration (sonraki versiyon): `t_apps`, `t_app_properties`, `t_app_records`, `t_app_record_values(value JSONB)`, `t_app_views`
 - `persistence/pom.xml`: hypersistence-utils + `App*` entity'leri (JSONB mapping)
 - `AppBuilderService`: app/property/record/view CRUD + property type validation
 - Property type validators (TEXT/NUMBER/SELECT/DATE/USER/RELATION/FORMULA)
@@ -256,16 +256,16 @@ Kod analizi sonucu keşfedilen P0 düzeltmeler. User CRUD / log'dan ÖNCE çöz�
 - MapStruct mappers (`AppMapper`, `RecordMapper`, `ViewMapper`)
 
 ### Epic 3.1 — Built-in "Tasks" Modülü — DONE (pm modülü olarak)
-> Görev yönetimi standalone yerine **project-scoped** geldi (2026-08): `tenant/V4__module_projects.sql` + `V5__module_tasks.sql` — tip-bazlı proje yapısı (`t_projects`), TASKS tipinde `t_tasks` (proje-scoped) + Kanban board UI (Epic 4.1). `pm:*` permission namespace. Standalone Tasks modülü bu sayının yerini aldı; Notes/Warehouse/Logistics (3.2-3.4) planlandığı gibi.
+> Görev yönetimi standalone yerine **project-scoped** geldi (2026-08): eski `tenant/V4__module_projects.sql` + `V5__module_tasks.sql` (K-36 squash'ı ile `V1.3__pm_projects_tasks.sql`'e indirildi) — tip-bazlı proje yapısı (`t_projects`), TASKS tipinde `t_tasks` (proje-scoped) + Kanban board UI (Epic 4.1). `pm:*` permission namespace. Standalone Tasks modülü bu sayının yerini aldı; Notes/Warehouse/Logistics (3.2-3.4) planlandığı gibi.
 
 ### Epic 3.2 — Built-in "Notes" Modülü
-`tenant/V4__module_notes.sql` (`t_notes`, `t_note_categories`). Entity + service + controller (`/api/v1/notes`). Arama + kategori filtreleme.
+`tenant` migration (sonraki versiyon): `t_notes`, `t_note_categories`. Entity + service + controller (`/api/v1/notes`). Arama + kategori filtreleme.
 
 ### Epic 3.3 — Built-in "Warehouse" Modülü
-`tenant/V5__module_warehouse.sql` (`t_products`, `t_warehouses`, `t_stock_items`, `t_stock_movements`). Entity'ler (Product/Warehouse/StockItem/StockMovement) + service + controller. Stok hareketleri (IN/OUT/TRANSFER) + minimum stok uyarısı.
+`tenant` migration (sonraki versiyon): `t_products`, `t_warehouses`, `t_stock_items`, `t_stock_movements`. Entity'ler (Product/Warehouse/StockItem/StockMovement) + service + controller. Stok hareketleri (IN/OUT/TRANSFER) + minimum stok uyarısı.
 
 ### Epic 3.4 — Built-in "Logistics" Modülü
-`tenant/V6__module_logistics.sql` (`t_shipments`, `t_vehicles`, `t_drivers`, `t_routes`). Entity'ler (Shipment/Vehicle/Driver/Route) + service + controller. Sevkiyat durum makinesi (CREATED -> IN_TRANSIT -> DELIVERED).
+`tenant` migration (sonraki versiyon): `t_shipments`, `t_vehicles`, `t_drivers`, `t_routes`. Entity'ler (Shipment/Vehicle/Driver/Route) + service + controller. Sevkiyat durum makinesi (CREATED -> IN_TRANSIT -> DELIVERED).
 
 ### Epic 3.X — Testcontainer + Rate Limit — DONE
 - [x] Testcontainers: iki gerçek tenant şeması + `SET search_path` izolasyonu + RISK-26 mid-tx switch doğrulaması (`CrossTenantIsolationTest`, `-Dforgesys.pg.it=true` gate'i)

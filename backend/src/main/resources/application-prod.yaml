@@ -17,7 +17,6 @@ spring:
     enabled: true
     schemas: public
     locations: classpath:db/migration/public
-    baseline-on-migrate: true
   # Externalized config overlay is wired up via SPRING_CONFIG_ADDITIONAL_LOCATION
   # env var (see docker-compose-prod.yml + .env.example) — not via spring.config.import
   # here, to avoid duplicate resolution.

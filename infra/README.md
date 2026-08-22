@@ -51,20 +51,16 @@ infra/data/postgres/
 
 See `init-sql/README.md` for the rationale.
 
-## Bind-mount UID matrix (PostgreSQL)
+## Bind-mount UID ownership (`data-init`)
 
-Container UID'leri (`postgres:16-alpine` → 70) host dizinlerine yazabilmeli.
-Gerekli işlem platform'a göre değişir:
+`docker-compose*.yml` declares a one-shot **`data-init`** service (alpine) that
+runs `chown` (postgres UID 70, redis UID 999) on the bind-mount dirs before
+`db`/`redis` start (`depends_on: service_completed_successfully`). This makes
+ownership automatic on every platform — including Linux-native Docker without
+user-namespace mapping — and makes a wiped `infra/data` fully recoverable
+(`docker compose up -d --force-recreate db`).
 
-| Platform                     | UID işlemi gerekiyor mu? | Komut                                                                          |
-|------------------------------|--------------------------|--------------------------------------------------------------------------------|
-| Docker Desktop (macOS)       | **Hayır**                | VirtioFS user-namespace mapping otomatik                                       |
-| Docker Desktop (Windows WSL2)| **Hayır**                | WSL2 otomatik map eder                                                         |
-| **Linux native Docker**      | **Evet — zorunlu**       | `sudo chown -R 70:70 infra/data/postgres && sudo chmod 700 infra/data/postgres` |
-
-Linux native Docker'da (`apt`/`dnf` ile kurulan Docker Engine) user-namespace
-mapping yoktur; host dizinleri container UID'lerine sahip olmazsa postgres
-`initdb` crash eder. Docker Desktop ise container UID'lerini host kullanıcısına
-map'leyerek bunu çözer.
-
-Redis bu tabloda yer almaz çünkü artık named volume kullanıyor (yukarıdaki nota bakın).
+| Platform                      | Manuel `chown` gerekli mi? |
+|-------------------------------|----------------------------|
+| Docker Desktop (macOS/WSL2)   | Hayır (VirtioFS mapping + `data-init`) |
+| **Linux native Docker**       | Hayır (`data-init` otomatik) |

@@ -124,11 +124,9 @@ docker --version && docker compose version
 cp .env.example .env
 #   ...edit POSTGRES_PASSWORD, SPRING_DATASOURCE_PASSWORD, vb.
 
-# 2. Bind-mount volume izinleri — postgres (UID 70) ve redis (UID 999)
-#    host dizinlerine yazabilmeli. Linux native Docker bunu otomatik
-#    yapmaz (Docker Desktop gibi user-namespace mapping yoktur).
-sudo chown -R 70:70  infra/data/postgres && sudo chmod 700 infra/data/postgres
-sudo chown -R 999:999 infra/data/redis
+# 2. Bind-mount izinleri otomatik: data-init one-shot servisi (compose içinde)
+#    postgres (UID 70) ve redis (UID 999) sahipliğini her up'ta düzeltir —
+#    manuel chown gerekmez (Linux native Docker dahil).
 
 # 3. (Opsiyonel) test gate — Dockerfile kendi build'ini yapar, bu sadece testleri doğrular
 mvn clean install
@@ -324,17 +322,13 @@ Kurallar: Subject <72 karakter, küçük harfle başlasın, nokta ile bitmesin, 
 - **`mvnw: Permission denied`** -> `chmod +x mvnw`
 - **Port 8080 / 3000 / 5432 kullanımda** -> `lsof -i :8080` ile bul, durdur.
 - **Docker container DB'ye bağlanamıyor** -> önce `docker compose up db` ile DB'yi ayrı kaldır, `pg_isready` kontrol et.
-- **PostgreSQL container "permission denied for data directory" (macOS)** -> bind-mount `infra/data/postgres/`'un sahibi `postgres` (UID 70) olmalı:
+- **PostgreSQL/Redis data dizini izin sorunu (Linux native Docker)** -> manuel `chown` gerekmez; `data-init` one-shot servisi her `up`'ta sahipliği düzeltir (postgres UID 70, redis UID 999). Sorun sürüyorsa `docker compose up -d --force-recreate` ile data-init'i yeniden koştur.
+- **DB verisini sıfırlamak / `infra/data` silindikten sonra toparlanmak** -> `data-init` servisi sahipliği otomatik düzeltir; tek komut yeter (silme container'lar açıkken ya da kapalıyken yapılmış olmasına bakmaz — eski veri gider, şema Flyway ile baştan kurulur):
   ```bash
-  sudo chown -R 70:70 infra/data/postgres && chmod 700 infra/data/postgres
-  # Redis için (UID 999):
-  sudo chown -R 999:999 infra/data/redis
+  docker compose up -d --force-recreate db
   ```
-- **DB verisini sıfırlamak** -> named volume yok artık; doğrudan host dizinini temizle:
-  ```bash
-  docker compose down
-  rm -rf infra/data/postgres/* infra/data/redis/*
-  ```
+- **DB "healthy" ama uygulama bağlantı hatası veriyor** -> eski `pg_isready` healthcheck'i authentication'a kadar gitmediği için bozuk data dizinini "healthy" gösterebiliyordu; artık gerçek `SELECT 1` sorgusu kullanılıyor. "unhealthy" görüyorsan yukarıdaki reset komutunu çalıştır.
+- **Flyway validation hatası (checksum mismatch) startup'ta** -> migration geçmişi pre-1.0.0 squash'ı ile alan-bazlı `V1.x` baseline ailesine indirildi ([K-36](docs/DECISIONS.md#k-36), 2026-08-22). Eski geçmişle yaratılmış local DB'ler sıfırlanmalı: `docker compose down && rm -rf infra/data/postgres && docker compose up -d` — taze DB'de baseline ailesi baştan koşar.
 - **Backend ayağa kalkıyor ama frontend static servis etmiyor** -> `./mvnw clean install` (tüm modülleri yeniden build).
 - **Frontend "Backend DOWN" gösteriyor** -> Backend çalışmıyor; başlat veya mock veriyle devam et (normal davranış).
 - **Vite/Rolldown/Lightning CSS native binding bulunamıyor** -> Node 20.20.2'yi (`nvm use`) kullanıp `node_modules` dizinini temizleyerek `npm install --include=optional` çalıştır.

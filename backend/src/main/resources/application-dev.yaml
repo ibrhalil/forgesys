@@ -17,7 +17,6 @@ spring:
     enabled: true
     schemas: public
     locations: classpath:db/migration/public
-    baseline-on-migrate: true
   data:
     redis:
       repositories:

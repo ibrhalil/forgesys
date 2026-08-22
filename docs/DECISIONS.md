@@ -246,6 +246,17 @@ Her kayıt:
 - **Durum:** UYGULANDI (2026-07-31). 302 test yeşil (H2). Önceki planlanmış name-based Admin detection'ı supersede eder (flag replaces name). RISK-18 ile ilişkili: `all_permissions` Admin'e tüm IAM + platform yetkilerini implicit verir (pratikte TenantFilter public şema erişimini yönetir).
 - **Etki:** Admin (ve herhangi bir "ALL" rolü / onu taşıyan group üyesi) artık runtime permission'lardan haberdar; rol permission atama UI'ında "ALL" toggle; permission silme artık Admin yüzünden bloklanmaz.
 
+### K-36
+**Pre-1.0.0 migration squash — migration geçmişini `V1`'e indir (2026-08-22)**
+- **Bağlam:** Proje henüz hiçbir prod ortama deploy edilmedi (tek geliştirici, local DB'ler). Buna rağmen migration geçmişi `public/V1..V3` + `tenant/V1..V8` olarak birikmişti; developer'lar "normal olmayan" migration akışından (squash edilemeyecek kadar büyümeden) şikayetçiydi. Versiyon 1.0.0'a ulaşılmadı — checksum/geçmiş uyumu gözetilmesi gereken deploy edilmiş hiçbir DB yok.
+- **Karar:** Pre-1.0.0 penceresinden yararlanılarak her iki location'daki tüm migration'lar **`V1.x` baseline ailesine** indirildi (final durum birleştirildi; dotted versiyonlar Flyway'de sırayla koşar, her biri ayrı checksum satırı üretir — dosya bazlı kategorizasyon, tek dosya şişmesi yok):
+  - `public/V1__tenant_registry.sql` (t_companies + t_organization_domains) + `public/V1.1__signup_verification_tokens.sql` (t_tenant_verification_tokens)
+  - `tenant/V1__iam_users.sql` (t_users/accounts/profiles) + `V1.1__iam_rbac.sql` (roles/permissions/groups + join'ler + t_role_parents + all_permissions) + `V1.2__audit.sql` (t_audit_logs + t_login_history + append-only trigger'lar) + `V1.3__pm_projects_tasks.sql` (t_projects + t_tasks)
+
+  Squash sırasında iki ertelenmiş Faz F kalemi bedava kapatıldı: (1) ölü `t_refresh_tokens` tablosu + `RefreshToken` entity'si + `RefreshTokenRepository` silindi (refresh zaten Redis-first, K-34); (2) `version BIGINT NOT NULL DEFAULT 0` tüm soft-delete tablolarına gömüldü. Partial unique index'ler doğrudan yazıldı (V2'nin "constraint yarat → DROP → partial index" dansı kalktı). `baselineOnMigrate` her yerden kaldırıldı (`TenantMigrationSupport`, dev/prod yaml, `CrossTenantIsolationTest`) — fresh-DB-only dünyada gereksiz; non-empty şemada baseline V1'i sessizce atlayıp şemayı boş bırakma riski taşırdı.
+- **Durum:** UYGULANDI (2026-08-22). Local DB'ler sıfırlandı (`infra/data/postgres` silindi + recreate) — checksum değiştiğinden sıfırlamayan herkes Flyway validation hatası alır (README troubleshooting).
+- **Etki:** Yeni migration'lar her iki location'da `V2`'den devam eder. `TenantMigrationRunner` (RISK-16) değişmedi — yeni tenant migration'ları mevcut tenant'lara yine startup'ta uygular. Tarihi kayıtlardaki `V2..V8` ref'leri tarihî gerçeklik olarak duruyor; güncel şema kaynağı `V1.x` baseline ailesi + üstüne gelen yeni versiyonlar.
+
 ---
 
 ## Risk Kayıtları (RISK-XX)
