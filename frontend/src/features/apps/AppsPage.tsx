@@ -15,7 +15,7 @@ import { PERMISSIONS } from '../../lib/permissions';
 import { useAuthStore } from '../../store/authStore';
 import { notify } from '../../lib/notify';
 import type { App } from './types';
-import { useApps, useDeleteApp } from './hooks';
+import { useApps, useDeleteApp, usePlanLimits } from './hooks';
 import { AppFormModal } from './components/AppFormModal';
 
 export function AppsPage() {
@@ -23,6 +23,9 @@ export function AppsPage() {
   const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, q } =
     useListPageState({ defaultSort: { field: 'name', dir: 'asc' } });
   const { data, isLoading, isFetching } = useApps({ page, size: pageSize, sorts: [sort], q: q || undefined });
+  // Usage indicator: unfiltered total via a one-row probe (the list above is q-filtered).
+  const { data: usage } = useApps({ page: 0, size: 1 });
+  const { data: planLimits } = usePlanLimits();
   const delApp = useDeleteApp();
   const canWrite = useAuthStore((s) => s.hasAuthority(PERMISSIONS.APP_WRITE));
   const canDelete = useAuthStore((s) => s.hasAuthority(PERMISSIONS.APP_DELETE));
@@ -37,7 +40,7 @@ export function AppsPage() {
       sortKey: 'name',
       render: (a) => (
         <Link to={`/apps/${a.id}`} className="font-medium text-main transition-colors hover:text-accent">
-          {a.name}
+          {a.icon ? `${a.icon} ${a.name}` : a.name}
         </Link>
       ),
     },
@@ -50,7 +53,35 @@ export function AppsPage() {
       breadcrumb={[{ label: t('nav.apps') }]}
       title={t('apps.title')}
       description={t('apps.desc')}
-      actions={canWrite ? <Button variant="primary" onClick={() => setCreating(true)}>{t('apps.new')}</Button> : undefined}
+      actions={
+        canWrite || (planLimits && usage) ? (
+          <div className="flex items-center gap-4">
+            {planLimits && usage && (
+              <div
+                className="flex flex-col gap-1"
+                title={t('apps.planUsage', { used: usage.totalElements, max: planLimits.maxApps })}
+              >
+                <span className="text-xs font-medium text-muted">
+                  {planLimits.maxApps >= 0
+                    ? t('apps.planUsage', { used: usage.totalElements, max: planLimits.maxApps })
+                    : t('apps.planUsageUnlimited', { used: usage.totalElements })}
+                </span>
+                {planLimits.maxApps >= 0 && (
+                  <div className="h-1.5 w-28 overflow-hidden rounded-full bg-main/10" aria-hidden>
+                    <div
+                      className="h-full rounded-full bg-accent"
+                      style={{ width: `${Math.min(100, (usage.totalElements / planLimits.maxApps) * 100)}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+            {canWrite && (
+              <Button variant="primary" onClick={() => setCreating(true)}>{t('apps.new')}</Button>
+            )}
+          </div>
+        ) : undefined
+      }
     >
       <DataTable<App>
         columns={columns}

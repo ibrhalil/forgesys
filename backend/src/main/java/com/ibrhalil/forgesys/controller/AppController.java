@@ -1,10 +1,13 @@
 package com.ibrhalil.forgesys.controller;
 
 import com.ibrhalil.forgesys.dto.AppDetailResponse;
+import com.ibrhalil.forgesys.dto.AppPlanLimitsResponse;
 import com.ibrhalil.forgesys.dto.AppRequest;
 import com.ibrhalil.forgesys.dto.AppResponse;
 import com.ibrhalil.forgesys.dto.PageResponse;
+import com.ibrhalil.forgesys.config.PlanDefinition;
 import com.ibrhalil.forgesys.service.AppBuilderService;
+import com.ibrhalil.forgesys.service.PlanLimitService;
 import com.ibrhalil.forgesys.web.SortGuard;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +39,20 @@ import java.util.UUID;
 public class AppController {
 
     private final AppBuilderService appBuilderService;
+    private final PlanLimitService planLimitService;
+
+    /**
+     * Plan limits for the App Builder usage indicators (K-42). Declared BEFORE the
+     * {@code /{id}} mapping for readability — Spring MVC gives literal segments
+     * precedence over path variables regardless of order.
+     */
+    @GetMapping("/plan-limits")
+    @PreAuthorize("hasAuthority('apps:app:read')")
+    public ResponseEntity<AppPlanLimitsResponse> planLimits() {
+        PlanDefinition plan = planLimitService.activePlan();
+        return ResponseEntity.ok(new AppPlanLimitsResponse(
+                plan.key(), plan.displayName(), plan.maxApps(), plan.maxRecordsPerApp()));
+    }
 
     @GetMapping
     @PreAuthorize("hasAuthority('apps:app:read')")

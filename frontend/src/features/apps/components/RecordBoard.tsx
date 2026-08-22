@@ -1,4 +1,4 @@
-import { LuTrash2 } from 'react-icons/lu';
+import { LuPencil, LuTrash2 } from 'react-icons/lu';
 import { Badge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
 import { EmptyState } from '../../../components/ui/EmptyState';
@@ -26,6 +26,7 @@ export function RecordBoard({
   isLoading,
   resolve,
   onRequestDelete,
+  onRequestEdit,
 }: {
   app: AppDetail;
   view: AppView;
@@ -33,6 +34,7 @@ export function RecordBoard({
   isLoading: boolean;
   resolve: ValueResolver;
   onRequestDelete: (record: AppRecord) => void;
+  onRequestEdit: (record: AppRecord) => void;
 }) {
   const { t } = useT();
   const patch = usePatchRecord(app.id);
@@ -79,6 +81,7 @@ export function RecordBoard({
           resolve={resolve}
           onMove={move}
           onRequestDelete={onRequestDelete}
+          onRequestEdit={onRequestEdit}
         />
       ))}
       <BoardColumn
@@ -96,6 +99,7 @@ export function RecordBoard({
         resolve={resolve}
         onMove={move}
         onRequestDelete={onRequestDelete}
+        onRequestEdit={onRequestEdit}
       />
     </div>
   );
@@ -116,6 +120,7 @@ function BoardColumn({
   resolve,
   onMove,
   onRequestDelete,
+  onRequestEdit,
 }: {
   label: string;
   tone: (typeof COLUMN_TONES)[number];
@@ -131,6 +136,7 @@ function BoardColumn({
   resolve: ValueResolver;
   onMove: (record: AppRecord, value: string | null) => void;
   onRequestDelete: (record: AppRecord) => void;
+  onRequestEdit: (record: AppRecord) => void;
 }) {
   const { t } = useT();
   return (
@@ -182,16 +188,32 @@ function BoardColumn({
                       />
                     </div>
                   )}
-                  {canDelete && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="ml-auto text-danger hover:bg-danger/10 hover:text-danger"
-                      aria-label={t('common.delete')}
-                      onClick={() => onRequestDelete(record)}
-                    >
-                      <LuTrash2 aria-hidden className="h-4 w-4" />
-                    </Button>
+                  {(canWrite || canDelete) && (
+                    <div className="ml-auto flex items-center gap-1">
+                      {canWrite && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={t('common.edit')}
+                          title={t('common.edit')}
+                          onClick={() => onRequestEdit(record)}
+                        >
+                          <LuPencil aria-hidden className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {canDelete && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-danger hover:bg-danger/10 hover:text-danger"
+                          aria-label={t('common.delete')}
+                          title={t('common.delete')}
+                          onClick={() => onRequestDelete(record)}
+                        >
+                          <LuTrash2 aria-hidden className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
                   )}
                 </div>
               </article>

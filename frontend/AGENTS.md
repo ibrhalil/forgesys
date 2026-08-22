@@ -82,6 +82,12 @@ src/
                            #   flat UserDirectoryView projection: counts, no role/group arrays)
     roles/  groups/  permissions/
     projects/              #   Projects pages + TaskBoard (components/), pm module
+    modules/               #   Module catalog + activation page (K-16, iam:module:read)
+    apps/                  #   App Builder UI (Epic 4.2 / K-42): app/property/view/record CRUD,
+                           #   RecordFormModal (create+edit), TABLE/BOARD/CALENDAR/LIST/GALLERY
+                           #   renderers, row-based filter/sort DSL editor (client-applied),
+                           #   User/Relation pickers + id→label resolvers, plan usage indicators
+                           #   (GET /apps/plan-limits — numbers from the backend registry)
     audit/                 #   AuditLogs + LoginHistory (iam:audit:read)
     sessions/              #   self/admin/all sessions pages + SessionList component (K-28)
   lib/                     # api (fetch + 401 refresh), i18n (t/useT + messages), notify, format, select, cn,

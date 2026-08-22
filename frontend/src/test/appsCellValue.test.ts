@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildRecordPatch,
   cellDisplay,
   cellEditValue,
   firstTextProperty,
@@ -130,5 +131,54 @@ describe('recordTitle', () => {
     expect(recordTitle(record({ t: null }), titleProp)).toBe('#r1');
     expect(recordTitle(record({}), undefined)).toBe('#r1');
     expect(recordTitle({ ...record({}), id: '12345678-90ab-cdef-1234-567890abcdef' }, undefined)).toBe('#12345678…');
+  });
+});
+
+describe('buildRecordPatch (PATCH partial-merge diff)', () => {
+  const props = [
+    prop({ id: 'p-text', type: 'TEXT' }),
+    prop({ id: 'p-num', type: 'NUMBER' }),
+    prop({ id: 'p-user', type: 'USER' }),
+  ];
+  const stored: AppRecord = record({ 'p-text': 'Old', 'p-num': 5, 'p-user': 'u-1' });
+
+  it('sends only changed keys; untouched and unchanged keys stay absent', () => {
+    const { invalid, values } = buildRecordPatch(props, stored, {
+      'p-text': 'New', // changed
+      'p-num': '5', // unchanged (parses to the stored number)
+      'p-user': 'u-1', // unchanged id
+    });
+    expect(invalid).toEqual([]);
+    expect(values).toEqual({ 'p-text': 'New' });
+  });
+
+  it('clears emptied cells with null; already-empty cells are no-ops', () => {
+    const { values } = buildRecordPatch(props, stored, {
+      'p-text': 'Old',
+      'p-num': '', // emptied → null clear
+      'p-user': 'u-1',
+    });
+    expect(values).toEqual({ 'p-num': null });
+    // Same draft against a record whose cell is already empty → nothing to send.
+    const empty = buildRecordPatch(props, record({}), { 'p-num': '' });
+    expect(empty.values).toEqual({});
+  });
+
+  it('passes USER/RELATION ids through unparsed and flags invalid scalars', () => {
+    const { invalid, values } = buildRecordPatch(props, stored, {
+      'p-text': 'Old', // unchanged
+      'p-user': 'u-2', // picker id — accepted as-is
+      'p-num': 'abc', // NaN number
+    });
+    expect(invalid).toEqual(['p-num']);
+    expect(values).toEqual({ 'p-user': 'u-2' });
+  });
+
+  it('create mode (empty record) treats every filled field as a change', () => {
+    const { values } = buildRecordPatch(props, record({}), {
+      'p-text': 'First',
+      'p-num': '3.14',
+    });
+    expect(values).toEqual({ 'p-text': 'First', 'p-num': 3.14 });
   });
 });

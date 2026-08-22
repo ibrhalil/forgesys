@@ -123,6 +123,24 @@ class AppControllerTest extends AbstractRbacWebTest {
     }
 
     @Test
+    void planLimitsReturnsActivePlanLimits() throws Exception {
+        // Also proves the literal segment wins over the /{id} UUID mapping.
+        perform(get("/api/v1/apps/plan-limits"), "apps:app:read")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.planKey").value("free"))
+                .andExpect(jsonPath("$.planName").value("Free"))
+                .andExpect(jsonPath("$.maxApps").value(3))
+                .andExpect(jsonPath("$.maxRecordsPerApp").value(1000));
+    }
+
+    @Test
+    void planLimitsForbiddenWithoutReadPermission() throws Exception {
+        perform(get("/api/v1/apps/plan-limits"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("auth_access_denied"));
+    }
+
+    @Test
     void createReturns201() throws Exception {
         perform(post("/api/v1/apps").contentType(JSON)
                         .content("""

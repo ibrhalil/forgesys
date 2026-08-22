@@ -24,8 +24,8 @@
 - **Audit & log:** 3 katman (audit + login history + request/traceId); append-only DB trigger; yetki değişim delta kaydı ("kim kime ne verdi/aldı"); arama
 - **Projects & Tasks modülü:** tip-bazlı proje yapısı + TASKS tipinde görev yönetimi (Kanban board UI dahil)
 - **Modül & plan sistemi (K-16):** FREE/PRO/ENTERPRISE planları; plan bazlı modül aktivasyonu (plan gate → modül Flyway → permission seed); modül/plan registry'leri kodda
-- **Custom App Builder backend'i (K-15):** tenant'ların kendi mini-uygulamalarını yaratması — JSONB EAV modeli (app/property/view/record CRUD, native PG JSONB search, plan limitleri). UI Faz 4.2'de
-- **Admin console (frontend):** login/register/tenant-verify; users/roles/groups/permissions/sessions/audit/login-history/projects/modules sayfaları; permission-gated lazy navigation
+- **Custom App Builder (K-15 + K-42):** tenant'ların kendi mini-uygulamalarını yaratması — JSONB EAV modeli (app/property/view/record CRUD, native PG JSONB search, plan limitleri) + tam UI (property/view/record editörleri, TABLE/BOARD/CALENDAR/LIST/GALLERY görünüm renderer'ları, satır bazlı filtre/sort DSL UI'ı, User/Relation picker'ları, plan kullanım göstergeleri)
+- **Admin console (frontend):** login/register/tenant-verify; users/roles/groups/permissions/sessions/audit/login-history/projects/modules/apps (App Builder) sayfaları; permission-gated lazy navigation
 - **Self-service:** `/users/me/**` (profil + şifre değiştirme) — her authenticated user kendi hesabını yönetir
 - **Platform admin:** `/platform/companies` cross-tenant yönetim (K-25) + rezerve `system` tenant bootstrap (K-24)
 - **İki fazlı tenant signup (K-21):** `POST /api/v1/auth/company/register` → 202 + PROVISIONING + doğrulama maili → `POST /verify` → şema + Flyway + admin user → ACTIVE
@@ -35,7 +35,6 @@
 
 **Planlanan (kararlar kilitlendi — yol haritası [`docs/ROADMAP.md`](docs/ROADMAP.md)):**
 - **Built-in modüller:** Notes, Warehouse, Logistics (plan bazlı aktivasyon; Tasks pm modülü olarak geldi)
-- **App Builder UI** (Faz 4.2 — backend K-15 ile tamamlandı)
 - Mail gönderimi (SMTP — doğrulama linkleri şu an log'a düşüyor)
 - Billing (Stripe/iyzico), Nginx gateway, CI/CD, LDAP/SSO
 

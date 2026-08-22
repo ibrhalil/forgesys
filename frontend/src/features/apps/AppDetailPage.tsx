@@ -41,7 +41,7 @@ export function AppDetailPage() {
   return (
     <Page
       breadcrumb={[{ label: t('nav.apps'), to: '/apps' }, { label: app.name }]}
-      title={app.name}
+      title={app.icon ? `${app.icon} ${app.name}` : app.name}
       description={app.description ?? undefined}
       actions={
         <>
