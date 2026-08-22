@@ -1,6 +1,8 @@
 # Karar Kayıtları (Decision Log)
 
 > Bu dosya ForgeSys'un mimari/teknik kararlarının (K-XX), risk kayıtlarının (RISK-XX) ve teknik borçlarının (DEBT-XX) tek merkezi. ID'ler karar verildiği sırayla artar, değişmez. Kararlar ticket numarasına değil, bağlam+gerekçe+etki'ye bağlıdır.
+>
+> **Kayıt boşluğu notu (2026-08-22):** En eski kayıtlar (K-1..K-14, RISK-1/2/4..9/11/12, DEBT-1..6/8/9) bu dosyaya hiç back-fill edilmedi — karar defteri, ilk yaygın review'dan (2026-07) itibaren tutuluyor. Bu aralıklardaki ID'ler yeni kayıtlar için KULLANILMAZ (çakışma riski); yeni kayıtlar mevcut en yüksek ID'den devam eder.
 
 ## Format
 
@@ -102,7 +104,7 @@ Her kayıt:
 **Admin/User/Log UI Faz 3 öncesi**
 - **Bağlam:** K-18 sonrası backend Faz 2 tamamlanınca frontend geliyor. Built-in modül UI'ları (Tasks/Notes) beklenebilir ama admin/user yönetimi kritik.
 - **Karar:** Epic 4.0.B (Admin/User/Log Management UI) Faz 3 öncesi gelir. Faz 4 core stack (bağımlılıklar, Tailwind, auth UI, router) burada kurulur. Tenant-scoped: her şirket kendi verisini görür.
-- **Durum:** Planlandı (Faz 4.0.B, backend Faz 2 sonrası).
+- **Durum:** UYGULANDI (2026-08, Epic 4.0.B — users/roles/groups/permissions/sessions/audit/login-history/projects sayfaları + permission-gated lazy navigation; kalan: request-log sayfası, K-27 kapsamında). Faz 4 core stack de bu epic içinde kuruldu.
 - **Etki:** Built-in modül UI'ları hâlâ Epic 4.1'de.
 
 ### K-21
@@ -210,18 +212,18 @@ Her kayıt:
   - Storage artışı: high-risk body loglama + pending_actions → periyodik arşiv/temizlik job'u (Faz 5).
 
 ### K-28
-**Session Management & Remote Revoke — PLANLANDI**
+**Session Management & Remote Revoke — UYGULANDI**
 - **Bağlam:** Kullanıcıların aktif oturumlarını (hangi cihaz/IP/ne zaman login) görmesi, admin/yetkilinin şüpheli veya unutulmuş bir oturumu uzaktan kapatması gerekiyor. Mevcut mimaride JWT stateless (token client'ta), DB'de "aktif oturum" kaydı yok → aktif session listesi ve remote revoke mimariyle çelişiyor.
 - **Karar:** İki katmanlı tasarım:
   1. **Active session management (runtime, stateful)** — Redis (Epic 2.6 bağımlılığı). Her refresh token = bir session kaydı (key: `session:{userId}:{sessionId}`, value: `{refreshTokenHash, device, ip, user_agent, loginAt, lastSeenAt}`, TTL = refresh token ömrü). `/api/v1/sessions` listesi bu cache'den okur. Revoke: Redis'ten key silinir + refresh token blacklist'e alınır (`TokenBlacklistService`). Stateless JWT access token revoke için `tokenInvalidBefore` (kullanıcı-bazlı "sonra geçerli token'lar invalid") veya granular access-token blacklist (Faz 2.5/2.6).
   2. **Session audit log (kalıcı, geçmiş analiz)** — yeni `t_sessions_log` tablosu (tenant şemasında). Event bazlı: `LOGIN` / `LOGOUT` / `SESSION_REVOKED` / `EXPIRED`. Kalıcı, geçmiş analizi/forensics. Active session listesi buradan değil Redis'ten.
   - **Admin/yetkili remote revoke:** `/api/v1/users/{id}/sessions` (list) + `DELETE /api/v1/users/{id}/sessions/{sessionId}` (revoke). İzin: `iam:user:write`. Self-service: `/api/v1/users/me/sessions` (kullanıcı kendi oturumlarını görür/kapatır).
-- **Durum:** PLANLANDI. Epic 2.5 (refresh token) + Epic 2.6 (Redis) bağımlılığı → sonrasında uygulanır.
+- **Durum:** UYGULANDI (2026-07-30, K-34 altyapısı üstünde). Aktif session listesi Redis store'dan (`listSessions`), self + admin remote revoke endpoint'leri + tenant-genel `/api/v1/sessions` (AllSessions) + max concurrent session limiti (`forgesys.security.max-sessions`, `SessionRevocationService.enforceSessionLimit`). **`t_sessions_log` İPTAL edildi** — `t_login_history`/`t_audit_logs` ile örtüşme (K-19 katmanları zaten event kaydı tutuyor); tablo hiç yaratılmadı.
 - **Etki:**
   - Refresh token rotation (Epic 2.5) ile entegre — her rotate yeni sessionId üretir.
-  - Redis key TTL → otomatik expire; ama `t_sessions_log`'a `EXPIRED` event yazımı scheduled job veya lazy (sonraki erişimde).
+  - ~~Redis key TTL → otomatik expire; ama `t_sessions_log`'a `EXPIRED` event yazımı~~ (t_sessions_log iptal — ihtiyaç olursa K-19 login-history kapsamında değerlendirilir).
   - `UserAccount.tokenInvalidBefore` zaten var — full revoke (tüm session'lar) için kullanılabilir; granular (tek session) için Redis blacklist.
-  - "Device" bilgisi `User-Agent` header'ından parse edilir (basit veya bir library ile — Faz 2.10 detaylandırır).
+  - "Device" bilgisi `User-Agent` header'ından türetilir.
 
 ### K-29
 **Security Notification Subsystem — PLANLANDI**
@@ -270,6 +272,34 @@ Her kayıt:
   Squash sırasında iki ertelenmiş Faz F kalemi bedava kapatıldı: (1) ölü `t_refresh_tokens` tablosu + `RefreshToken` entity'si + `RefreshTokenRepository` silindi (refresh zaten Redis-first, K-34); (2) `version BIGINT NOT NULL DEFAULT 0` tüm soft-delete tablolarına gömüldü. Partial unique index'ler doğrudan yazıldı (V2'nin "constraint yarat → DROP → partial index" dansı kalktı). `baselineOnMigrate` her yerden kaldırıldı (`TenantMigrationSupport`, dev/prod yaml, `CrossTenantIsolationTest`) — fresh-DB-only dünyada gereksiz; non-empty şemada baseline V1'i sessizce atlayıp şemayı boş bırakma riski taşırdı.
 - **Durum:** UYGULANDI (2026-08-22). Local DB'ler sıfırlandı (`infra/data/postgres` silindi + recreate) — checksum değiştiğinden sıfırlamayan herkes Flyway validation hatası alır (README troubleshooting).
 - **Etki:** Yeni migration'lar her iki location'da `V2`'den devam eder. `TenantMigrationRunner` (RISK-16) değişmedi — yeni tenant migration'ları mevcut tenant'lara yine startup'ta uygular. Tarihi kayıtlardaki `V2..V8` ref'leri tarihî gerçeklik olarak duruyor; güncel şema kaynağı `V1.x` baseline ailesi + üstüne gelen yeni versiyonlar.
+
+### K-37
+**Pre-1.0 API/wire tutarlılık geçişi — tek seferlik (2026-08-22 kararı)**
+- **Bağlam:** 85 endpoint boyunca biriken konvansiyon sapmaları: sayfalama bölünmüş (`PageResponse` kullananlar vs `PermissionController`/`TaskController`/app property-view/session listelerinin unpaged `List<T>` dönüşleri); çift `/me` (`GET /auth/me` claims-only vs `GET /users/me` DB); `DELETE /users/{id}/lock` → 200+body (diğer DELETE'ler 204); user-session namespace 4 controller'a bölünmüş (`SessionController` `/api/v1/users/**` path'leri taşıyor, ad≠path; ayrıca `AllSessionsController`); `AuditController` class-level `@RequestMapping`'siz tek istisna; `AuthController.registerCompany` `Map<String,Object>` döndürüyor (dokümante tek istisna). Envanter: [`ANALYSIS_ADDENDUM.md`](ANALYSIS_ADDENDUM.md) §2.
+- **Karar:** K-36 squash'ı ile aynı pre-1.0 penceresi (deploy edilmiş client yok) kullanılarak **tek seferlik tutarlılık geçişi** yapılır — deprecasyon süreci gerekmez,backward-compat yükü alınmaz: (1) standart `PageResponse` (sınırlı pick-list'ler için belgeli istisna kabul — endpoint başına netleştirilir); (2) tek `/me` (`/users/me` canonical, `/auth/me` kalkar); (3) DELETE→204; (4) session endpoint'leri tek controller'da toplanır; (5) class-level mapping konvansiyonu; (6) `Map` dönüşü → response record (DTO mapping manuel `toResponse` convention'ı ile — MapStruct Roadmap'te zaten iptal edilmişti, bu kararla kökten kapanır). **Springdoc-openapi bu geçişten SONRA eklenir** (şema stabilken; dev'de açık, prod'da kapalı) — dependency onayı ask-first kuralıyla implementation anında.
+- **Durum:** PLANLANDI (Session 1 — backend temizlik; detaylı envanter ANALYSIS_ADDENDUM §2).
+- **Etki:** Wire değişiklikleri frontend'i etkiler (`/auth/me` kullanan yerler `/users/me`'ye, unpaged listeler PageResponse normalize'a geçer — `normalizePage` helper'ı zaten legacy fallback destekliyor). Geçiş sonrası `backend/AGENTS.md` endpoint kataloğu ve (springdoc geldiğinde) OpenAPI şeması tek doğruluk kaynağı olur. Bu karar standartlaştırıldı: "API konvansiyon tekrar tartışılmaz" (FULL_ANALYSIS §11 / madde 22).
+
+### K-38
+**Ölü/speculative kod kaldırma politikası (2026-08-22 kararı)**
+- **Bağlam:** Planlama session'ı keşfi (grep-kanıtlı) sıfır-referans kümeler tespit etti: `OrganizationDomain` entity + repo + `t_organization_domains` tablosu (backend main'de hiç referans yok — Epic 2.9 self-register ertelenmiş); `OwnershipGuard` + `Ownable` (main'de kullanım yok, implement eden entity yok — Notes/Warehouse/Logistics için template); `Company.dbRole` (hiç populate edilmiyor — gerçekleşmemiş DB-role-per-tenant izolasyonunun vestijı); `User` entity'de 4 kullanımsız token kolonu (`emailVerificationToken`/`passwordResetToken` + expiry'ler — akış ertelenmiş); frontend'de backend'i olmayan `resendVerification` hook'u. Envanter + geri-getirme koşulları: [`ANALYSIS_ADDENDUM.md`](ANALYSIS_ADDENDUM.md) §1.
+- **Karar:** **"İleride lazım olur" düşüncesiyle kod taşınmaz; planlar DECISIONS.md'de yaşar.** Listelenenlerin tamamı pre-1.0 penceresinde (K-36 varsayımı: deploy edilmiş DB yok) kaldırılır; hangi akış gelirse yeniden eklenir (git history referans). `t_sessions_log` planı da resmen **İPTAL** (K-28'de not edildi). Enum değeri düzeyindeki speculative kalemler (`ProjectType.NOTES`, `PropertyType.FORMULA`, tek-değerli `ModuleStatus`/`SubscriptionStatus`) **kalır** — kod/kolon taşımazlar ve sahiplikleri roadmap'te net.
+- **Durum:** PLANLANDI (Session 1). ⚠ Tablo/kolon kaldırımları `public/V1` + `tenant/V1` baseline düzenlemesi gerektirir — K-36 varsayımının ("deploy edilmiş DB yok") hâlâ geçerli olduğu implementation ÖNCESİ teyit edilecek (ask-first).
+- **Etki:** Baseline migration'lara dokunulduğunda local DB'ler yine sıfırlanır (K-36 sürecinin tekrarı). `OrganizationDomain` satırı ARCHITECTURE.md şema haritasından, `findByRolesEmpty` satırı zaten düzeltilen persistence/AGENTS.md'den çıkar. Bu karar standartlaştırıldı: "speculative kod eklenmez/eklenen kaldırılır" (madde 21).
+
+### K-39
+**Frontend kalite gate'leri — strict TS + test altyapısı + liste-scaffold abstraction (2026-08-22 kararı)**
+- **Bağlam:** `tsconfig.app.json`'de `strict: true` YOK (yalnızca `noUnused*`/`verbatimModuleSyntax` vb. — `: any` sıfır olduğu için eksiklik maskeleniyor); test altyapısı sıfır (Vitest/RTL "planlı" olarak duruyor, CI'de yalnızca lint+build); liste-sayfa scaffold'ı (state + debounce + sort + page-reset, ~40 satır) 7 sayfada kopya (Users/Roles/Groups/Permissions/Projects/AuditLogs/LoginHistory — rule-of-three çoktan aşılmış). Envanter: [`ANALYSIS_ADDENDUM.md`](ANALYSIS_ADDENDUM.md) §5.
+- **Karar:** (1) `strict: true` açılır, `tsc -b` hatasız geçmeli; (2) Vitest + React Testing Library kurulur — ilk testler: `lib/api.ts` refresh akışı + Login page + kritik primitive'ler (DataTable sort/pagination, Modal focus trap); CI'e `npm test` adımı eklenir; (3) 7× kopya için `useListPageState` hook (tek abstraction, gerçek tekrar); (4) `lib/i18n/messages.ts` (864 satır dictionary) kalır — data'dır, kod değil. Bundan sonra **yeni frontend feature'ı testsiz merge edilmez**.
+- **Durum:** PLANLANDI (Session 2).
+- **Etki:** `frontend/AGENTS.md` test bölümü güncellenir ("none yet" kalkar); README npm komutlarına `npm test` eklenir. FULL_ANALYSIS §8'deki CRITICAL eksik (frontend testing) bu kararla kapanmış olur.
+
+### K-40
+**Backend temizlik fazı — startup projection + tek kaynak çözümlemeler (2026-08-22 kararı)**
+- **Bağlam:** (a) Startup runner'ları full-entity `companyRepository.findAll()` yüklüyor (`TenantMigrationRunner.java:26`, `ModuleSyncRunner.java:61`, `RbacSeeder.java:64`) — maliyet tenant sayısıyla doğrusal büyür; (b) plan çözümleme zinciri iki kez implement edilmiş (`PlanLimitService.activePlan` ≡ `ModuleActivationService.activePlanRank` — aynı TenantContext→Company→ACTIVE Subscription→plan bakış zinciri); (c) cookie build/expire kodu `AuthController` ↔ `SessionController`'da birebir kopya + `SessionController` cookie adını hardcoded (`"sf_refresh_token"`, `JwtCookieProperties` bypass — config rename'i kırar). Envanter: [`ANALYSIS_ADDENDUM.md`](ANALYSIS_ADDENDUM.md) §3-4.
+- **Karar:** Tek temizlik fazı (Session 1, K-37/K-38 ile birlikte): (1) runner'lar projection query (id + schemaName + status) kullanır — entity yüklemesi yok; (2) plan çözümlemesi tek kaynakta (`PlanLimitService`) — ModuleActivationService delege eder; (3) cookie helper tek noktaya alınır, cookie adı `JwtCookieProperties`'tan okunur. InMemory/Redis rate-limiter refill matematiği çifti **bilinçli kalır** (Docker'sız test stratejisi, parity test ile korunur).
+- **Durum:** PLANLANDI (Session 1).
+- **Etki:** Davranış değişikliği yok (refactor). RISK-36'daki bilinen açık P2'ler (InMemory store zincir paritesi, Redis fail-closed davranışı) bu kararın kapsamı DIŞINDA — ayrı değerlendirilir. Bu karar standartlaştırıldı: "startup runner'ları projection yükler; paylaşılan çözümleme zincirleri tek kaynakta yaşar" (madde 24).
 
 ---
 

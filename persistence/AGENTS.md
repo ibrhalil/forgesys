@@ -66,9 +66,9 @@ src/main/resources/db/migration/
 Package `com.ibrhalil.forgesys.persistence.repository`. Extends `JpaRepository` (list-bearing repos also `JpaSpecificationExecutor` — the backend filter engine queries through Specifications, with `@EntityGraph` overrides on `findAll(Spec, Pageable)` mirroring the former plain-list graphs to keep the N+1 profile). The module compiles with `hibernate-jpamodelgen` (annotation processor alongside Lombok, version property in the root pom) — generated `Entity_` classes carry compile-time field-name String constants (`User_.EMAIL`) used by the backend sort/filter whitelists. Current:
 - `CompanyRepository` (`findBySubdomain`, `findBySchemaName`) — public şema
 - `TenantVerificationTokenRepository` (`findByToken`, `findByCompanyId`) — public şema (K-21)
-- `OrganizationDomainRepository` (`findByDomain`, `findByCompanyId`, `findByCompanyIdAndVerifiedTrue`, `existsByDomain`) — public şema (K-32)
+- `OrganizationDomainRepository` (`findByDomain`, `findByCompanyId`, `findByCompanyIdAndVerifiedTrue`, `existsByDomain`) — public şema (K-32). **Kaldırılacak** (zero-reference dead set, [K-38](../docs/DECISIONS.md#k-38))
 - `PlanRepository` (`findByKey`), `SubscriptionRepository` (`findByCompanyId`), `TenantModuleRepository` (`findByCompanyId`, `findByCompanyIdAndModuleKey`) — public şema (K-16)
-- `UserRepository` (`findByEmail`, `findByUsername`, `findByRolesEmpty`, `findGroupMembers`, `findTokenInvalidBefore` [RISK-21 single-col projection], `findUserIdsByRole`/`findUserIdsByGroup`/`findGroupIdsByUserId`/`findUserIdsByGroupIds`/`bulkSetTokenInvalidBefore` [Faz 1 revoke + group-member visibility scope]) — tenant şeması
+- `UserRepository` (`findByEmail`, `findByUsername`, `findGroupMembers`, `findTokenInvalidBefore` [RISK-21 single-col projection], `findUserIdsByRole`/`findUserIdsByGroup`/`findGroupIdsByUserId`/`findUserIdsByGroupIds`/`bulkSetTokenInvalidBefore` [Faz 1 revoke + group-member visibility scope]) — tenant şeması
 - `UserDirectoryViewRepository` (`JpaSpecificationExecutor` — flat directory read model, no EntityGraph by design) — tenant şeması
 - `RoleRepository` (`findByName`, `existsByIdInAndAllPermissionsTrue`, `findAllByAllPermissionsTrue` [all-permissions flag]) — tenant şeması
 - `PermissionRepository` (`findByName`, `findAllNames` [JPQL name projection]) — tenant şeması
