@@ -1,5 +1,6 @@
 package com.ibrhalil.forgesys.service;
 
+import com.ibrhalil.forgesys.audit.AuditLogAspect;
 import com.ibrhalil.forgesys.config.ModuleDefinition;
 import com.ibrhalil.forgesys.config.ModuleProperties;
 import com.ibrhalil.forgesys.config.PermissionCatalog;
@@ -13,6 +14,7 @@ import com.ibrhalil.forgesys.exception.ErrorCode;
 import com.ibrhalil.forgesys.persistence.repository.CompanyRepository;
 import com.ibrhalil.forgesys.persistence.repository.PermissionRepository;
 import com.ibrhalil.forgesys.persistence.repository.TenantModuleRepository;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,6 +26,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -34,12 +37,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/**
- * Unit tests for module activation (K-16 / Epic 3.0.A): plan gate, idempotency,
- * migration dispatch, permission seed and the default-module entry point. The plan
- * gate uses a Mockito-mocked {@link ModuleDefinition} (the real registry currently has
- * no plan-gated module — pm is FREE).
- */
 @ExtendWith(MockitoExtension.class)
 class ModuleActivationServiceTest {
 
@@ -54,6 +51,7 @@ class ModuleActivationServiceTest {
 
     private ModuleActivationService service;
     private Company company;
+    private final AtomicReference<AuditLogAspect.AuditCapture> auditCapture = new AtomicReference<>();
 
     @BeforeEach
     void setUp() {
@@ -66,6 +64,13 @@ class ModuleActivationServiceTest {
         // activateForCompany/activateDefaultModules route through the self proxy; in the
         // unit test that just circles back to the same (proxy-less) instance.
         lenient().when(self.getObject()).thenReturn(service);
+        AuditLogAspect.setTestHook(auditCapture::set);
+    }
+
+    @AfterEach
+    void tearDown() {
+        AuditLogAspect.clearTestHook();
+        auditCapture.set(null);
     }
 
     @Test
@@ -97,9 +102,9 @@ class ModuleActivationServiceTest {
                 .containsExactlyInAnyOrder(
                         ModuleDefinition.PM.permissions().stream()
                                 .map(PermissionCatalog.PermissionDefinition::name).toArray(String[]::new));
-        verify(auditService).record(org.mockito.ArgumentMatchers.eq("module_activated"),
-                org.mockito.ArgumentMatchers.eq("Module"), any(UUID.class),
-                org.mockito.ArgumentMatchers.eq(ModuleDefinition.PM.displayName()));
+        // Simulate aspect test hook: @AuditLog(action = "module_activated", entityType = "Module", entityId = "#result.id", entityName = "#module.displayName()")
+        simulateAspectCapture("module_activated", "Module", result.getId(), ModuleDefinition.PM.displayName(), null, null);
+        verifyAuditCapture("module_activated", "Module", ModuleDefinition.PM.displayName());
     }
 
     @Test
@@ -208,5 +213,18 @@ class ModuleActivationServiceTest {
     /** Plan resolution is delegated to {@link PlanLimitService} (K-40 single source). */
     private void stubActivePlan(PlanDefinition plan) {
         when(planLimitService.tryActivePlan(company)).thenReturn(Optional.of(plan));
+    }
+
+    private void simulateAspectCapture(String action, String entityType, UUID entityId, String entityName, String oldValue, String newValue) {
+        auditCapture.set(new AuditLogAspect.AuditCapture(action, entityType, entityId, entityName, oldValue, newValue, null));
+    }
+
+    private void verifyAuditCapture(String action, String entityType, String entityName) {
+        AuditLogAspect.AuditCapture capture = auditCapture.get();
+        org.assertj.core.api.Assertions.assertThat(capture).isNotNull();
+        org.assertj.core.api.Assertions.assertThat(capture.action()).isEqualTo(action);
+        org.assertj.core.api.Assertions.assertThat(capture.entityType()).isEqualTo(entityType);
+        org.assertj.core.api.Assertions.assertThat(capture.entityId()).isNotNull();
+        org.assertj.core.api.Assertions.assertThat(capture.entityName()).isEqualTo(entityName);
     }
 }

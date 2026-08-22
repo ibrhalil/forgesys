@@ -26,6 +26,7 @@ final class FilterValueParser {
                 case UUID -> UUID.fromString(raw.trim());
                 case BOOLEAN -> parseBoolean(field, raw);
                 case TEMPORAL -> OffsetDateTime.parse(raw.trim());
+                case NUMERIC -> Long.parseLong(raw.trim());
                 case ENUM -> parseEnum(field, raw);
             };
         } catch (IllegalArgumentException | DateTimeParseException e) {

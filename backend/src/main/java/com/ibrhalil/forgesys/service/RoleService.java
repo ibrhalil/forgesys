@@ -19,6 +19,8 @@ import com.ibrhalil.forgesys.persistence.repository.GroupRepository;
 import com.ibrhalil.forgesys.persistence.repository.PermissionRepository;
 import com.ibrhalil.forgesys.persistence.repository.RoleRepository;
 import com.ibrhalil.forgesys.persistence.repository.UserRepository;
+import com.ibrhalil.forgesys.audit.AuditDeltaContext;
+import com.ibrhalil.forgesys.audit.AuditLog;
 import com.ibrhalil.forgesys.security.SessionRevocationService;
 import com.ibrhalil.forgesys.security.LastAdminGuard;
 import com.ibrhalil.forgesys.web.filter.FilterFieldSet;
@@ -74,6 +76,7 @@ public class RoleService {
     }
 
     @Transactional
+    @AuditLog(action = "role_created", entityType = "Role", entityId = "#result.id", entityName = "#result.name")
     public RoleResponse create(RoleRequest request) {
         if (roleRepository.existsByName(request.name())) {
             throw new BusinessException(ErrorCode.ROLE_NAME_TAKEN, "Role name already exists: " + request.name());
@@ -82,11 +85,11 @@ public class RoleService {
         role.setName(request.name());
         role.setDescription(request.description());
         Role saved = roleRepository.save(role);
-        auditService.record("role_created", "Role", saved.getId(), saved.getName());
         return toResponse(saved);
     }
 
     @Transactional
+    @AuditLog(action = "role_updated", entityType = "Role", entityId = "#result.id", entityName = "#result.name")
     public RoleResponse update(UUID id, RoleRequest request) {
         Role role = getRoleOrThrow(id);
         if (!role.getName().equals(request.name()) && roleRepository.existsByName(request.name())) {
@@ -95,11 +98,11 @@ public class RoleService {
         role.setName(request.name());
         role.setDescription(request.description());
         Role saved = roleRepository.save(role);
-        auditService.record("role_updated", "Role", saved.getId(), saved.getName());
         return toResponse(saved);
     }
 
     @Transactional
+    @AuditLog(action = "role_deleted", entityType = "Role", entityId = "#id", entityName = "")
     public void delete(UUID id) {
         Role role = getRoleOrThrow(id);
         // Detach the role from every referencing collection BEFORE the soft-delete.
@@ -123,10 +126,11 @@ public class RoleService {
         // delete leaves no Redis-side refresh-token carnage behind.
         lastAdminGuard.assertActiveAdminExists();
         sessionRevocationService.revokeUsers(holderIds);
-        auditService.record("role_deleted", "Role", id, null);
     }
 
     @Transactional
+    @AuditLog(action = "role_permissions_updated", entityType = "Role", entityId = "#result.id", entityName = "#result.name",
+            captureDelta = true)
     public RoleResponse setPermissions(UUID roleId, AssignPermissionsRequest request) {
         Role role = getRoleOrThrow(roleId);
         boolean all = Boolean.TRUE.equals(request.all());
@@ -165,14 +169,13 @@ public class RoleService {
         // their outstanding tokens still embed the old permission set — revoke so the
         // delta is enforced on the next request, not at access-token TTL.
         sessionRevocationService.revokeRoleHolders(saved.getId());
-        // Faz 2b: record the before/after permission set.
+        // Faz 2b: set delta values for AOP aspect
         java.util.Set<String> afterNames = saved.isAllPermissions()
                 ? java.util.Set.of(ALL_PERMISSIONS_SENTINEL)
                 : saved.getPermissions().stream()
                         .map(Permission::getName).collect(java.util.stream.Collectors.toSet());
-        auditService.recordDelta("role_permissions_updated", "Role", saved.getId(), saved.getName(),
-                AuditService.namesJson(beforeNames),
-                AuditService.namesJson(afterNames));
+        AuditDeltaContext.setOldValue(AuditService.namesJson(beforeNames));
+        AuditDeltaContext.setNewValue(AuditService.namesJson(afterNames));
         return toResponse(saved);
     }
 
@@ -189,6 +192,8 @@ public class RoleService {
      * is audited (Faz 2b).
      */
     @Transactional
+    @AuditLog(action = "role_parents_updated", entityType = "Role", entityId = "#result.id", entityName = "#result.name",
+            captureDelta = true)
     public RoleResponse setParents(UUID roleId, AssignRolesRequest request) {
         Role role = getRoleOrThrow(roleId);
         List<Role> parents = resolveParents(request.roleIds());
@@ -211,9 +216,9 @@ public class RoleService {
         lastAdminGuard.assertActiveAdminExists();
         Role saved = roleRepository.save(role);
         sessionRevocationService.revokeRoleHolders(saved.getId());
-        auditService.recordDelta("role_parents_updated", "Role", saved.getId(), saved.getName(),
-                AuditService.namesJson(beforeNames),
-                AuditService.namesJson(parents.stream().map(Role::getName).collect(java.util.stream.Collectors.toSet())));
+        // Faz 2b: set delta values for AOP aspect
+        AuditDeltaContext.setOldValue(AuditService.namesJson(beforeNames));
+        AuditDeltaContext.setNewValue(AuditService.namesJson(parents.stream().map(Role::getName).collect(java.util.stream.Collectors.toSet())));
         return toResponse(saved);
     }
 

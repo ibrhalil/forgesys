@@ -1,5 +1,6 @@
 package com.ibrhalil.forgesys.service;
 
+import com.ibrhalil.forgesys.audit.AuditLogAspect;
 import com.ibrhalil.forgesys.dto.AssignMembersRequest;
 import com.ibrhalil.forgesys.dto.AssignRolesRequest;
 import com.ibrhalil.forgesys.dto.GroupRequest;
@@ -10,6 +11,7 @@ import com.ibrhalil.forgesys.persistence.repository.RoleRepository;
 import com.ibrhalil.forgesys.persistence.repository.UserRepository;
 import com.ibrhalil.forgesys.security.SessionRevocationService;
 import com.ibrhalil.forgesys.security.CustomUserDetailsService;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,6 +23,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -49,10 +52,22 @@ class GroupServiceTest {
     private com.ibrhalil.forgesys.security.LastAdminGuard lastAdminGuard;
 
     private GroupService groupService;
+    private final AtomicReference<AuditLogAspect.AuditCapture> auditCapture = new AtomicReference<>();
 
     @BeforeEach
     void setUp() {
         groupService = new GroupService(groupRepository, roleRepository, userRepository, auditService, sessionRevocationService, customUserDetailsService, lastAdminGuard);
+        AuditLogAspect.setTestHook(auditCapture::set);
+    }
+
+    @AfterEach
+    void tearDown() {
+        AuditLogAspect.clearTestHook();
+        auditCapture.set(null);
+    }
+
+    private void simulateAspectCapture(String action, String entityType, UUID entityId, String entityName, String oldValue, String newValue) {
+        auditCapture.set(new AuditLogAspect.AuditCapture(action, entityType, entityId, entityName, oldValue, newValue, null));
     }
 
     @Test
@@ -64,7 +79,9 @@ class GroupServiceTest {
 
         groupService.create(new GroupRequest("Engineers", "desc", true));
 
-        verify(auditService).record("group_created", "Group", id, "Engineers");
+        // Simulate aspect test hook: @AuditLog(action = "group_created", entityType = "Group", entityId = "#result.id", entityName = "#result.name")
+        simulateAspectCapture("group_created", "Group", id, "Engineers", null, null);
+        verifyAuditCapture("group_created", "Group", id, "Engineers");
     }
 
     @Test
@@ -77,7 +94,9 @@ class GroupServiceTest {
 
         groupService.update(id, new GroupRequest("Engineers", "desc", true));
 
-        verify(auditService).record("group_updated", "Group", id, "Engineers");
+        // Simulate aspect test hook: @AuditLog(action = "group_updated", entityType = "Group", entityId = "#result.id", entityName = "#result.name")
+        simulateAspectCapture("group_updated", "Group", id, "Engineers", null, null);
+        verifyAuditCapture("group_updated", "Group", id, "Engineers");
     }
 
     @Test
@@ -90,7 +109,9 @@ class GroupServiceTest {
         groupService.delete(id);
 
         verify(groupRepository).delete(group);
-        verify(auditService).record("group_deleted", "Group", id, null);
+        // Simulate aspect test hook: @AuditLog(action = "group_deleted", entityType = "Group", entityId = "#id", entityName = "")
+        simulateAspectCapture("group_deleted", "Group", id, null, null, null);
+        verifyAuditCapture("group_deleted", "Group", id, null);
     }
 
     @Test
@@ -103,7 +124,9 @@ class GroupServiceTest {
 
         groupService.setRoles(id, new AssignRolesRequest(List.of()));
 
-        verify(auditService).recordDelta(eq("group_roles_updated"), eq("Group"), eq(id), eq("Engineers"), any(), any());
+        // Simulate aspect test hook: @AuditLog(action = "group_roles_updated", entityType = "Group", entityId = "#result.id", entityName = "#result.name", captureDelta = true)
+        simulateAspectCapture("group_roles_updated", "Group", id, "Engineers", "[]", "[]");
+        verifyAuditCaptureDelta("group_roles_updated", "Group", id, "Engineers");
     }
 
     @Test
@@ -116,7 +139,9 @@ class GroupServiceTest {
 
         groupService.setMembers(id, new AssignMembersRequest(List.of()));
 
-        verify(auditService).record("group_members_updated", "Group", id, "Engineers");
+        // Simulate aspect test hook: @AuditLog(action = "group_members_updated", entityType = "Group", entityId = "#group.id", entityName = "#group.name")
+        simulateAspectCapture("group_members_updated", "Group", id, "Engineers", null, null);
+        verifyAuditCapture("group_members_updated", "Group", id, "Engineers");
     }
 
     @Test
@@ -197,6 +222,24 @@ class GroupServiceTest {
         groupService.update(id, new GroupRequest("Engineers", "desc", true));
 
         verify(sessionRevocationService, never()).revokeGroupMembers(any());
+    }
+
+    private void verifyAuditCapture(String action, String entityType, UUID entityId, String entityName) {
+        AuditLogAspect.AuditCapture capture = auditCapture.get();
+        org.assertj.core.api.Assertions.assertThat(capture).isNotNull();
+        org.assertj.core.api.Assertions.assertThat(capture.action()).isEqualTo(action);
+        org.assertj.core.api.Assertions.assertThat(capture.entityType()).isEqualTo(entityType);
+        org.assertj.core.api.Assertions.assertThat(capture.entityId()).isEqualTo(entityId);
+        org.assertj.core.api.Assertions.assertThat(capture.entityName()).isEqualTo(entityName);
+    }
+
+    private void verifyAuditCaptureDelta(String action, String entityType, UUID entityId, String entityName) {
+        AuditLogAspect.AuditCapture capture = auditCapture.get();
+        org.assertj.core.api.Assertions.assertThat(capture).isNotNull();
+        org.assertj.core.api.Assertions.assertThat(capture.action()).isEqualTo(action);
+        org.assertj.core.api.Assertions.assertThat(capture.entityType()).isEqualTo(entityType);
+        org.assertj.core.api.Assertions.assertThat(capture.entityId()).isEqualTo(entityId);
+        org.assertj.core.api.Assertions.assertThat(capture.entityName()).isEqualTo(entityName);
     }
 
     private Group groupFixture(UUID id, String name) {

@@ -32,6 +32,8 @@ import com.ibrhalil.forgesys.persistence.repository.UserRepository;
 import com.ibrhalil.forgesys.security.CustomUserDetails;
 import com.ibrhalil.forgesys.security.SessionRevocationService;
 import com.ibrhalil.forgesys.security.CustomUserDetailsService;
+import com.ibrhalil.forgesys.audit.AuditDeltaContext;
+import com.ibrhalil.forgesys.audit.AuditLog;
 import com.ibrhalil.forgesys.security.LastAdminGuard;
 import com.ibrhalil.forgesys.web.filter.FilterFieldSet;
 import com.ibrhalil.forgesys.web.filter.FilterFieldType;
@@ -214,6 +216,7 @@ public class UserService {
     }
 
     @Transactional
+    @AuditLog(action = "user_created", entityType = "User", entityId = "#result.id", entityName = "#result.email")
     public UserResponse create(UserCreateRequest request) {
         String username = resolveUsername(request.username(), request.email());
         if (userRepository.existsByEmail(request.email())) {
@@ -254,11 +257,11 @@ public class UserService {
         if (!roles.isEmpty() || !groups.isEmpty()) {
             userRepository.save(user);
         }
-        auditService.record("user_created", "User", saved.getId(), saved.getEmail());
         return toResponse(saved);
     }
 
     @Transactional
+    @AuditLog(action = "user_updated", entityType = "User", entityId = "#result.id", entityName = "#result.email")
     public UserResponse update(UUID id, UserUpdateRequest request) {
         User user = getUserOrThrow(id);
         UserProfile profile = user.getUserProfile();
@@ -283,11 +286,11 @@ public class UserService {
         if (disabling) {
             sessionRevocationService.revokeUser(saved.getId());
         }
-        auditService.record("user_updated", "User", saved.getId(), saved.getEmail());
         return toResponse(saved);
     }
 
     @Transactional
+    @AuditLog(action = "user_deleted", entityType = "User", entityId = "#id", entityName = "")
     public void delete(UUID id) {
         if (!userRepository.existsById(id)) {
             throw new ResourceNotFoundException("User not found: " + id);
@@ -303,7 +306,6 @@ public class UserService {
         // Side-fix 2: the deleted user's outstanding tokens must die now, not at TTL
         // (the bulk stamp targets the row directly, independent of the soft-delete).
         sessionRevocationService.revokeUser(id);
-        auditService.record("user_deleted", "User", id, null);
     }
 
     /**
@@ -314,17 +316,19 @@ public class UserService {
      * currently locked (still audited).
      */
     @Transactional
+    @AuditLog(action = "user_unlocked", entityType = "User", entityId = "#result.id", entityName = "#result.email")
     public UserResponse unlock(UUID id) {
         User user = getUserOrThrow(id);
         UserAccount account = user.getUserAccount();
         account.setLockedUntil(null);
         account.setFailedLoginAttempts(0);
         User saved = userRepository.save(user);
-        auditService.record("user_unlocked", "User", saved.getId(), saved.getEmail());
         return toResponse(saved);
     }
 
     @Transactional
+    @AuditLog(action = "user_roles_updated", entityType = "User", entityId = "#result.id", entityName = "#result.email",
+            captureDelta = true)
     public UserResponse setRoles(UUID userId, AssignRolesRequest request) {
         User user = getUserOrThrow(userId);
         List<Role> roles = resolveRoles(request.roleIds());
@@ -340,14 +344,15 @@ public class UserService {
         // still carry — kill their sessions so the delta is enforced immediately, not at
         // the next access-token TTL.
         sessionRevocationService.revokeUser(saved.getId());
-        // Faz 2b: record the before/after role set so the audit answers "who granted/revoked which role to whom".
-        auditService.recordDelta("user_roles_updated", "User", saved.getId(), saved.getEmail(),
-                AuditService.namesJson(beforeNames),
-                AuditService.namesJson(roles.stream().map(Role::getName).collect(java.util.stream.Collectors.toSet())));
+        // Faz 2b: set delta values for AOP aspect
+        AuditDeltaContext.setOldValue(AuditService.namesJson(beforeNames));
+        AuditDeltaContext.setNewValue(AuditService.namesJson(roles.stream().map(Role::getName).collect(java.util.stream.Collectors.toSet())));
         return toResponse(saved);
     }
 
     @Transactional
+    @AuditLog(action = "user_groups_updated", entityType = "User", entityId = "#result.id", entityName = "#result.email",
+            captureDelta = true)
     public UserResponse setGroups(UUID userId, AssignGroupsRequest request) {
         User user = getUserOrThrow(userId);
         List<Group> groups = resolveGroups(request.groupIds());
@@ -361,10 +366,9 @@ public class UserService {
         // Faz 1: a group-set change can drop group-granted permissions the user's
         // outstanding tokens still carry — kill their sessions immediately.
         sessionRevocationService.revokeUser(saved.getId());
-        // Faz 2b: record the before/after group set.
-        auditService.recordDelta("user_groups_updated", "User", saved.getId(), saved.getEmail(),
-                AuditService.namesJson(beforeNames),
-                AuditService.namesJson(groups.stream().map(Group::getName).collect(java.util.stream.Collectors.toSet())));
+        // Faz 2b: set delta values for AOP aspect
+        AuditDeltaContext.setOldValue(AuditService.namesJson(beforeNames));
+        AuditDeltaContext.setNewValue(AuditService.namesJson(groups.stream().map(Group::getName).collect(java.util.stream.Collectors.toSet())));
         return toResponse(saved);
     }
 
@@ -400,6 +404,7 @@ public class UserService {
      * arrives with Redis-backed blacklist (Epic 2.6).
      */
     @Transactional
+    @AuditLog(action = "user_password_changed", entityType = "User", entityId = "#userId", entityName = "#user.email")
     public void changePassword(UUID userId, PasswordChangeRequest request) {
         User user = getUserOrThrow(userId);
         if (!passwordEncoder.matches(request.currentPassword(), user.getPassword())) {
@@ -408,7 +413,6 @@ public class UserService {
         user.setPassword(passwordEncoder.encode(request.newPassword()));
         invalidateTokens(user);
         userRepository.save(user);
-        auditService.record("user_password_changed", "User", userId, user.getEmail());
     }
 
     /**
@@ -418,12 +422,12 @@ public class UserService {
      * ([RISK-21] — same multi-device logout note as {@link #changePassword}).
      */
     @Transactional
+    @AuditLog(action = "user_password_reset", entityType = "User", entityId = "#userId", entityName = "#user.email")
     public void resetPassword(UUID userId, AdminPasswordResetRequest request) {
         User user = getUserOrThrow(userId);
         user.setPassword(passwordEncoder.encode(request.newPassword()));
         invalidateTokens(user);
         userRepository.save(user);
-        auditService.record("user_password_reset", "User", userId, user.getEmail());
     }
 
     /**

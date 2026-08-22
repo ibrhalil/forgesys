@@ -11,6 +11,7 @@ import com.ibrhalil.forgesys.exception.ResourceNotFoundException;
 import com.ibrhalil.forgesys.persistence.repository.ProjectRepository;
 import com.ibrhalil.forgesys.persistence.repository.TaskRepository;
 import com.ibrhalil.forgesys.persistence.repository.UserRepository;
+import com.ibrhalil.forgesys.audit.AuditLog;
 import com.ibrhalil.forgesys.web.filter.FilterFieldSet;
 import com.ibrhalil.forgesys.web.filter.FilterFieldType;
 import lombok.RequiredArgsConstructor;
@@ -59,6 +60,7 @@ public class TaskService {
     }
 
     @Transactional
+    @AuditLog(action = "task_created", entityType = "Task", entityId = "#result.id", entityName = "#result.title")
     public TaskResponse create(UUID projectId, TaskRequest request) {
         if (!projectRepository.existsById(projectId)) {
             throw new ResourceNotFoundException("Project not found: " + projectId);
@@ -75,27 +77,26 @@ public class TaskService {
             task.setPriority(TaskPriority.MEDIUM);
         }
         Task saved = taskRepository.save(task);
-        auditService.record("task_created", "Task", saved.getId(), saved.getTitle());
         return toResponse(saved);
     }
 
     @Transactional
+    @AuditLog(action = "task_updated", entityType = "Task", entityId = "#result.id", entityName = "#result.title")
     public TaskResponse update(UUID projectId, UUID taskId, TaskRequest request) {
         Task task = getTaskOrThrow(projectId, taskId);
         validateAssignee(request.assigneeId());
         applyRequest(task, request);
         Task saved = taskRepository.save(task);
-        auditService.record("task_updated", "Task", saved.getId(), saved.getTitle());
         return toResponse(saved);
     }
 
     @Transactional
+    @AuditLog(action = "task_deleted", entityType = "Task", entityId = "#taskId", entityName = "")
     public void delete(UUID projectId, UUID taskId) {
         if (!taskRepository.existsByIdAndProjectId(taskId, projectId)) {
             throw new ResourceNotFoundException("Task not found: " + taskId);
         }
         taskRepository.deleteById(taskId);
-        auditService.record("task_deleted", "Task", taskId, null);
     }
 
     private void applyRequest(Task task, TaskRequest request) {

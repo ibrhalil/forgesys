@@ -17,6 +17,7 @@ const PermissionDetailPage = lazy(() => import('../features/permissions/Permissi
 const ProfilePage = lazy(() => import('../features/users/ProfilePage').then((m) => ({ default: m.ProfilePage })));
 const AuditLogsPage = lazy(() => import('../features/audit/AuditLogsPage').then((m) => ({ default: m.AuditLogsPage })));
 const LoginHistoryPage = lazy(() => import('../features/audit/LoginHistoryPage').then((m) => ({ default: m.LoginHistoryPage })));
+const RequestLogsPage = lazy(() => import('../features/audit/RequestLogsPage').then((m) => ({ default: m.RequestLogsPage })));
 const SessionsPage = lazy(() => import('../features/sessions/SessionsPage').then((m) => ({ default: m.SessionsPage })));
 const AllSessionsPage = lazy(() => import('../features/sessions/AllSessionsPage').then((m) => ({ default: m.AllSessionsPage })));
 const UserSessionsPage = lazy(() => import('../features/sessions/UserSessionsPage').then((m) => ({ default: m.UserSessionsPage })));
@@ -52,6 +53,7 @@ export const SHELL_ROUTES: AppRoute[] = [
   { path: 'profile', Component: ProfilePage },
   { path: 'audit-logs', Component: AuditLogsPage, authority: PERMISSIONS.AUDIT_READ },
   { path: 'login-history', Component: LoginHistoryPage, authority: PERMISSIONS.AUDIT_READ },
+  { path: 'request-logs', Component: RequestLogsPage, authority: PERMISSIONS.AUDIT_READ },
   { path: 'sessions', Component: SessionsPage },
   { path: 'all-sessions', Component: AllSessionsPage, authority: PERMISSIONS.USER_WRITE },
   { path: 'admin/users/:userId/sessions', Component: UserSessionsPage, authority: PERMISSIONS.USER_WRITE },

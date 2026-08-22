@@ -21,6 +21,7 @@ import com.ibrhalil.forgesys.exception.ResourceNotFoundException;
 import com.ibrhalil.forgesys.persistence.repository.AppPropertyRepository;
 import com.ibrhalil.forgesys.persistence.repository.AppRepository;
 import com.ibrhalil.forgesys.persistence.repository.AppViewRepository;
+import com.ibrhalil.forgesys.audit.AuditLog;
 import com.ibrhalil.forgesys.web.filter.FilterFieldSet;
 import com.ibrhalil.forgesys.web.filter.FilterFieldType;
 import com.ibrhalil.forgesys.web.filter.FilterSpecifications;
@@ -89,6 +90,7 @@ public class AppBuilderService {
     }
 
     @Transactional
+    @AuditLog(action = "app_created", entityType = "App", entityId = "#result.id", entityName = "#result.name")
     public AppResponse create(AppRequest request) {
         if (appRepository.existsByName(request.name())) {
             throw new BusinessException(ErrorCode.APP_NAME_TAKEN, "App name already exists: " + request.name());
@@ -99,11 +101,11 @@ public class AppBuilderService {
         app.setDescription(request.description());
         app.setIcon(request.icon());
         App saved = appRepository.save(app);
-        auditService.record("app_created", "App", saved.getId(), saved.getName());
         return toResponse(saved);
     }
 
     @Transactional
+    @AuditLog(action = "app_updated", entityType = "App", entityId = "#result.id", entityName = "#result.name")
     public AppResponse update(UUID id, AppRequest request) {
         App app = getAppOrThrow(id);
         if (!app.getName().equals(request.name()) && appRepository.existsByName(request.name())) {
@@ -113,20 +115,20 @@ public class AppBuilderService {
         app.setDescription(request.description());
         app.setIcon(request.icon());
         App saved = appRepository.save(app);
-        auditService.record("app_updated", "App", saved.getId(), saved.getName());
         return toResponse(saved);
     }
 
     @Transactional
+    @AuditLog(action = "app_deleted", entityType = "App", entityId = "#id", entityName = "")
     public void delete(UUID id) {
         App app = getAppOrThrow(id);
         appRepository.delete(app);
-        auditService.record("app_deleted", "App", id, app.getName());
     }
 
     // ── properties ──────────────────────────────────────────────────────
 
     @Transactional
+    @AuditLog(action = "app_property_created", entityType = "AppProperty", entityId = "#result.id", entityName = "#app.name + ' / ' + #result.name")
     public AppPropertyResponse addProperty(UUID appId, AppPropertyRequest request) {
         App app = getAppOrThrow(appId);
         validatePropertyDefinition(request);
@@ -138,12 +140,11 @@ public class AppBuilderService {
         property.setAppId(appId);
         applyPropertyRequest(property, request);
         AppProperty saved = propertyRepository.save(property);
-        auditService.record("app_property_created", "AppProperty", saved.getId(),
-                app.getName() + " / " + saved.getName());
         return toResponse(saved);
     }
 
     @Transactional
+    @AuditLog(action = "app_property_updated", entityType = "AppProperty", entityId = "#result.id", entityName = "#app.name + ' / ' + #result.name")
     public AppPropertyResponse updateProperty(UUID appId, UUID propertyId, AppPropertyRequest request) {
         App app = getAppOrThrow(appId);
         AppProperty property = getPropertyOrThrow(appId, propertyId);
@@ -159,25 +160,23 @@ public class AppBuilderService {
         }
         applyPropertyRequest(property, request);
         AppProperty saved = propertyRepository.save(property);
-        auditService.record("app_property_updated", "AppProperty", saved.getId(),
-                app.getName() + " / " + saved.getName());
         return toResponse(saved);
     }
 
     @Transactional
+    @AuditLog(action = "app_property_deleted", entityType = "AppProperty", entityId = "#propertyId", entityName = "")
     public void deleteProperty(UUID appId, UUID propertyId) {
         App app = getAppOrThrow(appId);
         AppProperty property = getPropertyOrThrow(appId, propertyId);
         propertyRepository.delete(property);
         // Value rows are dependent data — meaningless once the definition is gone.
         propertyRepository.deleteValuesByPropertyId(propertyId);
-        auditService.record("app_property_deleted", "AppProperty", propertyId,
-                app.getName() + " / " + property.getName());
     }
 
     // ── views ───────────────────────────────────────────────────────────
 
     @Transactional
+    @AuditLog(action = "app_view_created", entityType = "AppView", entityId = "#result.id", entityName = "#app.name + ' / ' + #result.name")
     public AppViewResponse addView(UUID appId, AppViewRequest request) {
         App app = getAppOrThrow(appId);
         if (viewRepository.existsByAppIdAndName(appId, request.name())) {
@@ -195,12 +194,11 @@ public class AppBuilderService {
         view.setConfig(config);
         view.setPosition(request.position());
         AppView saved = viewRepository.save(view);
-        auditService.record("app_view_created", "AppView", saved.getId(),
-                app.getName() + " / " + saved.getName());
         return toResponse(saved);
     }
 
     @Transactional
+    @AuditLog(action = "app_view_updated", entityType = "AppView", entityId = "#result.id", entityName = "#app.name + ' / ' + #result.name")
     public AppViewResponse updateView(UUID appId, UUID viewId, AppViewRequest request) {
         App app = getAppOrThrow(appId);
         AppView view = getViewOrThrow(appId, viewId);
@@ -218,18 +216,15 @@ public class AppBuilderService {
         view.setConfig(config);
         view.setPosition(request.position());
         AppView saved = viewRepository.save(view);
-        auditService.record("app_view_updated", "AppView", saved.getId(),
-                app.getName() + " / " + saved.getName());
         return toResponse(saved);
     }
 
     @Transactional
+    @AuditLog(action = "app_view_deleted", entityType = "AppView", entityId = "#viewId", entityName = "")
     public void deleteView(UUID appId, UUID viewId) {
         App app = getAppOrThrow(appId);
         AppView view = getViewOrThrow(appId, viewId);
         viewRepository.delete(view);
-        auditService.record("app_view_deleted", "AppView", viewId,
-                app.getName() + " / " + view.getName());
     }
 
     // ── definition validation ───────────────────────────────────────────

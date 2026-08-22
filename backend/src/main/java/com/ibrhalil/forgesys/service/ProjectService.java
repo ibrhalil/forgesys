@@ -10,6 +10,7 @@ import com.ibrhalil.forgesys.exception.BusinessException;
 import com.ibrhalil.forgesys.exception.ErrorCode;
 import com.ibrhalil.forgesys.exception.ResourceNotFoundException;
 import com.ibrhalil.forgesys.persistence.repository.ProjectRepository;
+import com.ibrhalil.forgesys.audit.AuditLog;
 import com.ibrhalil.forgesys.web.filter.FilterFieldSet;
 import com.ibrhalil.forgesys.web.filter.FilterFieldType;
 import com.ibrhalil.forgesys.web.filter.FilterSpecifications;
@@ -57,6 +58,7 @@ public class ProjectService {
     }
 
     @Transactional
+    @AuditLog(action = "project_created", entityType = "Project", entityId = "#result.id", entityName = "#result.name")
     public ProjectResponse create(ProjectRequest request) {
         if (projectRepository.existsByName(request.name())) {
             throw new BusinessException(ErrorCode.PROJECT_NAME_TAKEN, "Project name already exists: " + request.name());
@@ -66,11 +68,11 @@ public class ProjectService {
         project.setDescription(request.description());
         project.setType(request.type());
         Project saved = projectRepository.save(project);
-        auditService.record("project_created", "Project", saved.getId(), saved.getName());
         return toResponse(saved);
     }
 
     @Transactional
+    @AuditLog(action = "project_updated", entityType = "Project", entityId = "#result.id", entityName = "#result.name")
     public ProjectResponse update(UUID id, ProjectRequest request) {
         Project project = getProjectOrThrow(id);
         if (!project.getName().equals(request.name()) && projectRepository.existsByName(request.name())) {
@@ -80,17 +82,16 @@ public class ProjectService {
         project.setDescription(request.description());
         project.setType(request.type());
         Project saved = projectRepository.save(project);
-        auditService.record("project_updated", "Project", saved.getId(), saved.getName());
         return toResponse(saved);
     }
 
     @Transactional
+    @AuditLog(action = "project_deleted", entityType = "Project", entityId = "#id", entityName = "")
     public void delete(UUID id) {
         if (!projectRepository.existsById(id)) {
             throw new ResourceNotFoundException("Project not found: " + id);
         }
         projectRepository.deleteById(id);
-        auditService.record("project_deleted", "Project", id, null);
     }
 
     private Project getProjectOrThrow(UUID id) {

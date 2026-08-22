@@ -18,6 +18,7 @@ import com.ibrhalil.forgesys.persistence.repository.AppRecordValueRepository;
 import com.ibrhalil.forgesys.persistence.repository.AppRepository;
 import com.ibrhalil.forgesys.service.AppQueryValidator.ValidatedFilter;
 import com.ibrhalil.forgesys.service.AppQueryValidator.ValidatedSort;
+import com.ibrhalil.forgesys.audit.AuditLog;
 import com.ibrhalil.forgesys.web.filter.FilterFieldSet;
 import com.ibrhalil.forgesys.web.filter.FilterFieldType;
 import lombok.RequiredArgsConstructor;
@@ -121,6 +122,7 @@ public class AppRecordService {
     // ── writes ───────────────────────────────────────────────────────────
 
     @Transactional
+    @AuditLog(action = "app_record_created", entityType = "AppRecord", entityId = "#result.id", entityName = "#app.name")
     public AppRecordResponse create(UUID appId, AppRecordRequest request) {
         App app = getAppOrThrow(appId);
         planLimitService.assertWithin(recordRepository.countByAppId(appId),
@@ -132,7 +134,6 @@ public class AppRecordService {
         record.setAppId(appId);
         AppRecord saved = recordRepository.save(record);
         persistValues(saved.getId(), validated);
-        auditService.record("app_record_created", "AppRecord", saved.getId(), app.getName());
         return toResponse(saved, valuesByRecordId(List.of(saved.getId()))
                 .getOrDefault(saved.getId(), Map.of()));
     }
@@ -142,6 +143,7 @@ public class AppRecordService {
      * value (rejected for required properties), an absent key keeps it unchanged.
      */
     @Transactional
+    @AuditLog(action = "app_record_updated", entityType = "AppRecord", entityId = "#recordId", entityName = "#app.name")
     public AppRecordResponse update(UUID appId, UUID recordId, AppRecordRequest request) {
         App app = getAppOrThrow(appId);
         AppRecord record = getRecordOrThrow(appId, recordId);
@@ -184,17 +186,16 @@ public class AppRecordService {
             }
         }
         recordRepository.save(record);
-        auditService.record("app_record_updated", "AppRecord", recordId, app.getName());
         return toResponse(record, valuesByRecordId(List.of(recordId))
                 .getOrDefault(recordId, Map.of()));
     }
 
     @Transactional
+    @AuditLog(action = "app_record_deleted", entityType = "AppRecord", entityId = "#recordId", entityName = "")
     public void delete(UUID appId, UUID recordId) {
         App app = getAppOrThrow(appId);
         AppRecord record = getRecordOrThrow(appId, recordId);
         recordRepository.delete(record);
-        auditService.record("app_record_deleted", "AppRecord", recordId, app.getName());
     }
 
     // ── value validation & persistence ──────────────────────────────────

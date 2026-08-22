@@ -9,6 +9,7 @@ import com.ibrhalil.forgesys.exception.BusinessException;
 import com.ibrhalil.forgesys.exception.ErrorCode;
 import com.ibrhalil.forgesys.exception.ResourceNotFoundException;
 import com.ibrhalil.forgesys.persistence.repository.PermissionRepository;
+import com.ibrhalil.forgesys.audit.AuditLog;
 import com.ibrhalil.forgesys.security.SessionRevocationService;
 import com.ibrhalil.forgesys.web.filter.FilterFieldSet;
 import com.ibrhalil.forgesys.web.filter.FilterFieldType;
@@ -53,6 +54,7 @@ public class PermissionService {
     }
 
     @Transactional
+    @AuditLog(action = "permission_created", entityType = "Permission", entityId = "#result.id", entityName = "#result.name")
     public PermissionResponse create(PermissionRequest request) {
         if (permissionRepository.existsByName(request.name())) {
             throw new BusinessException(ErrorCode.PERMISSION_NAME_TAKEN, "Permission name already exists: " + request.name());
@@ -61,7 +63,6 @@ public class PermissionService {
         permission.setName(request.name());
         permission.setDescription(request.description());
         Permission saved = permissionRepository.save(permission);
-        auditService.record("permission_created", "Permission", saved.getId(), saved.getName());
         // A new permission joins the all-permissions set, so holders of an all-permissions
         // role (Admin + any "ALL" role) should see it on their next request rather than at
         // their access-token TTL — their outstanding tokens still embed the prior snapshot.
@@ -70,6 +71,7 @@ public class PermissionService {
     }
 
     @Transactional
+    @AuditLog(action = "permission_updated", entityType = "Permission", entityId = "#result.id", entityName = "#result.name")
     public PermissionResponse update(java.util.UUID id, PermissionRequest request) {
         Permission permission = getPermissionOrThrow(id);
         boolean renamed = !permission.getName().equals(request.name());
@@ -79,7 +81,6 @@ public class PermissionService {
         permission.setName(request.name());
         permission.setDescription(request.description());
         Permission saved = permissionRepository.save(permission);
-        auditService.record("permission_updated", "Permission", saved.getId(), saved.getName());
         // A rename changes the authority string every all-permissions user carries, so
         // refresh their tokens to embed the new name (same rationale as create).
         if (renamed) {
@@ -95,6 +96,7 @@ public class PermissionService {
      * (which already triggers session revoke via {@code RoleService.setPermissions}).
      */
     @Transactional
+    @AuditLog(action = "permission_deleted", entityType = "Permission", entityId = "#id", entityName = "")
     public void delete(java.util.UUID id) {
         if (!permissionRepository.existsById(id)) {
             throw new ResourceNotFoundException("Permission not found: " + id);
@@ -104,7 +106,6 @@ public class PermissionService {
                     "Permission is still assigned to one or more roles: " + id);
         }
         permissionRepository.deleteById(id);
-        auditService.record("permission_deleted", "Permission", id, null);
     }
 
     private Permission getPermissionOrThrow(java.util.UUID id) {

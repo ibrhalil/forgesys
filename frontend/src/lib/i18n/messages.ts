@@ -32,6 +32,7 @@ export const messages = {
     'nav.groups': 'Gruplar',
     'nav.permissions': 'İzinler',
     'nav.auditLogs': 'Denetim Kaydı',
+    'nav.requestLogs': 'İstek Logları',
     'nav.loginHistory': 'Oturum Geçmişi',
     'nav.sessions': 'Oturumlar',
     'nav.allSessions': 'Tüm Oturumlar',
@@ -481,6 +482,21 @@ export const messages = {
     'audit.ip': 'IP',
     'audit.trace': 'İz',
 
+    // request log
+    'requestLog.desc': 'Kiracı genelinde kaydedilen HTTP istek izleri (yüksek riskli yollar için maskelemeli istek gövdeleri ile).',
+    'requestLog.empty': 'İstek kaydı yok',
+    'requestLog.emptyFiltered': 'Aramaya uyan kayıt yok',
+    'requestLog.searchPh': 'Trace ID, yol veya kullanıcı ara…',
+    'requestLog.date': 'Tarih',
+    'requestLog.trace': 'İz',
+    'requestLog.method': 'Yöntem',
+    'requestLog.path': 'Yol',
+    'requestLog.status': 'Durum',
+    'requestLog.duration': 'Süre',
+    'requestLog.user': 'Kullanıcı',
+    'requestLog.ip': 'IP',
+    'requestLog.userAgent': 'User Agent',
+
     // login history
     'loginHistory.desc': 'Tüm giriş denemeleri — başarılı veya başarısız.',
     'loginHistory.empty': 'Giriş denemesi yok',
@@ -520,6 +536,7 @@ export const messages = {
     'nav.groups': 'Groups',
     'nav.permissions': 'Permissions',
     'nav.auditLogs': 'Audit Log',
+    'nav.requestLogs': 'Request Logs',
     'nav.loginHistory': 'Login History',
     'nav.sessions': 'Sessions',
     'nav.allSessions': 'All Sessions',
@@ -969,6 +986,21 @@ export const messages = {
     'audit.target': 'Target',
     'audit.ip': 'IP',
     'audit.trace': 'Trace',
+
+    // request log
+    'requestLog.desc': 'HTTP request traces recorded across the tenant (with masked request bodies for high-risk paths).',
+    'requestLog.empty': 'No request logs',
+    'requestLog.emptyFiltered': 'No entries match your search',
+    'requestLog.searchPh': 'Search trace ID, path or user…',
+    'requestLog.date': 'Date',
+    'requestLog.trace': 'Trace',
+    'requestLog.method': 'Method',
+    'requestLog.path': 'Path',
+    'requestLog.status': 'Status',
+    'requestLog.duration': 'Duration',
+    'requestLog.user': 'User',
+    'requestLog.ip': 'IP',
+    'requestLog.userAgent': 'User Agent',
 
     // login history
     'loginHistory.desc': 'Every sign-in attempt, successful or failed.',

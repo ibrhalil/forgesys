@@ -1,5 +1,6 @@
 package com.ibrhalil.forgesys.service;
 
+import com.ibrhalil.forgesys.audit.AuditLog;
 import com.ibrhalil.forgesys.common.tenant.TenantContext;
 import com.ibrhalil.forgesys.dto.ActiveSessionResponse;
 import com.ibrhalil.forgesys.dto.AdminSessionResponse;
@@ -57,6 +58,7 @@ public class SessionService {
     }
 
     /** Ends one of the caller's own sessions. */
+    @AuditLog(action = "session_revoked", entityType = "Session", entityId = "#sessionId", entityName = "")
     public void revokeMySession(UUID userId, UUID sessionId) {
         if (!refreshTokenStore.revokeSession(userId, currentTenant(), sessionId)) {
             throw notFound();
@@ -66,7 +68,6 @@ public class SessionService {
         // immediately; revoking another own device briefly blips the current one (401 +
         // silent refresh) and recovers.
         sessionRevocationService.invalidateAccessTokens(userId);
-        auditService.record("session_revoked", ENTITY_TYPE, sessionId, null);
     }
 
     /**
@@ -106,6 +107,7 @@ public class SessionService {
     }
 
     /** Admin ends a single session of another user. */
+    @AuditLog(action = "session_revoked", entityType = "Session", entityId = "#sessionId", entityName = "")
     public void revokeUserSession(UUID targetUserId, UUID sessionId) {
         if (!refreshTokenStore.revokeSession(targetUserId, currentTenant(), sessionId)) {
             throw notFound();
@@ -113,14 +115,13 @@ public class SessionService {
         // Kill the user's outstanding access tokens now (not at TTL) so the device is
         // signed out on its next request. Sibling devices briefly 401 + silent-refresh.
         sessionRevocationService.invalidateAccessTokens(targetUserId);
-        auditService.record("session_revoked", ENTITY_TYPE, sessionId, null);
     }
 
     /** Admin ends every session of a user. */
+    @AuditLog(action = "sessions_revoked_all", entityType = "Session", entityId = "#targetUserId", entityName = "")
     public void revokeAllUserSessions(UUID targetUserId) {
         refreshTokenStore.revokeAllForUser(targetUserId, currentTenant());
         sessionRevocationService.invalidateAccessTokens(targetUserId);
-        auditService.record("sessions_revoked_all", ENTITY_TYPE, targetUserId, null);
     }
 
     private static ActiveSessionResponse toResponse(ActiveSession session, boolean current) {

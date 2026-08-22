@@ -8,8 +8,8 @@ import java.util.UUID;
 /**
  * Coarse value type of a filterable/sortable field. Determines the set of supported
  * {@link FilterOperator}s and how wire values are parsed. Kept intentionally small —
- * numeric filtering has no direct entity attribute today and can be added when a real
- * field needs it (a {@code NUMERIC} kind plus parser branch).
+ * the first numeric entity attribute ({@code RequestLog.durationMs}) brought the
+ * {@code NUMERIC} kind with it.
  */
 public enum FilterFieldType {
 
@@ -26,6 +26,10 @@ public enum FilterFieldType {
     TEMPORAL(EnumSet.of(FilterOperator.EQ, FilterOperator.NOT_EQ,
             FilterOperator.GT, FilterOperator.GTE, FilterOperator.LT, FilterOperator.LTE,
             FilterOperator.BETWEEN, FilterOperator.IS_NULL, FilterOperator.IS_NOT_NULL), OffsetDateTime.class),
+
+    NUMERIC(EnumSet.of(FilterOperator.EQ, FilterOperator.NOT_EQ,
+            FilterOperator.GT, FilterOperator.GTE, FilterOperator.LT, FilterOperator.LTE,
+            FilterOperator.BETWEEN, FilterOperator.IS_NULL, FilterOperator.IS_NOT_NULL), Long.class),
 
     ENUM(EnumSet.of(FilterOperator.EQ, FilterOperator.NOT_EQ, FilterOperator.IN, FilterOperator.NOT_IN,
             FilterOperator.IS_NULL, FilterOperator.IS_NOT_NULL), null);

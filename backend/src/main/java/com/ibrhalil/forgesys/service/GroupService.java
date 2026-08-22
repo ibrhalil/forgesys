@@ -17,6 +17,8 @@ import com.ibrhalil.forgesys.exception.ResourceNotFoundException;
 import com.ibrhalil.forgesys.persistence.repository.GroupRepository;
 import com.ibrhalil.forgesys.persistence.repository.RoleRepository;
 import com.ibrhalil.forgesys.persistence.repository.UserRepository;
+import com.ibrhalil.forgesys.audit.AuditDeltaContext;
+import com.ibrhalil.forgesys.audit.AuditLog;
 import com.ibrhalil.forgesys.security.SessionRevocationService;
 import com.ibrhalil.forgesys.security.CustomUserDetailsService;
 import com.ibrhalil.forgesys.security.LastAdminGuard;
@@ -84,6 +86,7 @@ public class GroupService {
     }
 
     @Transactional
+    @AuditLog(action = "group_created", entityType = "Group", entityId = "#result.id", entityName = "#result.name")
     public GroupResponse create(GroupRequest request) {
         if (groupRepository.existsByName(request.name())) {
             throw new BusinessException(ErrorCode.GROUP_NAME_TAKEN, "Group name already exists: " + request.name());
@@ -93,11 +96,11 @@ public class GroupService {
         group.setDescription(request.description());
         group.setActive(request.active() == null || request.active());
         Group saved = groupRepository.save(group);
-        auditService.record("group_created", "Group", saved.getId(), saved.getName());
         return toResponse(saved);
     }
 
     @Transactional
+    @AuditLog(action = "group_updated", entityType = "Group", entityId = "#result.id", entityName = "#result.name")
     public GroupResponse update(UUID id, GroupRequest request) {
         Group group = getGroupOrThrow(id);
         if (!group.getName().equals(request.name()) && groupRepository.existsByName(request.name())) {
@@ -123,11 +126,11 @@ public class GroupService {
         if (wasActive && Boolean.FALSE.equals(request.active())) {
             sessionRevocationService.revokeGroupMembers(saved.getId());
         }
-        auditService.record("group_updated", "Group", saved.getId(), saved.getName());
         return toResponse(saved);
     }
 
     @Transactional
+    @AuditLog(action = "group_deleted", entityType = "Group", entityId = "#id", entityName = "")
     public void delete(UUID id) {
         Group group = getGroupOrThrow(id);
         // Detach the group from every member's collection BEFORE the soft-delete:
@@ -147,10 +150,11 @@ public class GroupService {
         // guard, so a rejected delete leaves no Redis-side revoke behind.
         lastAdminGuard.assertActiveAdminExists();
         sessionRevocationService.revokeUsers(memberIds);
-        auditService.record("group_deleted", "Group", id, null);
     }
 
     @Transactional
+    @AuditLog(action = "group_roles_updated", entityType = "Group", entityId = "#result.id", entityName = "#result.name",
+            captureDelta = true)
     public GroupResponse setRoles(UUID groupId, AssignRolesRequest request) {
         Group group = getGroupOrThrow(groupId);
         List<Role> roles = resolveRoles(request.roleIds());
@@ -166,10 +170,9 @@ public class GroupService {
         // but their outstanding tokens still embed the old set — revoke members so the
         // delta is enforced on the next request, not at access-token TTL.
         sessionRevocationService.revokeGroupMembers(saved.getId());
-        // Faz 2b: record the before/after role set on the group.
-        auditService.recordDelta("group_roles_updated", "Group", saved.getId(), saved.getName(),
-                AuditService.namesJson(beforeNames),
-                AuditService.namesJson(roles.stream().map(Role::getName).collect(java.util.stream.Collectors.toSet())));
+        // Faz 2b: set delta values for AOP aspect
+        AuditDeltaContext.setOldValue(AuditService.namesJson(beforeNames));
+        AuditDeltaContext.setNewValue(AuditService.namesJson(roles.stream().map(Role::getName).collect(java.util.stream.Collectors.toSet())));
         return toResponse(saved);
     }
 
@@ -179,6 +182,7 @@ public class GroupService {
      * longer targeted, adds it to newly targeted users.
      */
     @Transactional
+    @AuditLog(action = "group_members_updated", entityType = "Group", entityId = "#group.id", entityName = "#group.name")
     public GroupResponse setMembers(UUID groupId, AssignMembersRequest request) {
         Group group = getGroupOrThrow(groupId);
         Set<UUID> targetIds = new LinkedHashSet<>(request.userIds());
@@ -209,7 +213,6 @@ public class GroupService {
         // case). Added members gain permissions on their next login — no revoke, so adding
         // someone to a group does not log them out.
         sessionRevocationService.revokeUsers(removedMemberIds);
-        auditService.record("group_members_updated", "Group", group.getId(), group.getName());
         return toResponse(group);
     }
 
