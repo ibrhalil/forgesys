@@ -21,7 +21,6 @@ public class TenantMigrationSupport {
                 .dataSource(dataSource)
                 .schemas(schemaName)
                 .locations(TENANT_MIGRATION_LOCATION)
-                .baselineOnMigrate(true)
                 .load();
         flyway.migrate();
         log.info("Flyway migrations executed for schema: {}", schemaName);

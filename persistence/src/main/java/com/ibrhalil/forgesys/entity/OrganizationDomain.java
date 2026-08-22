@@ -60,8 +60,7 @@ public class OrganizationDomain extends BaseEntity {
     /**
      * Reserved for the custom-domain verification flow (deferred). {@code DNS_TXT} or
      * {@code MX}; {@code null} while not yet driven through verification. CHECK
-     * constraint enforced at the DB level (see {@code public/V3} migration).
-     */
+     * constraint enforced at the DB level (see {@code public/V1} migration).     */
     @Column(name = "verification_method", length = 50)
     private String verificationMethod;
 }

@@ -16,11 +16,34 @@
 #     (IDE watchers, git) couldn't traverse. See infra/README.md.
 # ============================================================
 services:
+  # One-shot: ensure the bind-mount dir exists with the right ownership before
+  # postgres starts. Makes `rm -rf infra/data` fully recoverable — even if Docker
+  # recreated the dir as root, or on Linux-native Docker without user-namespace
+  # mapping. Replaces the manual `sudo chown -R 70:70` step.
+  data-init:
+    image: alpine:3.20
+    container_name: forgesys-data-init
+    restart: "no"
+    volumes:
+      - ./infra/data/postgres:/pgdata
+    command: chown -R 70:70 /pgdata
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+
   db:
     image: postgres:16-alpine
     container_name: forgesys-db
     init: true
     restart: unless-stopped
+    depends_on:
+      data-init:
+        condition: service_completed_successfully
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-forgesys}
       POSTGRES_USER: ${POSTGRES_USER:-forgeadmin}
@@ -38,8 +61,11 @@ services:
       - ./infra/data/postgres:/var/lib/postgresql/data
       # First-run init scripts (extensions etc.) — see infra/init-sql/README.md
       - ./infra/init-sql:/docker-entrypoint-initdb.d:ro
+    # Real query, not just pg_isready: pg_isready never reaches authentication,
+    # so a broken data dir (e.g. infra/data deleted while the container ran)
+    # still reports healthy. SELECT 1 catches that as UNHEALTHY.
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-forgeadmin} -d ${POSTGRES_DB:-forgesys}"]
+      test: ["CMD-SHELL", "PGPASSWORD=$$POSTGRES_PASSWORD psql -U $$POSTGRES_USER -d $$POSTGRES_DB -h /var/run/postgresql -tAc 'SELECT 1'"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -91,6 +117,10 @@ services:
       - SETUID
       - SETGID
       - CHOWN
+      # DAC_OVERRIDE: the entrypoint (root, caps dropped) runs `find /data` to
+      # chown everything to redis; without it root cannot traverse the 700
+      # appendonlydir owned by UID 999 on restart-with-existing-data → crash loop.
+      - DAC_OVERRIDE
     networks:
       - forgesys-net
     logging:

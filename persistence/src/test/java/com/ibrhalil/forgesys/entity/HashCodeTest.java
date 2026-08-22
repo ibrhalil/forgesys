@@ -37,10 +37,10 @@ class HashCodeTest {
 
     @Test
     void generatedIdEntitiesWithDistinctIdsDoNotCollideInSet() {
-        RefreshToken first = refreshTokenWithId(UUID.randomUUID());
-        RefreshToken second = refreshTokenWithId(UUID.randomUUID());
+        TenantVerificationToken first = verificationTokenWithId(UUID.randomUUID());
+        TenantVerificationToken second = verificationTokenWithId(UUID.randomUUID());
 
-        Set<RefreshToken> tokens = new HashSet<>();
+        Set<TenantVerificationToken> tokens = new HashSet<>();
         tokens.add(first);
         tokens.add(second);
 
@@ -63,8 +63,8 @@ class HashCodeTest {
         return role;
     }
 
-    private RefreshToken refreshTokenWithId(UUID id) {
-        RefreshToken token = new RefreshToken();
+    private TenantVerificationToken verificationTokenWithId(UUID id) {
+        TenantVerificationToken token = new TenantVerificationToken();
         token.setId(id);
         return token;
     }

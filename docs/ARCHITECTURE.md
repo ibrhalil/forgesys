@@ -96,18 +96,18 @@ flowchart TB
             TR1[t_roles]
             TP1[t_permissions]
             TG1[t_groups]
-            TJoin1[t_user_roles<br/>t_user_groups<br/>t_role_permissions<br/>t_group_roles]
+            TJoin1[t_user_roles<br/>t_user_groups<br/>t_role_permissions<br/>t_group_roles<br/>t_role_parents]
             TAcc1[t_user_accounts<br/>t_user_profiles]
-            TRF1[t_refresh_tokens]
+            TMod1[t_projects<br/>t_tasks<br/>t_audit_logs<br/>t_login_history]
         end
         subgraph T2[tenant_stark]
             TU2[t_users]
             TR2[t_roles]
             TP2[t_permissions]
             TG2[t_groups]
-            TJoin2[t_user_roles<br/>t_user_groups<br/>t_role_permissions<br/>t_group_roles]
+            TJoin2[t_user_roles<br/>t_user_groups<br/>t_role_permissions<br/>t_group_roles<br/>t_role_parents]
             TAcc2[t_user_accounts<br/>t_user_profiles]
-            TRF2[t_refresh_tokens]
+            TMod2[t_projects<br/>t_tasks<br/>t_audit_logs<br/>t_login_history]
         end
     end
 ```
@@ -122,20 +122,26 @@ flowchart TB
 
 | Şema             | Tablo               | Amaç                                 | Migration           |
 |------------------|---------------------|--------------------------------------|---------------------|
-| `public`         | `t_companies`       | Tenant kayıt (subdomain→schema map, status)  | `public/V1__...sql` |
-| `public`         | `t_organization_domains` | Org-owned email domain'leri (1:N, opsiyonel, K-32) | `public/V3__...sql` |
-| `public`         | `t_tenant_verification_tokens` | K-21 signup token'ları (admin credential'lar gömülü) | `public/V3__...sql` |
-| `tenant_<sub>`   | `t_users`           | Kullanıcı hesabı (credential'lar)    | `tenant/V1__...sql` |
-| `tenant_<sub>`   | `t_user_accounts`   | Security state (lock, failed login)  | `tenant/V1__...sql` |
-| `tenant_<sub>`   | `t_user_profiles`   | PII (isim, telefon, adres)           | `tenant/V1__...sql` |
-| `tenant_<sub>`   | `t_roles`           | RBAC rolleri                         | `tenant/V1__...sql` |
-| `tenant_<sub>`   | `t_permissions`     | RBAC yetkileri                       | `tenant/V1__...sql` |
-| `tenant_<sub>`   | `t_groups`          | Kullanıcı grupları                   | `tenant/V1__...sql` |
-| `tenant_<sub>`   | `t_user_roles`      | User↔Role join                       | `tenant/V1__...sql` |
-| `tenant_<sub>`   | `t_user_groups`     | User↔Group join                      | `tenant/V1__...sql` |
-| `tenant_<sub>`   | `t_role_permissions`| Role↔Permission join                 | `tenant/V1__...sql` |
-| `tenant_<sub>`   | `t_group_roles`     | Group↔Role join                      | `tenant/V1__...sql` |
-| `tenant_<sub>`   | `t_refresh_tokens`  | JWT refresh token'ları               | `tenant/V1__...sql` |
+| `public`         | `t_companies`       | Tenant kayıt (subdomain→schema map, status)  | `public/V1__tenant_registry.sql` |
+| `public`         | `t_organization_domains` | Org-owned email domain'leri (1:N, opsiyonel, K-32) | `public/V1__tenant_registry.sql` |
+| `public`         | `t_tenant_verification_tokens` | K-21 signup token'ları (admin credential'lar gömülü) | `public/V1.1__signup_verification_tokens.sql` |
+| `tenant_<sub>`   | `t_users`           | Kullanıcı hesabı (credential'lar)    | `tenant/V1__iam_users.sql` |
+| `tenant_<sub>`   | `t_user_accounts`   | Security state (lock, failed login)  | `tenant/V1__iam_users.sql` |
+| `tenant_<sub>`   | `t_user_profiles`   | PII (isim, telefon, adres)           | `tenant/V1__iam_users.sql` |
+| `tenant_<sub>`   | `t_roles`           | RBAC rolleri (+ `all_permissions` flag, parent inheritance) | `tenant/V1.1__iam_rbac.sql` |
+| `tenant_<sub>`   | `t_permissions`     | RBAC yetkileri                       | `tenant/V1.1__iam_rbac.sql` |
+| `tenant_<sub>`   | `t_groups`          | Kullanıcı grupları                   | `tenant/V1.1__iam_rbac.sql` |
+| `tenant_<sub>`   | `t_user_roles`      | User↔Role join                       | `tenant/V1.1__iam_rbac.sql` |
+| `tenant_<sub>`   | `t_user_groups`     | User↔Group join                      | `tenant/V1.1__iam_rbac.sql` |
+| `tenant_<sub>`   | `t_role_permissions`| Role↔Permission join                 | `tenant/V1.1__iam_rbac.sql` |
+| `tenant_<sub>`   | `t_group_roles`     | Group↔Role join                      | `tenant/V1.1__iam_rbac.sql` |
+| `tenant_<sub>`   | `t_role_parents`    | Role→parent-role inheritance join    | `tenant/V1.1__iam_rbac.sql` |
+| `tenant_<sub>`   | `t_projects`        | Proje/workspace konteyneri (modüller) | `tenant/V1.3__pm_projects_tasks.sql` |
+| `tenant_<sub>`   | `t_tasks`           | Task modülü (project-scoped)         | `tenant/V1.3__pm_projects_tasks.sql` |
+| `tenant_<sub>`   | `t_audit_logs`      | Audit trail (append-only, K-19)      | `tenant/V1.2__audit.sql` |
+| `tenant_<sub>`   | `t_login_history`   | Login denemeleri (append-only, K-19) | `tenant/V1.2__audit.sql` |
+
+> Refresh token'lar tabloda DEĞİL — Redis-first (K-34, [DECISIONS](DECISIONS.md#k-34)); eski `t_refresh_tokens` ölü tablosu K-36 temizliğinde kaldırıldı. Migration'ların tamamı pre-1.0.0 squash'ı ile alan-bazlı `V1.x` baseline ailesine indirildi ([K-36](DECISIONS.md#k-36)) — yeni migration'lar `V2`'den devam eder.
 
 **Tenant provisioning akışı** (`TenantProvisioningService`, K-21 iki-fazlı):
 
@@ -223,7 +229,7 @@ classDiagram
     class Role
     class Permission
     class Group
-    class RefreshToken
+    class TenantVerificationToken
 
     BaseEntity <|-- Company
     BaseEntity <|-- User
@@ -232,7 +238,7 @@ classDiagram
     BaseEntity <|-- Group
     SoftDeleteAuditEntity <|-- UserAccount
     SoftDeleteAuditEntity <|-- UserProfile
-    GeneratedIdAuditEntity <|-- RefreshToken
+    GeneratedIdAuditEntity <|-- TenantVerificationToken
 ```
 
 - **`@MappedSuperclass`** — DB tablosu karşılığı yok, sadece alanları concrete entity'lere inherits.

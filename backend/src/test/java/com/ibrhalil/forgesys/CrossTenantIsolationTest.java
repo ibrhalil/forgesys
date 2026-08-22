@@ -81,7 +81,6 @@ class CrossTenantIsolationTest {
         registry.add("spring.flyway.enabled", () -> "true");
         registry.add("spring.flyway.schemas", () -> "public");
         registry.add("spring.flyway.locations", () -> "classpath:db/migration/public");
-        registry.add("spring.flyway.baseline-on-migrate", () -> "true");
     }
 
     @Autowired private CompanyRepository companyRepository;
