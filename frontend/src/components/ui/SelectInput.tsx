@@ -28,6 +28,8 @@ export interface SelectInputProps<V> {
   creatable?: boolean;
   isClearable?: boolean;
   isDisabled?: boolean;
+  /** Marks individual options as non-selectable (rendered muted, e.g. unsupported types). */
+  isOptionDisabled?: (option: SelectOption<V>) => boolean;
   isLoading?: boolean;
   /** Render the dropdown in a portal (default document.body) so it escapes overflow
    *  containers (e.g. the Modal scroll area). */
@@ -61,6 +63,7 @@ export function SelectInput<V>({
   creatable = false,
   isClearable = false,
   isDisabled = false,
+  isOptionDisabled,
   isLoading = false,
   menuPortalTarget,
   className,
@@ -111,10 +114,11 @@ export function SelectInput<V>({
     clearIndicator: () => cn('text-muted hover:text-main', compact && 'p-1'),
     menu: () => 'mt-1 overflow-hidden rounded-lg border border-glass bg-sidebar shadow-xl shadow-black/10',
     menuList: () => 'py-1',
-    option: (state: { isSelected?: boolean; isFocused?: boolean }) =>
+    option: (state: { isSelected?: boolean; isFocused?: boolean; isDisabled?: boolean }) =>
       cn(
         compact ? 'cursor-pointer px-3 py-1.5 text-[13px]' : 'cursor-pointer px-3 py-2 text-sm',
         state.isSelected ? 'bg-accent/15 font-medium text-accent' : state.isFocused ? 'bg-main/5 text-main' : 'text-main',
+        state.isDisabled && 'cursor-not-allowed text-muted/50',
       ),
     noOptionsMessage: () => 'px-3 py-2 text-sm text-muted',
     loadingMessage: () => 'px-3 py-2 text-sm text-muted',
@@ -131,6 +135,7 @@ export function SelectInput<V>({
       isMulti={isMulti}
       isClearable={isClearable}
       isDisabled={isDisabled}
+      isOptionDisabled={isOptionDisabled as never}
       isLoading={isLoading}
       menuPortalTarget={portal}
       styles={{ menuPortal: (base) => ({ ...base, zIndex: 60 }) }}
