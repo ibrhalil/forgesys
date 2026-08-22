@@ -84,8 +84,8 @@ public class PlatformCompanyService {
     }
 
     private CompanyResponse mapToResponse(Company company) {
-        // schemaName/dbRole are intentionally omitted — internal details, not part of
-        // the API contract ([RISK] CompanyResponse internal leak cleanup).
+        // schemaName is intentionally omitted — internal detail, not part of
+        // the API contract (CompanyResponse internal leak cleanup).
         return new CompanyResponse(
                 company.getId(),
                 company.getName(),

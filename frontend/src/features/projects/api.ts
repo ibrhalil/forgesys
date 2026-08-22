@@ -13,7 +13,16 @@ export const projectsApi = {
 
 // Tasks are nested under their owning project (scoped REST).
 export const tasksApi = {
-  list: (projectId: string) => api.get<Task[]>(`/api/v1/projects/${projectId}/tasks`),
+  /**
+   * Paged tasks (K-37). The board fetches one large page and groups client-side
+   * (backend hard cap: 1000).
+   */
+  list: (projectId: string) =>
+    api
+      .get<PageResponse<Task>>(
+        `/api/v1/projects/${projectId}/tasks${toQuery({ size: 1000, sort: 'createdDate,desc' })}`,
+      )
+      .then(normalizePage),
   get: (projectId: string, taskId: string) =>
     api.get<Task>(`/api/v1/projects/${projectId}/tasks/${taskId}`),
   create: (projectId: string, data: TaskRequest) =>

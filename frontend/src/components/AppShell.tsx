@@ -3,7 +3,6 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { LuChevronDown, LuLogOut } from 'react-icons/lu';
 import { useAuthStore } from '../store/authStore';
-import { useMe } from '../features/users/hooks';
 import { NAV_GROUPS, NAV_ITEMS, type NavItem } from '../app/Navigation';
 import { BreadcrumbTargetContext } from './BreadcrumbTargetContext';
 import { LanguageToggle } from './LanguageToggle';
@@ -77,9 +76,6 @@ export function AppShell() {
   const hasAuthority = useAuthStore((s) => s.hasAuthority);
   const navigate = useNavigate();
   const { t } = useT();
-  // Full profile for the user chip (shares the ['users','me'] query cache with the
-  // Profile page — no extra request). Falls back through username -> full name -> email.
-  const { data: me } = useMe();
 
   const [confirmingLogout, setConfirmingLogout] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -97,8 +93,10 @@ export function AppShell() {
     }
   };
 
-  const fullName = [me?.firstName, me?.lastName].filter(Boolean).join(' ');
-  const displayName = me?.username || fullName || user?.email || '—';
+  // /users/me is the single self endpoint (K-37) — authStore.user carries the full
+  // profile (username/first/last name) plus the token authorities.
+  const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ');
+  const displayName = user?.username || fullName || user?.email || '—';
   const initial = displayName.charAt(0).toUpperCase();
 
   // Authority-driven visibility: a user without the required authority sees neither

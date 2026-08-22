@@ -56,9 +56,9 @@ class TaskControllerTest extends AbstractRbacWebTest {
         mockMvc.perform(get("/api/v1/projects/" + project.getId() + "/tasks")
                         .cookie(auth("reader@tenant.test", "pm:task:read")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(2))
-                .andExpect(jsonPath("$[?(@.title=='Design API')].status").value("TODO"))
-                .andExpect(jsonPath("$[?(@.title=='Write docs')].status").value("DONE"));
+                .andExpect(jsonPath("$.data.length()").value(2))
+                .andExpect(jsonPath("$.data[?(@.title=='Design API')].status").value("TODO"))
+                .andExpect(jsonPath("$.data[?(@.title=='Write docs')].status").value("DONE"));
     }
 
     @Test

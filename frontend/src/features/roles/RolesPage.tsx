@@ -176,7 +176,7 @@ function AssignPermissionsModal({ role, onClose }: { role: Role; onClose: () => 
   const [all, setAll] = useState(role.allPermissions);
   const [selected, setSelected] = useState<string[]>(role.permissions.map((p) => p.id));
 
-  const items: CheckboxItem[] = (permissions ?? []).map((p) => ({ id: p.id, label: p.name, description: p.description }));
+  const items: CheckboxItem[] = (permissions?.items ?? []).map((p) => ({ id: p.id, label: p.name, description: p.description }));
 
   const submit = async () => {
     try {

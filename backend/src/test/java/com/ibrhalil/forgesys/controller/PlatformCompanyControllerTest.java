@@ -165,7 +165,6 @@ class PlatformCompanyControllerTest extends AbstractRbacWebTest {
         company.setName(name);
         company.setSubdomain(name + "sub");
         company.setSchemaName("tenant_" + name);
-        company.setDbRole("role_" + name);
         company.setStatus(status);
         entityManager.persist(company);
         entityManager.flush();

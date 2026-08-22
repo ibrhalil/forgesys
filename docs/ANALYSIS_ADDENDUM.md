@@ -34,7 +34,7 @@ Deploy edilmiş client yok; K-36 squash felsefesiyle aynı pencere. Tek seferlik
 | 3 | `DELETE /users/{id}/lock` → 200 + body | Diğer tüm DELETE'ler 204 | 204 (veya semantik olarak `POST .../unlock` — implementation kararı) |
 | 4 | User session namespace 4 controller'a bölünmüş | `SessionController` `/api/v1/users/**` path'leri taşıyor (ad≠path) + `AllSessionsController` `/api/v1/sessions` | Session endpoint'leri tek controller'da toplanır; controller adı = path namespace |
 | 5 | `AuditController` class-level `@RequestMapping` yok | Tek istisna (full path'ler inline) | Class-level mapping (konvansiyon) |
-| 6 | `AuthController.registerCompany` → `Map<String,Object>` | Dokümante tek istisna | Proper response record (manuel `toResponse` convention — MapStruct zaten iptal) |
+| 6 | `AuthController.registerCompany` → `Map<String,Object>` | Dokümante tek istisna | ~~Proper response record~~ — **envanter bulgusu eski kalmış**: kod zaten `CompanyRegisterResponse` record döndürüyordu; kural (Map dönüş yok) AGENTS.md'ye işlendi (K-37 uygulamasında teyit) |
 
 **Springdoc-openapi (Karar D-6):** bu geçiş **bittikten sonra** eklenir — şema stabilken. dev'de açık, prod'da kapalı. (Ask-first: dependency onayı implementation session'ında.)
 
@@ -92,8 +92,13 @@ Deploy edilmiş client yok; K-36 squash felsefesiyle aynı pencere. Tek seferlik
 ```
 Session 0 (bu session — dokümantasyon) ✅
 Session 1 — Backend temizlik (K-38 kaldırma + K-37 API geçişi + K-40 tekrar/scalability)
-  ⚠ Baseline migration düzenlemesi ( OrganizationDomain/dbRole/token kolonları V1'den çıkarılır)
-    K-36 varsayımı gereği "deploy edilmiş DB yok" teyidi implementation ÖNCESİ alınacak (ask-first).
+  ✅ K-38 uygulandı (2026-08-22): baseline V1 düzenlemesi + tüm ölü küme kaldırıldı
+    (462 H2 + 9 gated PG IT yeşil; local DB reset gerektirir).
+  ✅ K-37 uygulandı (2026-08-22): permissions/tasks PageResponse, tek /users/me,
+    POST /unlock 204, session controller rename'leri (ad=path), AuditController
+    class-mapping; registerCompany zaten DTO imiş (envanter notu düzeltildi).
+    (469 H2 + 9 gated PG IT yeşil; frontend göçü dahil.)
+  ⏳ K-40 (Session 3) bekliyor.
 Session 2 — Frontend kalite (K-39)
 Session 3 — Springdoc-openapi (D-6 — K-37 sonrası)
 ```

@@ -2,18 +2,23 @@ package com.ibrhalil.forgesys.service;
 
 import com.ibrhalil.forgesys.dto.TaskRequest;
 import com.ibrhalil.forgesys.dto.TaskResponse;
+import com.ibrhalil.forgesys.entity.AuditEntity_;
 import com.ibrhalil.forgesys.entity.Task;
 import com.ibrhalil.forgesys.entity.TaskPriority;
 import com.ibrhalil.forgesys.entity.TaskStatus;
+import com.ibrhalil.forgesys.entity.Task_;
 import com.ibrhalil.forgesys.exception.ResourceNotFoundException;
 import com.ibrhalil.forgesys.persistence.repository.ProjectRepository;
 import com.ibrhalil.forgesys.persistence.repository.TaskRepository;
 import com.ibrhalil.forgesys.persistence.repository.UserRepository;
+import com.ibrhalil.forgesys.web.filter.FilterFieldSet;
+import com.ibrhalil.forgesys.web.filter.FilterFieldType;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
 import java.util.UUID;
 
 /**
@@ -26,17 +31,26 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class TaskService {
 
+    /** Sortable/filterable direct attributes of the project's task list (K-37 paging). */
+    public static final FilterFieldSet FILTER_FIELDS = FilterFieldSet.builder()
+            .field(Task_.TITLE, FilterFieldType.STRING, true)
+            .field(Task_.STATUS, FilterFieldType.ENUM, false)
+            .field(Task_.PRIORITY, FilterFieldType.ENUM, false)
+            .field(AuditEntity_.CREATED_DATE, FilterFieldType.TEMPORAL, false)
+            .field(AuditEntity_.UPDATED_AT, FilterFieldType.TEMPORAL, false)
+            .build();
+
     private final TaskRepository taskRepository;
     private final ProjectRepository projectRepository;
     private final UserRepository userRepository;
     private final AuditService auditService;
 
     @Transactional(readOnly = true)
-    public List<TaskResponse> list(UUID projectId) {
+    public Page<TaskResponse> list(UUID projectId, Pageable pageable) {
         if (!projectRepository.existsById(projectId)) {
             throw new ResourceNotFoundException("Project not found: " + projectId);
         }
-        return taskRepository.findAllByProjectId(projectId).stream().map(this::toResponse).toList();
+        return taskRepository.findAllByProjectId(projectId, pageable).map(this::toResponse);
     }
 
     @Transactional(readOnly = true)

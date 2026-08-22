@@ -169,7 +169,7 @@ class AuthControllerLoginTest {
     void meWithAccessTokenCookieReturnsCurrentUser() throws Exception {
         String token = loginAndGetToken();
 
-        mockMvc.perform(get("/api/v1/auth/me").cookie(new Cookie(ACCESS_COOKIE, token)))
+        mockMvc.perform(get("/api/v1/users/me").cookie(new Cookie(ACCESS_COOKIE, token)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.email").value(EMAIL))
                 .andExpect(jsonPath("$.authorities[0]").value("tasks:task:read"));
@@ -177,7 +177,7 @@ class AuthControllerLoginTest {
 
     @Test
     void meWithoutCookieIsUnauthorized() throws Exception {
-        mockMvc.perform(get("/api/v1/auth/me"))
+        mockMvc.perform(get("/api/v1/users/me"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("auth_unauthenticated"));
     }
@@ -329,10 +329,9 @@ class AuthControllerLoginTest {
                 UUID.randomUUID().toString(), "admin-writer@acme.com", "public",
                 java.util.List.of("iam:user:write"));
         User lockedUser = userRepository.findByEmail(EMAIL).orElseThrow();
-        mockMvc.perform(delete("/api/v1/users/{id}/lock", lockedUser.getId())
+        mockMvc.perform(post("/api/v1/users/{id}/unlock", lockedUser.getId())
                         .cookie(new Cookie(ACCESS_COOKIE, token)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.lockedUntil").value(org.hamcrest.Matchers.nullValue()));
+                .andExpect(status().isNoContent());
 
         mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)

@@ -91,7 +91,7 @@ class AuthRefreshControllerTest extends AbstractRbacWebTest {
         assertThatNotEquals(oldRefresh, newRefresh);
 
         // The new access token authenticates.
-        mockMvc.perform(get("/api/v1/auth/me").cookie(new Cookie(COOKIE_NAME, newAccess)))
+        mockMvc.perform(get("/api/v1/users/me").cookie(new Cookie(COOKIE_NAME, newAccess)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.email").value(EMAIL));
 
@@ -130,7 +130,7 @@ class AuthRefreshControllerTest extends AbstractRbacWebTest {
         String refresh = loginCookies[1];
 
         // The access token works before logout.
-        mockMvc.perform(get("/api/v1/auth/me").cookie(new Cookie(COOKIE_NAME, access)))
+        mockMvc.perform(get("/api/v1/users/me").cookie(new Cookie(COOKIE_NAME, access)))
                 .andExpect(status().isOk());
 
         // Per-session logout: blacklists this access token's jti (other devices untouched).
@@ -140,7 +140,7 @@ class AuthRefreshControllerTest extends AbstractRbacWebTest {
                 .andExpect(status().isNoContent());
 
         // The blacklisted access token is now rejected.
-        mockMvc.perform(get("/api/v1/auth/me").cookie(new Cookie(COOKIE_NAME, access)))
+        mockMvc.perform(get("/api/v1/users/me").cookie(new Cookie(COOKIE_NAME, access)))
                 .andExpect(status().isUnauthorized());
 
         // The consumed refresh token is single-use now.
