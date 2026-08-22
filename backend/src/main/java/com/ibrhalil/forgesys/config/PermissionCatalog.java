@@ -3,22 +3,26 @@ package com.ibrhalil.forgesys.config;
 import java.util.List;
 
 /**
- * Catalog of built-in permissions seeded into every tenant schema by
- * {@link RbacSeeder}. Permission names follow {@code {module}:{resource}:{action}}.
+ * Catalog of built-in <em>core</em> permissions seeded into every tenant schema by
+ * {@link RbacSeeder}. Permission names follow {@code {module}:{resource}:{action}`.
  *
- * <p>Two namespaces:
+ * <p>Two core namespaces:
  * <ul>
  *   <li>{@code iam:*} — tenant-scoped identity/admin operations (User/Role/Permission/Group
- *       CRUD), enforced by {@code @PreAuthorize} on the RBAC controllers.</li>
+ *       CRUD + module management), enforced by {@code @PreAuthorize} on the RBAC controllers.</li>
  *   <li>{@code platform:*} — cross-tenant/platform operations (company management), reserved
  *       for the system tenant admin; enforced on {@code /api/v1/platform/**}.</li>
  * </ul>
  *
+ * <p>Product-module permissions (e.g. {@code pm:*}) are owned by their
+ * {@link ModuleDefinition} and seeded on module activation (K-16 / Epic 3.0.A), not into
+ * every tenant — {@link #CORE} drives only the always-present rows in {@code t_permissions}.
+ *
  * <p>The built-in {@code Admin} role implicitly holds every permission via the
  * {@code all_permissions} flag (set by {@code RbacSeeder}, resolved dynamically by
  * {@code CustomUserDetailsService} — no per-permission grant rows), so it stays complete
- * without the seeder re-syncing explicit grants. {@link #ALL} only drives which permission
- * <em>rows</em> are seeded into {@code t_permissions}.
+ * without the seeder re-syncing explicit grants; module permissions reach it automatically
+ * once their rows are seeded on activation.
  */
 public final class PermissionCatalog {
 
@@ -39,11 +43,15 @@ public final class PermissionCatalog {
     public static final String IAM_GROUP_WRITE = "iam:group:write";
     public static final String IAM_GROUP_DELETE = "iam:group:delete";
     public static final String IAM_AUDIT_READ = "iam:audit:read";
+    public static final String IAM_MODULE_READ = "iam:module:read";
+    public static final String IAM_MODULE_WRITE = "iam:module:write";
 
     public static final String PLATFORM_COMPANY_READ = "platform:company:read";
     public static final String PLATFORM_COMPANY_WRITE = "platform:company:write";
 
     // pm:* — project-management (the first product feature module, Faz 3 Stage 1).
+    // Definitions live in ModuleDefinition.PM (module-owned, seeded on activation);
+    // the constants stay here as the single naming source referenced by controllers.
     public static final String PM_PROJECT_READ = "pm:project:read";
     public static final String PM_PROJECT_WRITE = "pm:project:write";
     public static final String PM_PROJECT_DELETE = "pm:project:delete";
@@ -54,7 +62,7 @@ public final class PermissionCatalog {
     public record PermissionDefinition(String name, String description) {
     }
 
-    public static final List<PermissionDefinition> ALL = List.of(
+    public static final List<PermissionDefinition> CORE = List.of(
             new PermissionDefinition(IAM_USER_READ, "Read tenant users"),
             new PermissionDefinition(IAM_USER_WRITE, "Create or update tenant users"),
             new PermissionDefinition(IAM_USER_DELETE, "Delete tenant users"),
@@ -69,14 +77,10 @@ public final class PermissionCatalog {
             new PermissionDefinition(IAM_GROUP_WRITE, "Create or update tenant groups"),
             new PermissionDefinition(IAM_GROUP_DELETE, "Delete tenant groups"),
             new PermissionDefinition(IAM_AUDIT_READ, "Read tenant audit logs and login history"),
+            new PermissionDefinition(IAM_MODULE_READ, "Read tenant modules (catalog + activation state)"),
+            new PermissionDefinition(IAM_MODULE_WRITE, "Activate tenant modules"),
             new PermissionDefinition(PLATFORM_COMPANY_READ, "Read platform companies"),
-            new PermissionDefinition(PLATFORM_COMPANY_WRITE, "Update platform company status"),
-            new PermissionDefinition(PM_PROJECT_READ, "Read tenant projects"),
-            new PermissionDefinition(PM_PROJECT_WRITE, "Create or update tenant projects"),
-            new PermissionDefinition(PM_PROJECT_DELETE, "Delete tenant projects"),
-            new PermissionDefinition(PM_TASK_READ, "Read project tasks"),
-            new PermissionDefinition(PM_TASK_WRITE, "Create or update project tasks"),
-            new PermissionDefinition(PM_TASK_DELETE, "Delete project tasks")
+            new PermissionDefinition(PLATFORM_COMPANY_WRITE, "Update platform company status")
     );
 
     private PermissionCatalog() {

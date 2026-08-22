@@ -1,12 +1,15 @@
 package com.ibrhalil.forgesys;
 
 import com.ibrhalil.forgesys.common.tenant.TenantContext;
+import com.ibrhalil.forgesys.config.PlanDefinition;
 import com.ibrhalil.forgesys.dto.CompanyRegisterRequest;
 import com.ibrhalil.forgesys.entity.Company;
 import com.ibrhalil.forgesys.entity.CompanyStatus;
+import com.ibrhalil.forgesys.entity.Plan;
 import com.ibrhalil.forgesys.entity.User;
 import com.ibrhalil.forgesys.entity.UserAccount;
 import com.ibrhalil.forgesys.persistence.repository.CompanyRepository;
+import com.ibrhalil.forgesys.persistence.repository.PlanRepository;
 import com.ibrhalil.forgesys.persistence.repository.UserRepository;
 import com.ibrhalil.forgesys.service.TenantMigrationSupport;
 import com.ibrhalil.forgesys.service.TenantProvisioningService;
@@ -85,12 +88,24 @@ class CrossTenantIsolationTest {
 
     @Autowired private CompanyRepository companyRepository;
     @Autowired private UserRepository userRepository;
+    @Autowired private PlanRepository planRepository;
     @Autowired private TenantMigrationSupport tenantMigrationSupport;
     @Autowired private TenantProvisioningService provisioningService;
     @Autowired private DataSource dataSource;
 
     @BeforeAll
     void provisionTenants() {
+        // K-16: provisioning now writes an initial FREE subscription + default module
+        // activations, so the plan rows must exist (PlanSyncRunner's job at runtime;
+        // absent in the test profile).
+        for (PlanDefinition definition : PlanDefinition.values()) {
+            Plan plan = planRepository.findByKey(definition.key()).orElseGet(Plan::new);
+            plan.setKey(definition.key());
+            plan.setName(definition.displayName());
+            plan.setRank(definition.rank());
+            plan.setActive(true);
+            planRepository.save(plan);
+        }
         // Tenant A via the full bootstrap flow (also exercises RISK-26): the admin user
         // must land in tenant_tenanta despite the mid-transaction TenantContext switch.
         provisioningService.provisionSystemTenant(new CompanyRegisterRequest(

@@ -239,6 +239,7 @@ public class GlobalExceptionHandler {
         if (lower.contains("groups_name")) return ErrorCode.GROUP_NAME_TAKEN;
         if (lower.contains("permissions_name")) return ErrorCode.PERMISSION_NAME_TAKEN;
         if (lower.contains("projects_name")) return ErrorCode.PROJECT_NAME_TAKEN;
+        if (lower.contains("tenant_modules_company_module")) return ErrorCode.MODULE_ALREADY_ACTIVE;
         if (lower.contains("companies_subdomain") || lower.contains("companies_schema_name")) {
             return ErrorCode.COMPANY_SUBDOMAIN_TAKEN;
         }

@@ -20,6 +20,7 @@ const LoginHistoryPage = lazy(() => import('../features/audit/LoginHistoryPage')
 const SessionsPage = lazy(() => import('../features/sessions/SessionsPage').then((m) => ({ default: m.SessionsPage })));
 const AllSessionsPage = lazy(() => import('../features/sessions/AllSessionsPage').then((m) => ({ default: m.AllSessionsPage })));
 const UserSessionsPage = lazy(() => import('../features/sessions/UserSessionsPage').then((m) => ({ default: m.UserSessionsPage })));
+const ModulesPage = lazy(() => import('../features/modules/ModulesPage').then((m) => ({ default: m.ModulesPage })));
 
 export interface AppRoute {
   /** Relative path inside the AppShell layout; omit for the index route. */
@@ -52,4 +53,5 @@ export const SHELL_ROUTES: AppRoute[] = [
   { path: 'sessions', Component: SessionsPage },
   { path: 'all-sessions', Component: AllSessionsPage, authority: PERMISSIONS.USER_WRITE },
   { path: 'admin/users/:userId/sessions', Component: UserSessionsPage, authority: PERMISSIONS.USER_WRITE },
+  { path: 'modules', Component: ModulesPage, authority: PERMISSIONS.MODULE_READ },
 ];

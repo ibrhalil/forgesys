@@ -33,6 +33,10 @@ management:
 forgesys:
   multi-tenancy:
     base-domain: ${BASE_DOMAIN:localhost}
+  modules:
+    # K-16 modules activated for every tenant at provisioning (and backfilled at
+    # startup for pre-module-system tenants). Keys must exist in ModuleDefinition.
+    default-keys: ${FORGESYS_MODULES_DEFAULT_KEYS:pm}
   security:
     # Global password pepper (K-23). HMAC-SHA256 pre-hash key combined with BCrypt
     # so a DB leak alone cannot brute-force password hashes. MUST be non-blank —

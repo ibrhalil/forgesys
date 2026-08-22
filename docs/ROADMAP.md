@@ -230,14 +230,20 @@ Kod analizi sonucu keşfedilen P0 düzeltmeler. User CRUD / log'dan ÖNCE çöz�
 
 > Hibrit modüler platform: önce Module System altyapısı (3.0), sonra built-in modüller (3.1-3.4). Custom App Builder backend altyapısı da 3.0 ile gelir; UI'sı Faz 4.2.
 
-### Epic 3.0.A — Module System & Plan/Subscription (K-16)
-- `public` migration (sonraki versiyon — [K-36](DECISIONS.md#k-36) squash sonrası `V2`'den devam): `t_plans`, `t_subscriptions`, `t_tenant_modules`, `t_module_catalog`
-- `Plan`, `Subscription`, `TenantModuleActivation`, `ModuleCatalog` entity'leri
-- `Module` registry (enum/konfig — key, name, min_plan, flyway_path)
-- `ModuleActivationService` (plan kontrol -> Flyway tenant migration -> permission seed -> kayıt)
-- `PermissionSeeder` — modül aktivasyonunda `{module}:{resource}:{action}` namespace insert
-- Tenant signup -> `t_subscriptions` (default FREE) + varsayılan modüller (Tasks+Notes)
-- Module activation integration test (plan reject, Flyway, permission seed)
+### Epic 3.0.A — Module System & Plan/Subscription (K-16) — DONE (2026-08-22)
+> Uygulama kararları: [DECISIONS.md K-16](DECISIONS.md#k-16). Registry kodda (`ModuleDefinition`/`PlanDefinition` enum — `t_module_catalog` tablosu yapılmadı), modül-başı ayrı Flyway history (`db/migration/module/<key>` + `flyway_schema_history_mod_<key>`), `iam:module:read/write` + `GET /api/v1/modules` + `POST /modules/{key}/activate` (3.0.C'in modül parçası öne alındı). Gerçek PG doğrulaması: `ModuleActivationIT` (gated).
+
+- [x] `public` migration `V2__plans_subscriptions_modules.sql`: `t_plans`, `t_subscriptions`, `t_tenant_modules` (tenant-başı tek abonelik + `(company_id, module_key)` partial unique)
+- [x] `Plan`/`Subscription`/`TenantModule` entity'leri + repository'ler (public schema)
+- [x] `PlanDefinition` (FREE/PRO/ENTERPRISE) + `PlanSyncRunner` (`@Order(0)`, idempotent upsert)
+- [x] `ModuleDefinition` registry (key/name/minPlan/flywayLocation/permissions) — `pm` modüle çevrildi (FREE, baseline tabloları, permission'ları modül sahipliğine taşındı)
+- [x] `PermissionCatalog` split: `CORE` (iam+platform+`iam:module:*`) vs modül permission'ları; `RbacSeeder` core-only
+- [x] `TenantMigrationSupport.migrateModule` — modül-başı history tablosu + baseline-0
+- [x] `ModuleActivationService` (plan gate → migrate → permission seed (REQUIRES_NEW) → kayıt (caller tx)) + `activateDefaultModules` + `resyncForCompany`
+- [x] `ModuleSyncRunner` — mevcut tenantlara FREE backfill + default modüller + aktif modül re-sync
+- [x] Tenant signup → FREE subscription + default modüller (`verifyAndProvision` hook)
+- [x] `GET /modules` + `POST /modules/{key}/activate` + ErrorCode'lar (`module_not_found`, `module_already_active`, `subscription_not_found`, `module_plan_required`) + frontend permission mirror
+- [x] Testler: unit (activation/sync/plan-seed) + controller (H2) + `ModuleActivationIT` (Testcontainers, gerçek PG: provisioning hook + permission seed + history izolasyonu)
 
 ### Epic 3.0.B — Custom App Builder Backend (K-15, Notion-style)
 - `tenant` migration (sonraki versiyon): `t_apps`, `t_app_properties`, `t_app_records`, `t_app_record_values(value JSONB)`, `t_app_views`
@@ -250,7 +256,7 @@ Kod analizi sonucu keşfedilen P0 düzeltmeler. User CRUD / log'dan ÖNCE çöz�
 - View config güvenliği spike (filter/formula expression injection — sandbox/AST validation)
 
 ### Epic 3.0.C — Module/App API
-- `GET /api/v1/modules` (katalog + aktif) + `POST /modules/{key}/activate`
+- [x] `GET /api/v1/modules` (katalog + aktif) + `POST /modules/{key}/activate` — **3.0.A ile geldi** ([K-16](DECISIONS.md#k-16))
 - `GET/POST/PATCH/DELETE /api/v1/apps` (custom app CRUD)
 - `GET/POST/PATCH/DELETE /api/v1/apps/{id}/records` + `/properties` + `/views`
 - MapStruct mappers (`AppMapper`, `RecordMapper`, `ViewMapper`)

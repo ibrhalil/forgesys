@@ -24,9 +24,15 @@ Her kayıt:
 ### K-16
 **Plan Bazlı Modül Aktivasyonu**
 - **Bağlam:** Tüm tenant'lar tüm modülleri kullanmamalı. Free/Pro/Enterprise planları modül erişimini belirlemeli.
-- **Karar:** `t_plans`, `t_subscriptions`, `t_tenant_modules`, `t_module_catalog` yapısı. Tenant signup -> varsayılan FREE + default modüller (Tasks+Notes). Modül aktivasyonu plan kontrolü + Flyway tenant migration + permission seed adımlarından oluşur.
-- **Durum:** Planlandı (Faz 3.0.A). Finansal tarafı (gerçek ödeme) Faz 6.
-- **Etki:** Modül aktivasyonu çok adımlı (plan doğrula -> şema migrate -> permission seed -> kayıt).
+- **Karar:** `t_plans`, `t_subscriptions`, `t_tenant_modules` yapısı (public `V2`). Tenant signup -> varsayılan FREE + default modüller (Tasks+Notes; bugün `pm`, `forgesys.modules.default-keys`). Modül aktivasyonu plan kontrolü + Flyway tenant migration + permission seed adımlarından oluşur.
+- **Durum:** UYGULANDI (2026-08-22, Faz 3.0.A backend çekirdeği). Finansal tarafı (gerçek ödeme, plan değişimi, deaktivasyon) Faz 6.
+- **Etki / uygulama kararları:**
+  - **Modül registry'si kodda, DB'de değil:** `t_module_catalog` tablosu İÇİNMEZ — `ModuleDefinition` enum'u (key/displayName/minPlan/ownMigrations/permissions) tek doğruluk kaynağı; `t_tenant_modules` yalnızca aktivasyon durumu taşır (`module_key` string). Bir modül koddur (entity/service/migration); registry kaydı kodla birlikte gitmeli, DB'den sapmasın.
+  - **Plan registry de kodda:** `PlanDefinition` (FREE/PRO/ENTERPRISE + rank) — `PlanSyncRunner` (`@Order(0)`, `!test`) `t_plans`'a idempotent upsert. Plan rank karşılaştırması DB satırı üzerinden (`plan.rank >= module.minPlan.rank()`).
+  - **Modül-başı ayrı Flyway history:** modül migration'ları `db/migration/module/<key>/` altında (core `tenant/` DIŞINDA — Flyway location taraması rekürsif olduğundan core ağacında kalsaydı core history'ye dahil olurdu — IT'de keşfedildi) + history tablosu `flyway_schema_history_mod_<key>` (her modül V1'den bağımsız versiyonlanır, core ile çakışma imkânsız). `baselineOnMigrate(true) + baselineVersion("0")` — modül ilk aktivasyonda non-empty schema üstünde history açar, hiçbir migration atlamaZ (core'daki K-36 baseline-yasağı modül history'sini etkilemez).
+  - **Transaction split (FK-deadlock önleme):** aktivasyon kaydı (`t_tenant_modules`) caller tx'ine KATILIR (provisioning outer tx'i commit edilmemiş `Company` satırını tutar — REQUIRES_NEW insert PG'de FK lock ile self-deadlock yapardı); yalnızca permission seed `REQUIRES_NEW` (tenant şema yazısı, outer session `public`'a pinned — RISK-26). Gerçek PG'de doğrulandı (`ModuleActivationIT`).
+  - **Provisioning hook:** `verifyAndProvision` → FREE subscription insert + `activateDefaultModules` (default keys). `ModuleSyncRunner` (`!test`) startup'ta mevcut tenantlara FREE backfill + default modüller + aktif modüllerin migration/permission re-sync'i (yeni ship edilen modül migration'ları mevcut tenantlara yayılır).
+  - **PermissionCatalog split:** `ALL` → `CORE` (iam:* + platform:* + yeni `iam:module:read/write`); modül permission'ları (`pm:*`) `ModuleDefinition` sahipliğinde, aktivasyonda seed edilir. Admin (all_permissions) modül permission'larına otomatik ulaşır.
 
 ### K-18
 **Nginx ertelendi, Faz 2 önceli (2026-07-09)**
