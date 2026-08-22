@@ -36,7 +36,12 @@ forgesys:
   modules:
     # K-16 modules activated for every tenant at provisioning (and backfilled at
     # startup for pre-module-system tenants). Keys must exist in ModuleDefinition.
-    default-keys: ${FORGESYS_MODULES_DEFAULT_KEYS:pm}
+    # 'apps' (K-15 custom app builder) is FREE + default so adoption is the point;
+    # plans separate by plan limits (PlanDefinition.maxApps/maxRecordsPerApp).
+    # NOTE: the built-in fallback in ModuleProperties.DEFAULT_KEYS stays 'pm'-only —
+    # the test profile has no ModuleProperties bean and must not run module
+    # migrations implicitly; ITs activate modules explicitly.
+    default-keys: ${FORGESYS_MODULES_DEFAULT_KEYS:pm,apps}
   security:
     # Global password pepper (K-23). HMAC-SHA256 pre-hash key combined with BCrypt
     # so a DB leak alone cannot brute-force password hashes. MUST be non-blank —

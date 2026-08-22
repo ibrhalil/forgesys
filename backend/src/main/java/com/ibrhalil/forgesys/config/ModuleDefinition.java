@@ -33,6 +33,23 @@ public enum ModuleDefinition {
             new PermissionCatalog.PermissionDefinition(PermissionCatalog.PM_TASK_READ, "Read project tasks"),
             new PermissionCatalog.PermissionDefinition(PermissionCatalog.PM_TASK_WRITE, "Create or update project tasks"),
             new PermissionCatalog.PermissionDefinition(PermissionCatalog.PM_TASK_DELETE, "Delete project tasks")
+    )),
+
+    /**
+     * Custom App Builder (K-15 / Epic 3.0.B). The first module with {@code ownMigrations
+     * = true}: its tables ship under {@code db/migration/module/apps} and land in the
+     * tenant schema on activation (per-module Flyway history {@code
+     * flyway_schema_history_mod_apps}). {@code minPlan = FREE} — adoption is the point;
+     * plans separate by the {@link PlanDefinition} limits (maxApps / maxRecordsPerApp),
+     * enforced as a soft-block.
+     */
+    APPS("apps", "Custom App Builder", PlanDefinition.FREE, true, List.of(
+            new PermissionCatalog.PermissionDefinition(PermissionCatalog.APPS_APP_READ, "Read tenant custom apps (definitions, properties, views)"),
+            new PermissionCatalog.PermissionDefinition(PermissionCatalog.APPS_APP_WRITE, "Create or update tenant custom apps and their properties/views"),
+            new PermissionCatalog.PermissionDefinition(PermissionCatalog.APPS_APP_DELETE, "Delete tenant custom apps"),
+            new PermissionCatalog.PermissionDefinition(PermissionCatalog.APPS_RECORD_READ, "Read records of tenant custom apps"),
+            new PermissionCatalog.PermissionDefinition(PermissionCatalog.APPS_RECORD_WRITE, "Create or update custom app records"),
+            new PermissionCatalog.PermissionDefinition(PermissionCatalog.APPS_RECORD_DELETE, "Delete custom app records")
     ));
 
     /** Convention for per-module tenant migration locations ({@code %s} = module key). */

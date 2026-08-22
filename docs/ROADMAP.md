@@ -245,21 +245,21 @@ Kod analizi sonucu keşfedilen P0 düzeltmeler. User CRUD / log'dan ÖNCE çöz�
 - [x] `GET /modules` + `POST /modules/{key}/activate` + ErrorCode'lar (`module_not_found`, `module_already_active`, `subscription_not_found`, `module_plan_required`) + frontend permission mirror
 - [x] Testler: unit (activation/sync/plan-seed) + controller (H2) + `ModuleActivationIT` (Testcontainers, gerçek PG: provisioning hook + permission seed + history izolasyonu)
 
-### Epic 3.0.B — Custom App Builder Backend (K-15, Notion-style)
-- `tenant` migration (sonraki versiyon): `t_apps`, `t_app_properties`, `t_app_records`, `t_app_record_values(value JSONB)`, `t_app_views`
-- `persistence/pom.xml`: hypersistence-utils + `App*` entity'leri (JSONB mapping)
-- `AppBuilderService`: app/property/record/view CRUD + property type validation
-- Property type validators (TEXT/NUMBER/SELECT/DATE/USER/RELATION/FORMULA)
-- `AppRecordValueRepository` — JSONB GIN index ile sorgu (filter/sort)
-- Limit enforcement (max_custom_apps, max_records_per_app — soft-block)
-- Custom app builder CRUD testi
-- View config güvenliği spike (filter/formula expression injection — sandbox/AST validation)
+### Epic 3.0.B — Custom App Builder Backend (K-15, Notion-style) — DONE (2026-08-22)
+> Uygulama kararları: [`DECISIONS.md K-15`](DECISIONS.md#k-15). `apps` modül olarak geldi (`db/migration/module/apps` ağacının ilk kullanımı, FREE + default); JSONB mapping düz String (hypersistence-utils EKLENMEDİ); FORMULA ertelendi; MapStruct yerine manuel `toResponse` (mevcut konvansiyon).
+
+- [x] `apps` modülü: `t_apps`, `t_app_properties (config jsonb)`, `t_app_records`, `t_app_record_values (value jsonb, GIN jsonb_path_ops)`, `t_app_views (config jsonb)` — modül-başı Flyway history (`flyway_schema_history_mod_apps`)
+- [x] `AppBuilderService` (app/property/view CRUD + tip/config doğrulama) + `AppRecordService` (record CRUD, PATCH partial-merge, required coverage)
+- [x] Property type validators (TEXT/NUMBER/SELECT/DATE/USER/RELATION — FORMULA reddedilir, `AppPropertyValueValidator`)
+- [x] `AppRecordSearchExecutor` — native PG JSONB sorgu (`@>`/`#>>`/`::numeric`, GIN-backed; H2'de koşmaz)
+- [x] Limit enforcement (maxApps/maxRecordsPerApp kod registry — FREE 3/1k, PRO 25/50k, ENT sınırsız; soft-block 403 `app_limit_reached`, `PlanLimitService`)
+- [x] Testler: 34 unit + 29 H2 controller + `AppBuilderIT` (gated gerçek PG: aktivasyon + JSONB search + izolasyon)
+- [x] View config güvenliği spike'ı ÇÖZÜLDÜ: structured JSON DSL (`AppQueryValidator` + `AppViewConfigValidator`) — serbest expression dili yok, injection yüzeyi yapısal olarak kapalı
 
 ### Epic 3.0.C — Module/App API
 - [x] `GET /api/v1/modules` (katalog + aktif) + `POST /modules/{key}/activate` — **3.0.A ile geldi** ([K-16](DECISIONS.md#k-16))
-- `GET/POST/PATCH/DELETE /api/v1/apps` (custom app CRUD)
-- `GET/POST/PATCH/DELETE /api/v1/apps/{id}/records` + `/properties` + `/views`
-- MapStruct mappers (`AppMapper`, `RecordMapper`, `ViewMapper`)
+- [x] `GET/POST/PATCH/DELETE /api/v1/apps` (custom app CRUD) + `/apps/{id}/records` (+ `/search`, PATCH) + `/properties` + `/views` — **3.0.B ile geldi** ([K-15](DECISIONS.md#k-15))
+- ~~MapStruct mappers (`AppMapper`, `RecordMapper`, `ViewMapper`)~~ — iptal: Epic 2.1 MapStruct hiç uygulanmadı, kod tabanı manuel `toResponse` konvansiyonunda (yeni dependency değmez)
 
 ### Epic 3.1 — Built-in "Tasks" Modülü — DONE (pm modülü olarak)
 > Görev yönetimi standalone yerine **project-scoped** geldi (2026-08): eski `tenant/V4__module_projects.sql` + `V5__module_tasks.sql` (K-36 squash'ı ile `V1.3__pm_projects_tasks.sql`'e indirildi) — tip-bazlı proje yapısı (`t_projects`), TASKS tipinde `t_tasks` (proje-scoped) + Kanban board UI (Epic 4.1). `pm:*` permission namespace. Standalone Tasks modülü bu sayının yerini aldı; Notes/Warehouse/Logistics (3.2-3.4) planlandığı gibi.
