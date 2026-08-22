@@ -12,6 +12,7 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -24,12 +25,13 @@ import java.util.UUID;
  * criteria by {@code AuditQueryService} (composable AND filters).
  */
 @RestController
+@RequestMapping("/api/v1")
 @RequiredArgsConstructor
 public class AuditController {
 
     private final AuditQueryService auditQueryService;
 
-    @GetMapping("/api/v1/audit-logs")
+    @GetMapping("/audit-logs")
     @PreAuthorize("hasAuthority('iam:audit:read')")
     public ResponseEntity<PageResponse<AuditLogResponse>> auditLogs(
             @PageableDefault(sort = "createdDate", direction = Sort.Direction.DESC) Pageable pageable,
@@ -40,7 +42,7 @@ public class AuditController {
         return ResponseEntity.ok(PageResponse.of(auditQueryService.findAllAuditLogs(pageable, q, action, actorId)));
     }
 
-    @GetMapping("/api/v1/login-history")
+    @GetMapping("/login-history")
     @PreAuthorize("hasAuthority('iam:audit:read')")
     public ResponseEntity<PageResponse<LoginHistoryResponse>> loginHistory(
             @PageableDefault(sort = "createdDate", direction = Sort.Direction.DESC) Pageable pageable,

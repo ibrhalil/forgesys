@@ -173,8 +173,8 @@ Kod analizi sonucu keşfedilen P0 düzeltmeler. User CRUD / log'dan ÖNCE çöz�
 - [x] `UserController` (`/api/v1/users`: sayfalı list / GET{id} / POST / PUT{id} / DELETE{id}) + DTO
 - [x] `UserService` (`@Transactional`, soft-delete, account+profile cascade)
 - [x] `UserProfileController` (`PUT /users/me/profile`, `PUT /users/me/password`, `GET /users/me`) — self-service, `@PreAuthorize`'süz authenticated
-- [ ] Email doğrulama akışı (tenant **içi** mevcut user — entity field'ları hazır: `emailVerificationToken`/`ExpiresAt`)
-- [ ] Password reset akışı (entity field'ları hazır: `passwordResetToken`/`ExpiresAt`)
+- [ ] Email doğrulama akışı (tenant **içi** mevcut user — speculative kolonlar K-38 ile kaldırıldı; akış kendi migration'ını getirir)
+- [ ] Password reset akışı (speculative kolonlar K-38 ile kaldırıldı; akış kendi migration'ını getirir)
 - [x] `GET /users/me` (mevcut kullanıcı + permission/rol listesi) — UserProfileController
 - [x] `RoleController` (`/api/v1/roles`: CRUD + `/roles/{id}/permissions`)
 - [x] `PermissionController` (`/api/v1/permissions`: list — CRUD yok, katalog seed-bazlı)
@@ -217,7 +217,7 @@ Kod analizi sonucu keşfedilen P0 düzeltmeler. User CRUD / log'dan ÖNCE çöz�
 - [x] Max concurrent session limiti (`forgesys.security.max-sessions`, en eski session düşürülür)
 - [x] Audit append-only (V6 trigger) + yetki değişim delta kaydı (old/new JSON)
 - [x] App-level rate limiting — public auth endpoint'lerinde Redis Lua token-bucket (`RateLimitFilter`, JWT decode'dan önce; Nginx edge limit'i K-33 gateway epic'ine ertelendi)
-- [x] Rol kalıtımı (`t_role_parents`, V7; cycle guard + recursive authority çözümlemesi) + ABAC ownership şablonu (`Ownable` + `OwnershipGuard`)
+- [x] Rol kalıtımı (`t_role_parents`, V7; cycle guard + recursive authority çözümlemesi) + ABAC ownership şablonu (`Ownable` + `OwnershipGuard` — şablon K-38 ile kaldırıldı, ilk ABAC modülüyle geri gelir)
 - [x] `all_permissions` bayrağı (V8) — Admin implicit süper-kullanıcı; `PUT /roles/{id}/permissions` `{all:true}` kısayolu
 - [x] Last-admin invariant ([RISK-35](DECISIONS.md#risk-35)) — self-delete koşulsuz yasak, son aktif admin kaybedilemez (11 write path)
 - [x] Permission CRUD + user/group effective-permissions endpoint'leri

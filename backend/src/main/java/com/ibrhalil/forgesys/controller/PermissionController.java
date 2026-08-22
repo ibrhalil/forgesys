@@ -1,10 +1,14 @@
 package com.ibrhalil.forgesys.controller;
 
+import com.ibrhalil.forgesys.dto.PageResponse;
 import com.ibrhalil.forgesys.dto.PermissionRequest;
 import com.ibrhalil.forgesys.dto.PermissionResponse;
 import com.ibrhalil.forgesys.service.PermissionService;
+import com.ibrhalil.forgesys.web.SortGuard;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -15,9 +19,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -29,8 +33,11 @@ public class PermissionController {
 
     @GetMapping
     @PreAuthorize("hasAuthority('iam:permission:read')")
-    public ResponseEntity<List<PermissionResponse>> list() {
-        return ResponseEntity.ok(permissionService.findAll());
+    public ResponseEntity<PageResponse<PermissionResponse>> list(
+            @PageableDefault(sort = "name") Pageable pageable,
+            @RequestParam(required = false) String q) {
+        SortGuard.require(pageable, PermissionService.FILTER_FIELDS);
+        return ResponseEntity.ok(PageResponse.of(permissionService.search(q, pageable)));
     }
 
     @GetMapping("/{id}")

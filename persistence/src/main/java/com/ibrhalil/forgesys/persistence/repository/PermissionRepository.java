@@ -2,6 +2,7 @@ package com.ibrhalil.forgesys.persistence.repository;
 
 import com.ibrhalil.forgesys.entity.Permission;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -12,15 +13,13 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Repository
-public interface PermissionRepository extends JpaRepository<Permission, UUID> {
+public interface PermissionRepository extends JpaRepository<Permission, UUID>, JpaSpecificationExecutor<Permission> {
 
     boolean existsByName(String name);
 
     Optional<Permission> findByName(String name);
 
     List<Permission> findAllByNameIn(Collection<String> names);
-
-    List<Permission> findAllByOrderByNameAsc();
 
     /**
      * Just the names of every permission in the tenant, ordered — the all-permissions

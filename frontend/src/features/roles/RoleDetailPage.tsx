@@ -46,7 +46,7 @@ export function RoleDetailPage() {
     return <DetailNotFound message={t('roles.notFound')} backLabel={t('roles.backToRoles')} backTo="/roles" />;
   }
 
-  const permissionOptions = toOptions(permissions ?? [], (p) => p.id, (p) => p.name);
+  const permissionOptions = toOptions(permissions?.items ?? [], (p) => p.id, (p) => p.name);
   // Parent candidates: every role except this one (no self-inheritance).
   const parentOptions = toOptions((rolesData?.items ?? []).filter((r) => r.id !== role.id), (r) => r.id, (r) => r.name);
 
@@ -106,11 +106,11 @@ export function RoleDetailPage() {
         }}
       />
 
-      <DetailPanel title={t('roles.effectivePerms', { count: role.allPermissions ? (permissions ?? []).length : role.permissions.length })}>
+      <DetailPanel title={t('roles.effectivePerms', { count: role.allPermissions ? (permissions?.items ?? []).length : role.permissions.length })}>
         <PermissionBadges
           permissions={
             role.allPermissions
-              ? (permissions ?? []).map((p) => p.name)
+              ? (permissions?.items ?? []).map((p) => p.name)
               : role.permissions.map((p) => p.name)
           }
         />

@@ -38,7 +38,7 @@ export function PermissionsPage() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const list = permissions ?? [];
+    const list = permissions?.items ?? [];
     const filteredList = !q
       ? list
       : list.filter(

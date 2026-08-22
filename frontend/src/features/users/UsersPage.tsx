@@ -36,7 +36,7 @@ export function UsersPage() {
   const delUser = useDeleteUser();
   const unlockUser = useUnlockUser();
   const navigate = useNavigate();
-  const currentUserId = useAuthStore((s) => s.user?.userId);
+  const currentUserId = useAuthStore((s) => s.user?.id);
   const canWrite = useAuthStore((s) => s.hasAuthority(PERMISSIONS.USER_WRITE));
   const canDelete = useAuthStore((s) => s.hasAuthority(PERMISSIONS.USER_DELETE));
 

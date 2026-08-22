@@ -1,3 +1,5 @@
+import type { GroupSummary, RoleSummary } from '../../types';
+
 // Auth
 export interface LoginRequest {
   email: string;
@@ -18,10 +20,25 @@ export interface LoginResponse {
   authorities: string[];
 }
 
+// Backend MeResponse: the single self endpoint (GET /users/me) — full profile view
+// from the DB + the authorities embedded in the access token. The former
+// claims-only GET /auth/me was removed (K-37).
 export interface MeResponse {
-  userId: string;
+  id: string;
   email: string;
-  tenant: string;
+  username: string;
+  firstName: string | null;
+  lastName: string | null;
+  phoneNumber: string | null;
+  address: string | null;
+  city: string | null;
+  country: string | null;
+  zipCode: string | null;
+  enabled: boolean;
+  emailVerified: boolean;
+  lockedUntil: string | null;
+  roles: RoleSummary[];
+  groups: GroupSummary[];
   authorities: string[];
 }
 

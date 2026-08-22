@@ -2,36 +2,53 @@ package com.ibrhalil.forgesys.service;
 
 import com.ibrhalil.forgesys.dto.PermissionRequest;
 import com.ibrhalil.forgesys.dto.PermissionResponse;
+import com.ibrhalil.forgesys.entity.AuditEntity_;
 import com.ibrhalil.forgesys.entity.Permission;
+import com.ibrhalil.forgesys.entity.Permission_;
 import com.ibrhalil.forgesys.exception.BusinessException;
 import com.ibrhalil.forgesys.exception.ErrorCode;
 import com.ibrhalil.forgesys.exception.ResourceNotFoundException;
 import com.ibrhalil.forgesys.persistence.repository.PermissionRepository;
 import com.ibrhalil.forgesys.security.SessionRevocationService;
+import com.ibrhalil.forgesys.web.filter.FilterFieldSet;
+import com.ibrhalil.forgesys.web.filter.FilterFieldType;
+import com.ibrhalil.forgesys.web.filter.FilterSpecifications;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.util.List;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class PermissionService {
+
+    /** Filterable/sortable direct attributes of the permission list; {@code q} matches {@code name}. */
+    public static final FilterFieldSet FILTER_FIELDS = FilterFieldSet.builder()
+            .field(Permission_.NAME, FilterFieldType.STRING, true)
+            .field(Permission_.DESCRIPTION, FilterFieldType.STRING, false)
+            .field(AuditEntity_.CREATED_DATE, FilterFieldType.TEMPORAL, false)
+            .field(AuditEntity_.UPDATED_AT, FilterFieldType.TEMPORAL, false)
+            .build();
 
     private final PermissionRepository permissionRepository;
     private final AuditService auditService;
     private final SessionRevocationService sessionRevocationService;
 
     @Transactional(readOnly = true)
-    public List<PermissionResponse> findAll() {
-        return permissionRepository.findAllByOrderByNameAsc().stream()
-                .map(permission -> new PermissionResponse(
-                        permission.getId(), permission.getName(), permission.getDescription()))
-                .toList();
+    public Page<PermissionResponse> search(String q, Pageable pageable) {
+        Specification<Permission> spec = FilterSpecifications.from(FILTER_FIELDS,
+                StringUtils.hasText(q) ? q.trim() : null, List.of());
+        return permissionRepository.findAll(spec, pageable).map(this::toResponse);
     }
 
     @Transactional(readOnly = true)
-    public PermissionResponse findById(java.util.UUID id) {
+    public PermissionResponse findById(UUID id) {
         return toResponse(getPermissionOrThrow(id));
     }
 

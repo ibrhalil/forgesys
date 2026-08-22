@@ -488,11 +488,9 @@ class UserControllerTest extends AbstractRbacWebTest {
         entityManager.merge(locked);
         entityManager.flush();
 
-        mockMvc.perform(delete("/api/v1/users/{id}/lock", locked.getId())
+        mockMvc.perform(post("/api/v1/users/{id}/unlock", locked.getId())
                         .cookie(auth("writer@tenant.test", "iam:user:write")))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.lockedUntil").value(org.hamcrest.Matchers.nullValue()))
-                .andExpect(jsonPath("$.email").value("locked@tenant.test"));
+                .andExpect(status().isNoContent());
 
         UserAccount cleared = entityManager.find(User.class, locked.getId()).getUserAccount();
         org.junit.jupiter.api.Assertions.assertNull(cleared.getLockedUntil());
@@ -504,7 +502,7 @@ class UserControllerTest extends AbstractRbacWebTest {
         User locked = seedRbacUser("locked@tenant.test", "locked");
         entityManager.flush();
 
-        mockMvc.perform(delete("/api/v1/users/{id}/lock", locked.getId())
+        mockMvc.perform(post("/api/v1/users/{id}/unlock", locked.getId())
                         .cookie(auth("reader@tenant.test", "iam:user:read")))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("auth_access_denied"));
@@ -512,7 +510,7 @@ class UserControllerTest extends AbstractRbacWebTest {
 
     @Test
     void unlockUnknownReturns404() throws Exception {
-        mockMvc.perform(delete("/api/v1/users/{id}/lock", UUID.randomUUID())
+        mockMvc.perform(post("/api/v1/users/{id}/unlock", UUID.randomUUID())
                         .cookie(auth("writer@tenant.test", "iam:user:write")))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("resource_not_found"));

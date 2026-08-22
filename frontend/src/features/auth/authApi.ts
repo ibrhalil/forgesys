@@ -5,7 +5,7 @@ export const authApi = {
   login: (data: LoginRequest) =>
     api.post<LoginResponse>('/api/v1/auth/login', data),
 
-  me: () => api.get<MeResponse>('/api/v1/auth/me'),
+  me: () => api.get<MeResponse>('/api/v1/users/me'),
 
   logout: () => api.post<void>('/api/v1/auth/logout'),
 };

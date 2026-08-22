@@ -104,11 +104,15 @@ public class UserController {
         return ResponseEntity.noContent().build();
     }
 
-    /** Clears an active brute-force lockout ahead of its expiry ([RISK-22] admin unlock). */
-    @DeleteMapping("/{id}/lock")
+    /**
+     * Clears an active brute-force lockout ahead of its expiry ([RISK-22] admin unlock).
+     * An action, not a resource deletion — POST (K-37; was {@code DELETE /{id}/lock}).
+     */
+    @PostMapping("/{id}/unlock")
     @PreAuthorize("hasAuthority('iam:user:write')")
-    public ResponseEntity<UserResponse> unlock(@PathVariable UUID id) {
-        return ResponseEntity.ok(userService.unlock(id));
+    public ResponseEntity<Void> unlock(@PathVariable UUID id) {
+        userService.unlock(id);
+        return ResponseEntity.noContent().build();
     }
 
     @PutMapping("/{id}/roles")

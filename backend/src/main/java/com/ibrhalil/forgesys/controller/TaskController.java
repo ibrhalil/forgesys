@@ -1,10 +1,15 @@
 package com.ibrhalil.forgesys.controller;
 
+import com.ibrhalil.forgesys.dto.PageResponse;
 import com.ibrhalil.forgesys.dto.TaskRequest;
 import com.ibrhalil.forgesys.dto.TaskResponse;
 import com.ibrhalil.forgesys.service.TaskService;
+import com.ibrhalil.forgesys.web.SortGuard;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -17,7 +22,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
 import java.util.UUID;
 
 /**
@@ -33,8 +37,11 @@ public class TaskController {
 
     @GetMapping
     @PreAuthorize("hasAuthority('pm:task:read')")
-    public ResponseEntity<List<TaskResponse>> list(@PathVariable UUID projectId) {
-        return ResponseEntity.ok(taskService.list(projectId));
+    public ResponseEntity<PageResponse<TaskResponse>> list(
+            @PathVariable UUID projectId,
+            @PageableDefault(sort = "createdDate", direction = Sort.Direction.DESC) Pageable pageable) {
+        SortGuard.require(pageable, TaskService.FILTER_FIELDS);
+        return ResponseEntity.ok(PageResponse.of(taskService.list(projectId, pageable)));
     }
 
     @GetMapping("/{taskId}")

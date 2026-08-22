@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { LuEllipsisVertical, LuKeyRound, LuListChecks, LuMail, LuMonitor, LuPencil, LuTrash2, LuLockOpen } from 'react-icons/lu';
+import { LuEllipsisVertical, LuKeyRound, LuListChecks, LuMonitor, LuPencil, LuTrash2, LuLockOpen } from 'react-icons/lu';
 import {
   useUser, useUserEffectivePermissions, useUserActivity, useCreateUser, useUpdateUser,
-  useSetUserRoles, useSetUserGroups, useDeleteUser, useResendVerification, useUnlockUser,
+  useSetUserRoles, useSetUserGroups, useDeleteUser, useUnlockUser,
 } from './hooks';
 import { isLocked } from './types';
 import { formatDateTime } from '../../lib/format';
@@ -65,9 +65,8 @@ export function UserDetailPage() {
   const setRoles = useSetUserRoles();
   const setGroups = useSetUserGroups();
   const del = useDeleteUser();
-  const resendVerification = useResendVerification();
   const unlockUser = useUnlockUser();
-  const currentUserId = useAuthStore((s) => s.user?.userId);
+  const currentUserId = useAuthStore((s) => s.user?.id);
   const canWrite = useAuthStore((s) => s.hasAuthority(PERMISSIONS.USER_WRITE));
   const canDelete = useAuthStore((s) => s.hasAuthority(PERMISSIONS.USER_DELETE));
 
@@ -225,19 +224,6 @@ export function UserDetailPage() {
               // Effective permissions live behind a searchable modal — the page itself
               // is iam:user:read gated, so every viewer may open it.
               { label: t('users.viewEffectivePerms'), onClick: () => setShowPerms(true), icon: LuListChecks },
-              // Re-send only makes sense for unverified addresses; the endpoint is a
-              // pending-backend convention (404 toasts until it lands).
-              ...(canWrite && !user.emailVerified
-                ? [{
-                    label: t('users.resendVerification'),
-                    onClick: () => {
-                      resendVerification.mutate(user.id, {
-                        onSuccess: () => notify.success(t('users.verificationSent')),
-                      });
-                    },
-                    icon: LuMail,
-                  }]
-                : []),
               /* Self-delete is rejected by the backend (409 self_delete_forbidden) — omit it on the actor's own page. */
               ...(canDelete && user.id !== currentUserId
                 ? [{ label: t('common.delete'), onClick: () => setDeleting(true), icon: LuTrash2, danger: true }]

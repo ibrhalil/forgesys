@@ -97,7 +97,7 @@ export function TaskBoard({ projectId }: { projectId: string }) {
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {(Object.keys(COLUMN_TONES) as TaskStatus[]).map((status) => {
-          const colTasks = (tasks ?? []).filter((tk) => tk.status === status);
+          const colTasks = (tasks?.items ?? []).filter((tk) => tk.status === status);
           return (
             <section key={status} className="flex min-h-[12rem] flex-col gap-3 rounded-xl border border-glass bg-surface/40 p-3">
               <div className="flex items-center justify-between px-1">

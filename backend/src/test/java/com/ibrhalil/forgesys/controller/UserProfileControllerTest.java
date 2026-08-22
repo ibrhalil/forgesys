@@ -40,6 +40,7 @@ class UserProfileControllerTest extends AbstractRbacWebTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(user.getId().toString()))
                 .andExpect(jsonPath("$.email").value("me@tenant.test"))
+                .andExpect(jsonPath("$.authorities").exists())
                 .andExpect(jsonPath("$.password").doesNotExist());
     }
 

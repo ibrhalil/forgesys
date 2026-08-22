@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { usersApi } from './api';
+import { useAuthStore } from '../../store/authStore';
 import type { PageParams } from '../../types';
 import type { AssignRolesRequest } from '../roles/types';
 import type {
@@ -95,20 +96,14 @@ export function useResetPassword() {
   });
 }
 
-export function useResendVerification() {
-  return useMutation({ mutationFn: (id: string) => usersApi.resendVerification(id) });
-}
-
 // ─── Self-service (/users/me/*) ───
-export function useMe() {
-  return useQuery({ queryKey: ['users', 'me'], queryFn: usersApi.me });
-}
-
+// GET /users/me (the single /me, K-37) is owned by authStore.fetchMe — no useMe hook.
 export function useUpdateMyProfile() {
-  const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: UserProfileUpdateRequest) => usersApi.updateMyProfile(data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['users', 'me'] }),
+    // Refresh the session snapshot (authStore.user mirrors /users/me) so the shell
+    // chip / nav re-render with the new name immediately.
+    onSuccess: () => useAuthStore.getState().fetchMe(),
   });
 }
 

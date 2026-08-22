@@ -1,6 +1,5 @@
 package com.ibrhalil.forgesys.entity;
 
-import java.time.OffsetDateTime;
 import java.util.HashSet;
 import java.util.Set;
 import jakarta.persistence.CascadeType;
@@ -35,7 +34,7 @@ import lombok.ToString;
 })
 @SQLDelete(sql = "UPDATE t_users SET is_deleted = true, deleted_at = now(), version = version + 1 WHERE id = ? AND version = ?")
 @EntityListeners(AuditingEntityListener.class)
-@ToString(exclude = {"password", "groups", "roles", "emailVerificationToken", "passwordResetToken", "userProfile", "userAccount"})
+@ToString(exclude = {"password", "groups", "roles", "userProfile", "userAccount"})
 public class User extends BaseEntity {
 
     @Column(nullable = false, length = 70, unique = true)
@@ -56,18 +55,6 @@ public class User extends BaseEntity {
 
     @Column(nullable = false)
     private boolean emailVerified = false;
-
-    @Column(length = 512)
-    private String emailVerificationToken;
-
-    @Column(columnDefinition = "TIMESTAMP WITH TIME ZONE")
-    private OffsetDateTime emailVerificationTokenExpiresAt;
-
-    @Column(length = 512)
-    private String passwordResetToken;
-
-    @Column(columnDefinition = "TIMESTAMP WITH TIME ZONE")
-    private OffsetDateTime passwordResetTokenExpiresAt;
 
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(

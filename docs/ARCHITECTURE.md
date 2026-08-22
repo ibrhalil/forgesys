@@ -125,7 +125,6 @@ flowchart TB
 | Şema             | Tablo               | Amaç                                 | Migration           |
 |------------------|---------------------|--------------------------------------|---------------------|
 | `public`         | `t_companies`       | Tenant kayıt (subdomain→schema map, status)  | `public/V1__tenant_registry.sql` |
-| `public`         | `t_organization_domains` | Org-owned email domain'leri (1:N, opsiyonel, K-32) — **kaldırılacak** ([K-38](DECISIONS.md#k-38): sıfır-referans ölü küme) | `public/V1__tenant_registry.sql` |
 | `public`         | `t_tenant_verification_tokens` | K-21 signup token'ları (admin credential'lar gömülü) | `public/V1.1__signup_verification_tokens.sql` |
 | `public`         | `t_plans`           | Plan kataloğu (FREE/PRO/ENTERPRISE; `PlanSyncRunner` upsert — registry kodda, [K-16](DECISIONS.md#k-16)) | `public/V2__plans_subscriptions_modules.sql` |
 | `public`         | `t_subscriptions`   | Tenant→plan aboneliği (FREE default) | `public/V2__plans_subscriptions_modules.sql` |

@@ -6,7 +6,6 @@ import com.ibrhalil.forgesys.dto.CompanyVerifyRequest;
 import com.ibrhalil.forgesys.dto.CompanyVerifyResponse;
 import com.ibrhalil.forgesys.dto.LoginRequest;
 import com.ibrhalil.forgesys.dto.LoginResponse;
-import com.ibrhalil.forgesys.dto.MeResponse;
 import com.ibrhalil.forgesys.dto.RefreshRequest;
 import com.ibrhalil.forgesys.dto.SubdomainSuggestionRequest;
 import com.ibrhalil.forgesys.dto.SubdomainSuggestionResponse;
@@ -23,16 +22,13 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Arrays;
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -90,14 +86,6 @@ public class AuthController {
         response.addHeader(HttpHeaders.SET_COOKIE, buildAccessTokenCookie(bodyOut.accessToken(), bodyOut.expiresIn()));
         response.addHeader(HttpHeaders.SET_COOKIE, buildRefreshTokenCookie(bodyOut.refreshToken()));
         return ResponseEntity.ok(bodyOut);
-    }
-
-    @GetMapping("/me")
-    public ResponseEntity<MeResponse> me(@AuthenticationPrincipal CustomUserDetails user) {
-        List<String> authorities = user.getAuthorities().stream()
-                .map(GrantedAuthority::getAuthority)
-                .toList();
-        return ResponseEntity.ok(new MeResponse(user.getUserId(), user.getEmail(), user.getTenantSchema(), authorities));
     }
 
     @PostMapping("/logout")

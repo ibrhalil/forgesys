@@ -18,7 +18,7 @@ import lombok.ToString;
 @Getter
 @Setter
 @NoArgsConstructor
-@ToString(exclude = {"dbRole"})
+@ToString
 @Table(
         name = "t_companies",
         schema = "public",
@@ -42,9 +42,6 @@ public class Company extends BaseEntity {
 
     @Column(name = "schema_name", nullable = false, length = 100)
     private String schemaName;
-
-    @Column(name = "db_role", length = 100)
-    private String dbRole;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)

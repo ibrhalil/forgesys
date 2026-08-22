@@ -49,8 +49,8 @@ class PermissionControllerTest extends AbstractRbacWebTest {
 
         mockMvc.perform(get("/api/v1/permissions").cookie(auth("reader@tenant.test", "iam:permission:read")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].name").value("iam:role:read"))
-                .andExpect(jsonPath("$[1].name").value("iam:user:read"));
+                .andExpect(jsonPath("$.data[0].name").value("iam:role:read"))
+                .andExpect(jsonPath("$.data[1].name").value("iam:user:read"));
     }
 
     /* ── get ── */

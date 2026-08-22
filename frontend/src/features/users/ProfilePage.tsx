@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { useMe, useUpdateMyProfile, useChangeMyPassword } from './hooks';
+import { useUpdateMyProfile, useChangeMyPassword } from './hooks';
+import { useAuthStore } from '../../store/authStore';
+import type { MeResponse } from '../auth/types';
 import { notify, extractFieldErrors } from '../../lib/notify';
 import { Page } from '../../components/Page';
 import { DetailPanel } from '../../components/detail/DetailPanel';
@@ -21,7 +23,9 @@ import { useT } from '../../lib/i18n';
  */
 export function ProfilePage() {
   const { t } = useT();
-  const { data: me, isLoading } = useMe();
+  // /users/me is the single self endpoint (K-37) — the session store owns the snapshot.
+  const me = useAuthStore((s) => s.user);
+  const isLoading = useAuthStore((s) => s.isLoading);
 
   if (isLoading || !me) {
     return (
@@ -53,7 +57,7 @@ export function ProfilePage() {
   );
 }
 
-function ProfileCard({ user }: { user: NonNullable<ReturnType<typeof useMe>['data']> }) {
+function ProfileCard({ user }: { user: MeResponse }) {
   const { t } = useT();
   const update = useUpdateMyProfile();
   const [firstName, setFirstName] = useState(user.firstName ?? '');
