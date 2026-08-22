@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { appsApi } from './api';
 import type { PageParams } from '../../types';
-import type { AppPropertyRequest, AppRecordRequest, AppRequest } from './types';
+import type { AppPropertyRequest, AppRecordRequest, AppRequest, AppViewRequest } from './types';
 import { ApiError } from '../../lib/api';
 import { notify, notifyApiError } from '../../lib/notify';
 import { t } from '../../lib/i18n';
@@ -80,6 +80,32 @@ export function useDeleteProperty(appId: string) {
   });
 }
 
+// ─── Views (invalidate the detail — views live inside it) ───
+export function useCreateView(appId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: AppViewRequest) => appsApi.createView(appId, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['apps', appId] }),
+  });
+}
+
+export function useUpdateView(appId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ viewId, data }: { viewId: string; data: AppViewRequest }) =>
+      appsApi.updateView(appId, viewId, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['apps', appId] }),
+  });
+}
+
+export function useDeleteView(appId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (viewId: string) => appsApi.deleteView(appId, viewId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['apps', appId] }),
+  });
+}
+
 // ─── Records ───
 export function useRecords(appId: string | undefined, params: PageParams = {}) {
   return useQuery({
@@ -87,6 +113,22 @@ export function useRecords(appId: string | undefined, params: PageParams = {}) {
     queryFn: () => appsApi.listRecords(appId!, params),
     enabled: !!appId,
   });
+}
+
+/**
+ * Single-page fetch for the client-side view renderers (BOARD/CALENDAR/LIST/GALLERY
+ * and filtered TABLE) — the TaskBoard precedent: one bounded page, grouped/filtered
+ * locally. Cap mirrors the backend max-page-size (1000) which also covers the FREE
+ * plan's per-app record limit.
+ */
+export const VIEW_RECORDS_PARAMS: PageParams = {
+  page: 0,
+  size: 1000,
+  sorts: [{ field: 'createdDate', dir: 'desc' }],
+};
+
+export function useViewRecords(appId: string | undefined) {
+  return useRecords(appId, VIEW_RECORDS_PARAMS);
 }
 
 export function useCreateRecord(appId: string) {

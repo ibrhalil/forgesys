@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { cellDisplay, cellEditValue, isInlineEditable, parseCellInput, shortenId } from '../features/apps/cellValue';
+import {
+  cellDisplay,
+  cellEditValue,
+  firstTextProperty,
+  isInlineEditable,
+  parseCellInput,
+  recordTitle,
+  shortenId,
+} from '../features/apps/cellValue';
 import type { AppProperty, AppRecord } from '../features/apps/types';
 
 const prop = (over: Partial<AppProperty> = {}): AppProperty => ({
@@ -97,5 +105,30 @@ describe('cellEditValue', () => {
   it('seeds empty for missing/null cells', () => {
     expect(cellEditValue(prop(), record({}))).toBe('');
     expect(cellEditValue(prop(), record({ p1: null }))).toBe('');
+  });
+});
+
+describe('firstTextProperty', () => {
+  it('picks the first TEXT property in definition order', () => {
+    const props = [
+      prop({ id: 'a', type: 'NUMBER', position: 0 }),
+      prop({ id: 'b', type: 'TEXT', position: 1 }),
+      prop({ id: 'c', type: 'TEXT', position: 2 }),
+    ];
+    expect(firstTextProperty(props)?.id).toBe('b');
+    expect(firstTextProperty([prop({ type: 'NUMBER' })])).toBeUndefined();
+  });
+});
+
+describe('recordTitle', () => {
+  const titleProp = prop({ id: 't', type: 'TEXT' });
+  it('uses the title property value when present', () => {
+    expect(recordTitle(record({ t: 'Card title' }), titleProp)).toBe('Card title');
+  });
+  it('prefers the resolver label and falls back to the shortened id', () => {
+    expect(recordTitle(record({ t: 'raw' }), titleProp, () => 'Resolved')).toBe('Resolved');
+    expect(recordTitle(record({ t: null }), titleProp)).toBe('#r1');
+    expect(recordTitle(record({}), undefined)).toBe('#r1');
+    expect(recordTitle({ ...record({}), id: '12345678-90ab-cdef-1234-567890abcdef' }, undefined)).toBe('#12345678…');
   });
 });

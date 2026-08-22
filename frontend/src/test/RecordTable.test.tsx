@@ -38,7 +38,34 @@ const RECORDS_PAYLOAD = {
   meta: { page: 0, pageSize: 10, totalElements: 1, totalPages: 1, hasNext: false, hasPrevious: false },
 };
 
+/** Directory page containing the record's owner (jane) + a second user (john). */
+const USERS_PAYLOAD = {
+  data: [
+    { id: USER_ID, email: 'jane@acme.com' },
+    { id: 'u-john', email: 'john@acme.com' },
+  ],
+  meta: { page: 0, pageSize: 100, totalElements: 2, totalPages: 1, hasNext: false, hasPrevious: false },
+};
+
+const EMPTY_PAGE = { data: [], meta: { page: 0, pageSize: 100, totalElements: 0, totalPages: 0, hasNext: false, hasPrevious: false } };
+
 let calls: { method: string; url: string; body?: string }[] = [];
+
+function stubFetch(usersPayload: typeof USERS_PAYLOAD | typeof EMPTY_PAGE = USERS_PAYLOAD) {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      calls.push({ method: init?.method ?? 'GET', url, body: init?.body ? String(init.body) : undefined });
+      const body = url.includes('/users')
+        ? usersPayload
+        : url.includes('/records') && (init?.method ?? 'GET') === 'GET'
+          ? RECORDS_PAYLOAD
+          : RECORD;
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }),
+  );
+}
 
 function renderTable() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -54,15 +81,7 @@ describe('RecordTable inline edit', () => {
     useLocaleStore.setState({ locale: 'en' });
     useAuthStore.setState({ hasAuthority: () => true });
     calls = [];
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = String(input);
-        calls.push({ method: init?.method ?? 'GET', url, body: init?.body ? String(init.body) : undefined });
-        const body = url.includes('/records') && (init?.method ?? 'GET') === 'GET' ? RECORDS_PAYLOAD : RECORD;
-        return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
-      }),
-    );
+    stubFetch();
   });
   afterEach(() => vi.unstubAllGlobals());
 
@@ -96,14 +115,43 @@ describe('RecordTable inline edit', () => {
     expect(calls.find((c) => c.method === 'PATCH')).toBeUndefined();
   });
 
-  it('renders USER cells read-only as a shortened id', async () => {
+  it('resolves USER cells to directory emails and edits them through the picker', async () => {
     const user = userEvent.setup();
     renderTable();
 
-    const cell = await screen.findByText('12345678…');
+    // Resolver (useUsers) maps the raw USER id to the directory email.
+    const cell = await screen.findByRole('button', { name: 'jane@acme.com' });
+    expect(cell).toHaveAttribute('title', 'Edit');
+
+    // Clicking opens the UserPicker; picking another user PATCHes the raw id.
     await user.click(cell);
-    // No inline editor opens for picker-dependent types.
-    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
-    expect(cell).toHaveAttribute('title', USER_ID);
+    const combobox = screen.getByRole('combobox');
+    await user.click(combobox);
+    await user.type(combobox, 'john');
+    await user.click(await screen.findByRole('option', { name: 'john@acme.com' }));
+
+    await waitFor(() => {
+      const patch = calls.find((c) => c.method === 'PATCH');
+      expect(patch).toBeDefined();
+      expect(JSON.parse(patch!.body!)).toEqual({ values: { 'p-user': 'u-john' } });
+    });
+  });
+
+  it('falls back to the shortened raw id when the user is not in the directory', async () => {
+    calls = [];
+    stubFetch(EMPTY_PAGE);
+    renderTable();
+
+    const cell = await screen.findByText('12345678…');
+    expect(cell).toBeInTheDocument();
+  });
+
+  it('hides all editing affordances without apps:record:write', async () => {
+    useAuthStore.setState({ hasAuthority: (a: string) => a !== 'apps:record:write' });
+    renderTable();
+
+    expect(await screen.findByText('jane@acme.com')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'jane@acme.com' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Old title' })).not.toBeInTheDocument();
   });
 });
