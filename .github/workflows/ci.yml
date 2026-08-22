@@ -32,14 +32,14 @@ jobs:
 
       # Test profili H2 (MODE=PostgreSQL) kullanır -> PostgreSQL/Redis gerekmez.
       # Sadece backend + upstream (common, persistence) build edilir. frontend
-      # modülü atlanır çünkü paralel "frontend" job'ında lint+build koşar; böylece
-      # npm install/build iki kez çalışmaz. backend testleri static resource'lara
-      # bağımlı değil (AuditingTest, ForgeSysApplicationTests).
+      # modülü atlanır çünkü paralel "frontend" job'ında lint+test+build koşar;
+      # böylece npm install/build iki kez çalışmaz. backend testleri static
+      # resource'lara bağımlı değil (AuditingTest, ForgeSysApplicationTests).
       - name: Build & Test
         run: ./mvnw --no-transfer-progress clean install -pl backend -am
 
   frontend:
-    name: Frontend (lint + build)
+    name: Frontend (lint + test + build)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -63,6 +63,10 @@ jobs:
 
       - name: Lint (oxlint)
         run: npm run lint
+
+      # Vitest + RTL (jsdom) — K-39 frontend kalite gate'i.
+      - name: Test (vitest)
+        run: npm test
 
       - name: Build (tsc -b && vite build)
         run: npm run build

@@ -1,5 +1,5 @@
 import { PERMISSIONS } from '../../lib/permissions';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Role } from './types';
 import { useRoles, useCreateRole, useDeleteRole, useSetRolePermissions } from './hooks';
@@ -20,36 +20,17 @@ import { TextField } from '../../components/ui/Field';
 import { TextAreaField } from '../../components/ui/TextArea';
 import { CheckboxList, type CheckboxItem } from '../../components/ui/CheckboxList';
 import { useT } from '../../lib/i18n';
-import { useDebouncedValue } from '../../lib/useDebouncedValue';
-import type { SortState } from '../../types';
+import { useListPageState } from '../../lib/useListPageState';
 import { useAuthStore } from '../../store/authStore';
-
-const DEFAULT_PAGE_SIZE = 10;
 
 export function RolesPage() {
   const { t } = useT();
-  const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const [sort, setSort] = useState<SortState>({ field: 'name', dir: 'asc' });
-  const [search, setSearch] = useState('');
-  const q = useDebouncedValue(search, 300);
+  const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, q } =
+    useListPageState({ defaultSort: { field: 'name', dir: 'asc' } });
   const { data, isLoading, isFetching } = useRoles({ page, size: pageSize, sorts: [sort], q: q || undefined });
   const delRole = useDeleteRole();
   const canWrite = useAuthStore((s) => s.hasAuthority(PERMISSIONS.ROLE_WRITE));
   const canDelete = useAuthStore((s) => s.hasAuthority(PERMISSIONS.ROLE_DELETE));
-
-  useEffect(() => {
-    setPage(0);
-  }, [q]);
-
-  const handleSort = (field: string) => {
-    setSort((prev) =>
-      prev.field === field
-        ? { field, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
-        : { field, dir: 'asc' },
-    );
-    setPage(0);
-  };
 
   const [creating, setCreating] = useState(false);
   const [assignPermsTo, setAssignPermsTo] = useState<Role | null>(null);
@@ -94,12 +75,12 @@ export function RolesPage() {
         page={data?.page ?? page}
         pageSize={data?.size ?? pageSize}
         pageSizeOptions={PAGE_SIZE_OPTIONS}
-        onPageSizeChange={(size) => { setPageSize(size); setPage(0); }}
+        onPageSizeChange={setPageSize}
         totalElements={data?.totalElements ?? 0}
         totalPages={data?.totalPages ?? 0}
         onPageChange={setPage}
         sort={sort}
-        onSortChange={handleSort}
+        onSortChange={toggleSort}
         toolbar={<SearchInput value={search} onChange={setSearch} placeholder={t('roles.searchPh')} />}
         actionsHeader={t('common.actions')}
         actions={(r) => (

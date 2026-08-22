@@ -1,6 +1,6 @@
 package com.ibrhalil.forgesys.config;
 
-import com.ibrhalil.forgesys.entity.Company;
+import com.ibrhalil.forgesys.entity.CompanyStatus;
 import com.ibrhalil.forgesys.persistence.repository.CompanyRepository;
 import com.ibrhalil.forgesys.service.TenantMigrationSupport;
 import org.junit.jupiter.api.Test;
@@ -10,6 +10,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.UUID;
 
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -30,7 +31,7 @@ class TenantMigrationRunnerTest {
 
     @Test
     void migratesEveryTenantSchema() {
-        when(companyRepository.findAll()).thenReturn(List.of(company("tenant_a"), company("tenant_b")));
+        when(companyRepository.findAllTenantSchemas()).thenReturn(List.of(view("tenant_a"), view("tenant_b")));
 
         runner.run(null);
 
@@ -40,7 +41,7 @@ class TenantMigrationRunnerTest {
 
     @Test
     void skipsMigrationWhenNoTenantsExist() {
-        when(companyRepository.findAll()).thenReturn(List.of());
+        when(companyRepository.findAllTenantSchemas()).thenReturn(List.of());
 
         runner.run(null);
 
@@ -49,7 +50,7 @@ class TenantMigrationRunnerTest {
 
     @Test
     void skipsTenantWithBlankSchemaName() {
-        when(companyRepository.findAll()).thenReturn(List.of(company("  ")));
+        when(companyRepository.findAllTenantSchemas()).thenReturn(List.of(view("  ")));
 
         runner.run(null);
 
@@ -58,7 +59,7 @@ class TenantMigrationRunnerTest {
 
     @Test
     void continuesOtherTenantsWhenOneFails() {
-        when(companyRepository.findAll()).thenReturn(List.of(company("tenant_a"), company("tenant_b")));
+        when(companyRepository.findAllTenantSchemas()).thenReturn(List.of(view("tenant_a"), view("tenant_b")));
         doThrow(new RuntimeException("boom")).when(tenantMigrationSupport).migrateSchema("tenant_a");
 
         runner.run(null);
@@ -67,9 +68,14 @@ class TenantMigrationRunnerTest {
         verify(tenantMigrationSupport).migrateSchema("tenant_b");
     }
 
-    private Company company(String schemaName) {
-        Company company = new Company();
-        company.setSchemaName(schemaName);
-        return company;
+    private record TenantView(UUID id, String schemaName, CompanyStatus status)
+            implements CompanyRepository.TenantSchemaView {
+        @Override public UUID getId() { return id; }
+        @Override public String getSchemaName() { return schemaName; }
+        @Override public CompanyStatus getStatus() { return status; }
+    }
+
+    private CompanyRepository.TenantSchemaView view(String schemaName) {
+        return new TenantView(UUID.randomUUID(), schemaName, CompanyStatus.ACTIVE);
     }
 }

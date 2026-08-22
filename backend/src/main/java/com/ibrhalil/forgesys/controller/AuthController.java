@@ -14,13 +14,11 @@ import com.ibrhalil.forgesys.security.jwt.JwtCookieProperties;
 import com.ibrhalil.forgesys.service.AuthService;
 import com.ibrhalil.forgesys.service.SubdomainSuggestionService;
 import com.ibrhalil.forgesys.service.TenantProvisioningService;
-import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -28,7 +26,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Arrays;
 import java.util.UUID;
 
 @RestController
@@ -67,8 +64,8 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request, HttpServletResponse response) {
         LoginResponse body = authService.login(request);
-        response.addHeader(HttpHeaders.SET_COOKIE, buildAccessTokenCookie(body.accessToken(), body.expiresIn()));
-        response.addHeader(HttpHeaders.SET_COOKIE, buildRefreshTokenCookie(body.refreshToken()));
+        response.addHeader(HttpHeaders.SET_COOKIE, cookieProperties.buildAccessTokenCookie(body.accessToken(), body.expiresIn()));
+        response.addHeader(HttpHeaders.SET_COOKIE, cookieProperties.buildRefreshTokenCookie(body.refreshToken()));
         return ResponseEntity.ok(body);
     }
 
@@ -83,8 +80,8 @@ public class AuthController {
                                                  HttpServletResponse response) {
         String refreshToken = resolveRefreshToken(body, request);
         LoginResponse bodyOut = authService.refresh(refreshToken);
-        response.addHeader(HttpHeaders.SET_COOKIE, buildAccessTokenCookie(bodyOut.accessToken(), bodyOut.expiresIn()));
-        response.addHeader(HttpHeaders.SET_COOKIE, buildRefreshTokenCookie(bodyOut.refreshToken()));
+        response.addHeader(HttpHeaders.SET_COOKIE, cookieProperties.buildAccessTokenCookie(bodyOut.accessToken(), bodyOut.expiresIn()));
+        response.addHeader(HttpHeaders.SET_COOKIE, cookieProperties.buildRefreshTokenCookie(bodyOut.refreshToken()));
         return ResponseEntity.ok(bodyOut);
     }
 
@@ -101,59 +98,18 @@ public class AuthController {
         if (userId != null) {
             authService.logout(userId, jti, refreshToken);
         }
-        response.addHeader(HttpHeaders.SET_COOKIE, expireCookie(
+        response.addHeader(HttpHeaders.SET_COOKIE, cookieProperties.expireCookie(
                 cookieProperties.effectiveCookieName(), "/"));
-        response.addHeader(HttpHeaders.SET_COOKIE, expireCookie(
+        response.addHeader(HttpHeaders.SET_COOKIE, cookieProperties.expireCookie(
                 cookieProperties.effectiveRefreshCookieName(), cookieProperties.effectiveRefreshCookiePath()));
         return ResponseEntity.noContent().build();
     }
 
-    private String buildAccessTokenCookie(String token, long expiresInSeconds) {
-        return ResponseCookie.from(cookieProperties.effectiveCookieName(), token)
-                .httpOnly(true)
-                .secure(cookieProperties.effectiveCookieSecure())
-                .sameSite(cookieProperties.effectiveCookieSameSite())
-                .path("/")
-                .maxAge(expiresInSeconds)
-                .build()
-                .toString();
-    }
-
-    private String buildRefreshTokenCookie(String token) {
-        return ResponseCookie.from(cookieProperties.effectiveRefreshCookieName(), token)
-                .httpOnly(true)
-                .secure(cookieProperties.effectiveRefreshCookieSecure())
-                .sameSite(cookieProperties.effectiveCookieSameSite())
-                .path(cookieProperties.effectiveRefreshCookiePath())
-                .maxAge(cookieProperties.effectiveRefreshTokenTtlSeconds())
-                .build()
-                .toString();
-    }
-
-    private String expireCookie(String name, String path) {
-        return ResponseCookie.from(name, "")
-                .httpOnly(true)
-                .secure(cookieProperties.effectiveCookieSecure())
-                .sameSite(cookieProperties.effectiveCookieSameSite())
-                .path(path)
-                .maxAge(0)
-                .build()
-                .toString();
-    }
-
-    /** Body takes precedence; falls back to the {@code sf_refresh_token} cookie. */
+    /** Body takes precedence; falls back to the refresh-token cookie. */
     private String resolveRefreshToken(RefreshRequest body, HttpServletRequest request) {
         if (body != null && body.refreshToken() != null && !body.refreshToken().isBlank()) {
             return body.refreshToken();
         }
-        Cookie[] cookies = request.getCookies();
-        if (cookies == null) {
-            return null;
-        }
-        return Arrays.stream(cookies)
-                .filter(c -> cookieProperties.effectiveRefreshCookieName().equals(c.getName()))
-                .map(Cookie::getValue)
-                .findFirst()
-                .orElse(null);
+        return cookieProperties.readRefreshCookie(request);
     }
 }

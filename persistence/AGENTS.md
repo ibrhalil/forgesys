@@ -64,7 +64,7 @@ src/main/resources/db/migration/
 ## Repository
 
 Package `com.ibrhalil.forgesys.persistence.repository`. Extends `JpaRepository` (list-bearing repos also `JpaSpecificationExecutor` — the backend filter engine queries through Specifications, with `@EntityGraph` overrides on `findAll(Spec, Pageable)` mirroring the former plain-list graphs to keep the N+1 profile). The module compiles with `hibernate-jpamodelgen` (annotation processor alongside Lombok, version property in the root pom) — generated `Entity_` classes carry compile-time field-name String constants (`User_.EMAIL`) used by the backend sort/filter whitelists. Current:
-- `CompanyRepository` (`findBySubdomain`, `findBySchemaName`) — public şema
+- `CompanyRepository` (`findBySubdomain`, `findBySchemaName`, `findAllTenantSchemas` — interface projection `TenantSchemaView` id+schemaName+status for the startup runners, [K-40](../docs/DECISIONS.md#k-40)) — public şema
 - `TenantVerificationTokenRepository` (`findByToken`, `findByCompanyId`) — public şema (K-21)
 - `PlanRepository` (`findByKey`), `SubscriptionRepository` (`findByCompanyId`), `TenantModuleRepository` (`findByCompanyId`, `findByCompanyIdAndModuleKey`) — public şema (K-16)
 - `UserRepository` (`findByEmail`, `findByUsername`, `findGroupMembers`, `findTokenInvalidBefore` [RISK-21 single-col projection], `findUserIdsByRole`/`findUserIdsByGroup`/`findGroupIdsByUserId`/`findUserIdsByGroupIds`/`bulkSetTokenInvalidBefore` [Faz 1 revoke + group-member visibility scope]) — tenant şeması

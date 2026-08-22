@@ -1,6 +1,11 @@
 package com.ibrhalil.forgesys.security.jwt;
 
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.http.ResponseCookie;
+
+import java.util.Arrays;
 
 /**
  * Cookie attributes + refresh-token TTL for JWT auth. The access token is delivered
@@ -24,6 +29,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *
  * <p>Bound under the {@code jwt.*} prefix; the {@code jwt.rsa.*} subkeys are owned by
  * {@link RsaKeyProperties} and are ignored here (record has no matching field).
+ * Beyond the raw attributes, this record also carries the {@code Set-Cookie}
+ * build/expire/read helpers (K-40) — the single cookie construction path shared by
+ * the auth and session controllers.
  */
 @ConfigurationProperties(prefix = "jwt")
 public record JwtCookieProperties(
@@ -75,5 +83,62 @@ public record JwtCookieProperties(
     /** Refresh-token lifetime in seconds (Redis TTL). */
     public long effectiveRefreshTokenTtlSeconds() {
         return effectiveRefreshTokenTtlDays() * 86_400L;
+    }
+
+    /**
+     * Builds the {@code Set-Cookie} header for the access-token cookie. Single
+     * source for cookie construction (K-40) — controllers never assemble
+     * {@code ResponseCookie}s themselves.
+     */
+    public String buildAccessTokenCookie(String token, long expiresInSeconds) {
+        return ResponseCookie.from(effectiveCookieName(), token)
+                .httpOnly(true)
+                .secure(effectiveCookieSecure())
+                .sameSite(effectiveCookieSameSite())
+                .path("/")
+                .maxAge(expiresInSeconds)
+                .build()
+                .toString();
+    }
+
+    /** Builds the {@code Set-Cookie} header for the refresh-token cookie. */
+    public String buildRefreshTokenCookie(String token) {
+        return ResponseCookie.from(effectiveRefreshCookieName(), token)
+                .httpOnly(true)
+                .secure(effectiveRefreshCookieSecure())
+                .sameSite(effectiveCookieSameSite())
+                .path(effectiveRefreshCookiePath())
+                .maxAge(effectiveRefreshTokenTtlSeconds())
+                .build()
+                .toString();
+    }
+
+    /**
+     * Builds a {@code Max-Age=0} expire header for the given cookie name.
+     * Both cookies expire with the access-cookie {@code Secure} flag — preserved
+     * pre-K-40 behavior (the access flag is the strictest default).
+     */
+    public String expireCookie(String name, String path) {
+        return ResponseCookie.from(name, "")
+                .httpOnly(true)
+                .secure(effectiveCookieSecure())
+                .sameSite(effectiveCookieSameSite())
+                .path(path)
+                .maxAge(0)
+                .build()
+                .toString();
+    }
+
+    /** Reads the refresh-token cookie from the request; {@code null} when absent. */
+    public String readRefreshCookie(HttpServletRequest request) {
+        Cookie[] cookies = request.getCookies();
+        if (cookies == null) {
+            return null;
+        }
+        return Arrays.stream(cookies)
+                .filter(c -> effectiveRefreshCookieName().equals(c.getName()))
+                .map(Cookie::getValue)
+                .findFirst()
+                .orElse(null);
     }
 }

@@ -197,6 +197,7 @@ Hızlı başlangıç yukarıda. Bu bölüm **geliştirme/referans** için tüm y
 cd frontend
 npm install --include=optional   # lock dosyası yok (.npmrc: package-lock=false)
 npm run lint                     # oxlint
+npm test                         # vitest run (jsdom + React Testing Library)
 npm run build                    # tsc -b && vite build -> dist/
 npm run dev                      # http://localhost:3000 (/api -> :8080 proxy)
 ```
@@ -318,7 +319,7 @@ Kurallar: Subject <72 karakter, küçük harfle başlasın, nokta ile bitmesin, 
 
 ### Code Review
 
-- Build + test + lint geçmek zorunlu: PR öncesi `./mvnw test` + `npm run lint`.
+- Build + test + lint geçmek zorunlu: PR öncesi `./mvnw test` + `npm run lint` + `npm test` (CI de aynı üçünü koşar).
 - Tenant izolasyonu içeren değişikliklerde ekstra dikkat (data leak kontrolü) — tenant verisi sızdıran en kritik bug sınıfıdır.
 - Yeni endpoint'ler için en az bir test eklenmeli.
 

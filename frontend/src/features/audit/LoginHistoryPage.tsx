@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { LoginHistory } from './types';
 import { useLoginHistory } from './hooks';
 import { DataTable, type Column } from '../../components/ui/DataTable';
@@ -10,10 +10,7 @@ import { Badge } from '../../components/ui/Badge';
 import type { SelectOption } from '../../lib/select';
 import { formatDateTime } from '../../lib/format';
 import { useT } from '../../lib/i18n';
-import type { SortState } from '../../types';
-import { useDebouncedValue } from '../../lib/useDebouncedValue';
-
-const DEFAULT_PAGE_SIZE = 10;
+import { useListPageState } from '../../lib/useListPageState';
 
 /**
  * Read-only admin view over {@code t_login_history} (K-19). Every authentication
@@ -28,28 +25,12 @@ export function LoginHistoryPage() {
     { value: 'true', label: t('loginHistory.success') },
     { value: 'false', label: t('loginHistory.failed') },
   ];
-  const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [success, setSuccess] = useState<'all' | 'true' | 'false'>('all');
-  const [search, setSearch] = useState('');
-  const [sort, setSort] = useState<SortState>({ field: 'createdDate', dir: 'desc' });
-  const q = useDebouncedValue(search, 300);
+  const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, q } =
+    useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' } });
 
   const successParam = success === 'all' ? undefined : success === 'true';
   const { data, isLoading, isFetching } = useLoginHistory({ page, size: pageSize, sort: `${sort.field},${sort.dir}`, success: successParam, q: q || undefined });
-
-  const handleSort = (field: string) => {
-    setSort((prev) =>
-      prev.field === field
-        ? { field, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
-        : { field, dir: 'asc' },
-    );
-    setPage(0);
-  };
-
-  useEffect(() => {
-    setPage(0);
-  }, [q]);
 
   const columns: Column<LoginHistory>[] = [
     { key: 'createdAt', header: t('audit.date'), sortKey: 'createdDate', render: (l) => <span className="whitespace-nowrap text-muted">{formatDateTime(l.createdAt)}</span> },
@@ -82,12 +63,12 @@ export function LoginHistoryPage() {
         page={data?.page ?? page}
         pageSize={data?.size ?? pageSize}
         pageSizeOptions={PAGE_SIZE_OPTIONS}
-        onPageSizeChange={(size) => { setPageSize(size); setPage(0); }}
+        onPageSizeChange={setPageSize}
         totalElements={data?.totalElements ?? 0}
         totalPages={data?.totalPages ?? 0}
         onPageChange={setPage}
         sort={sort}
-        onSortChange={handleSort}
+        onSortChange={toggleSort}
         toolbar={(
           <>
             <SearchInput value={search} onChange={setSearch} placeholder={t('loginHistory.searchPh')} />

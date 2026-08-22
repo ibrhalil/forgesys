@@ -19,8 +19,8 @@ import { TextAreaField } from '../../components/ui/TextArea';
 import { useT } from '../../lib/i18n';
 import { PAGE_SIZE_OPTIONS } from '../../lib/pagination';
 import { useClientPagination } from '../../lib/useClientPagination';
+import { useListPageState } from '../../lib/useListPageState';
 import { useAuthStore } from '../../store/authStore';
-import type { SortState } from '../../types';
 
 export function PermissionsPage() {
   const { t } = useT();
@@ -31,7 +31,9 @@ export function PermissionsPage() {
   const canDelete = useAuthStore((s) => s.hasAuthority(PERMISSIONS.PERMISSION_DELETE));
 
   const [query, setQuery] = useState('');
-  const [sort, setSort] = useState<SortState>({ field: 'name', dir: 'asc' });
+  // Client-paginated page: only the sort toggle comes from the list-state hook
+  // (page/search state is inert here — pagination is local, filtering is instant).
+  const { sort, toggleSort } = useListPageState({ defaultSort: { field: 'name', dir: 'asc' } });
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Permission | null>(null);
   const [deleting, setDeleting] = useState<Permission | null>(null);
@@ -84,13 +86,7 @@ export function PermissionsPage() {
         pageSizeOptions={PAGE_SIZE_OPTIONS}
         onPageSizeChange={(size) => { pagination.setPageSize(size); resetPage(); }}
         sort={sort}
-        onSortChange={(field) => {
-          setSort((prev) =>
-            prev.field === field
-              ? { field, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
-              : { field, dir: 'asc' },
-          );
-        }}
+        onSortChange={toggleSort}
         toolbar={(
           <SearchInput
             value={query}

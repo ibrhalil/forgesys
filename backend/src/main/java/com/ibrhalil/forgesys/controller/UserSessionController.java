@@ -4,14 +4,13 @@ import com.ibrhalil.forgesys.dto.ActiveSessionResponse;
 import com.ibrhalil.forgesys.security.CustomUserDetails;
 import com.ibrhalil.forgesys.security.jwt.JwtCookieProperties;
 import com.ibrhalil.forgesys.service.SessionService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
-import org.springframework.http.ResponseCookie;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -47,9 +46,6 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class UserSessionController {
 
-    /** The httpOnly refresh-token cookie used to identify the caller's current device. */
-    static final String REFRESH_COOKIE = "sf_refresh_token";
-
     private final SessionService sessionService;
     private final JwtCookieProperties cookieProperties;
 
@@ -58,16 +54,18 @@ public class UserSessionController {
     @GetMapping("/me/sessions")
     public ResponseEntity<List<ActiveSessionResponse>> mySessions(
             @AuthenticationPrincipal CustomUserDetails principal,
-            @CookieValue(name = REFRESH_COOKIE, required = false) String refreshToken) {
-        return ResponseEntity.ok(sessionService.listMySessions(principal.getUserId(), refreshToken));
+            HttpServletRequest request) {
+        return ResponseEntity.ok(sessionService.listMySessions(principal.getUserId(),
+                cookieProperties.readRefreshCookie(request)));
     }
 
     @DeleteMapping("/me/sessions/{sessionId}")
     public ResponseEntity<Void> revokeMySession(
             @AuthenticationPrincipal CustomUserDetails principal,
             @PathVariable UUID sessionId,
-            @CookieValue(name = REFRESH_COOKIE, required = false) String refreshToken,
+            HttpServletRequest request,
             HttpServletResponse response) {
+        String refreshToken = cookieProperties.readRefreshCookie(request);
         sessionService.revokeMySession(principal.getUserId(), sessionId);
         // If the caller ended their own current device, clear the refresh cookie so the
         // browser stops sending a now-dead token.
@@ -106,21 +104,10 @@ public class UserSessionController {
             // The caller ended their own current device: clear BOTH cookies so the
             // browser drops the (now server-side-dead) access token immediately for an
             // instant logout, not just the refresh cookie.
-            response.addHeader(HttpHeaders.SET_COOKIE, expireCookie(
+            response.addHeader(HttpHeaders.SET_COOKIE, cookieProperties.expireCookie(
                     cookieProperties.effectiveCookieName(), "/"));
-            response.addHeader(HttpHeaders.SET_COOKIE, expireCookie(
+            response.addHeader(HttpHeaders.SET_COOKIE, cookieProperties.expireCookie(
                     cookieProperties.effectiveRefreshCookieName(), cookieProperties.effectiveRefreshCookiePath()));
         }
-    }
-
-    private String expireCookie(String name, String path) {
-        return ResponseCookie.from(name, "")
-                .httpOnly(true)
-                .secure(cookieProperties.effectiveCookieSecure())
-                .sameSite(cookieProperties.effectiveCookieSameSite())
-                .path(path)
-                .maxAge(0)
-                .build()
-                .toString();
     }
 }

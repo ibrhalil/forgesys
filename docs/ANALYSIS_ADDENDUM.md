@@ -100,6 +100,10 @@ Session 1 — Backend temizlik (K-38 kaldırma + K-37 API geçişi + K-40 tekrar
     (469 H2 + 9 gated PG IT yeşil; frontend göçü dahil.)
   ⏳ K-40 (Session 3) bekliyor.
 Session 2 — Frontend kalite (K-39)
+  ✅ K-39 uygulandı (2026-08-22): strict TS (0 hata ile geçti), Vitest+RTL
+    altyapısı (Node 20 pin'i: jest-dom 6 / jsdom 29) + 20 test (api refresh,
+    LoginPage, DataTable, Modal, useListPageState), 7 sayfa list-scaffold göçü
+    (Permissions kısmi — client pagination), CI npm test adımı.
 Session 3 — Springdoc-openapi (D-6 — K-37 sonrası)
 ```
 
