@@ -21,6 +21,14 @@ spring:
   # env var (see docker-compose-prod.yml + .env.example) — not via spring.config.import
   # here, to avoid duplicate resolution.
 
+# K-41: OpenAPI docs are a dev-only tool. Both the spec endpoint and the Swagger UI
+# are disabled in prod — no API surface disclosure in deployed environments.
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
 # RISK-24: the access-token cookie MUST be Secure in prod so it never travels over
 # cleartext HTTP (redirect / mixed-content downgrade, internal network paths).
 # SameSite=Lax alone does not prevent that. Dev/test keep the default (false).

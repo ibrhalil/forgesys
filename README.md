@@ -142,6 +142,7 @@ docker compose -f docker-compose-prod.yml up -d --build
 ```
 
 - App: http://localhost:8080 · Health: http://localhost:8080/actuator/health
+- Swagger UI (yalnız dev): http://localhost:8080/swagger-ui.html · OpenAPI spec: `/v3/api-docs` — prod profilinde kapalıdır (K-41).
 - DB: `localhost:5432` (credential'lar `.env`'den) · Redis: `localhost:6379`
 
 ### Sadece Frontend (Backend yokken)

@@ -60,6 +60,13 @@
             <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
         </dependency>
 
+        <!-- OpenAPI 3 docs + Swagger UI (K-41). Dev-only: application-prod.yaml sets
+             springdoc.api-docs.enabled/swagger-ui.enabled=false. -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>

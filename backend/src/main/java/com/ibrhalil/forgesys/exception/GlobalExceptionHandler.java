@@ -17,6 +17,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 
 import java.util.List;
@@ -44,6 +45,19 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleResourceNotFound(ResourceNotFoundException ex, HttpServletRequest request) {
         log.warn("Resource not found: {} at {}", ex.getMessage(), request.getRequestURI());
         return build(ErrorCode.RESOURCE_NOT_FOUND, ex.getMessage(), request.getRequestURI());
+    }
+
+    /**
+     * No handler mapping matched the request path (Spring 6.1+ static-resource chain
+     * throws {@link NoResourceFoundException} instead of rendering a plain 404). Maps
+     * to the standard {@code resource_not_found} wire shape — e.g. hitting
+     * {@code /v3/api-docs} in a profile where springdoc is disabled (K-41 prod gating).
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleNoResourceFound(NoResourceFoundException ex, HttpServletRequest request) {
+        log.warn("No resource found: {} at {}", ex.getMessage(), request.getRequestURI());
+        return build(ErrorCode.RESOURCE_NOT_FOUND, "No endpoint found for this path",
+                request.getRequestURI());
     }
 
     @ExceptionHandler(TenantNotFoundException.class)

@@ -98,13 +98,19 @@ Session 1 — Backend temizlik (K-38 kaldırma + K-37 API geçişi + K-40 tekrar
     POST /unlock 204, session controller rename'leri (ad=path), AuditController
     class-mapping; registerCompany zaten DTO imiş (envanter notu düzeltildi).
     (469 H2 + 9 gated PG IT yeşil; frontend göçü dahil.)
-  ⏳ K-40 (Session 3) bekliyor.
+  ✅ K-40 uygulandı (2026-08-22, Session 3): startup runner projection
+    (`CompanyRepository.TenantSchemaView`), tek plan çözümleme zinciri
+    (`PlanLimitService.tryActivePlan`), cookie helper tek noktada
+    (`JwtCookieProperties`). 462 H2 + 9 gated PG IT yeşil; refactor, davranış değişikliği yok.
 Session 2 — Frontend kalite (K-39)
   ✅ K-39 uygulandı (2026-08-22): strict TS (0 hata ile geçti), Vitest+RTL
     altyapısı (Node 20 pin'i: jest-dom 6 / jsdom 29) + 20 test (api refresh,
     LoginPage, DataTable, Modal, useListPageState), 7 sayfa list-scaffold göçü
     (Permissions kısmi — client pagination), CI npm test adımı.
 Session 3 — Springdoc-openapi (D-6 — K-37 sonrası)
+  ✅ K-41 uygulandı (2026-08-22, Session 5): springdoc 3.1.0 (SB4/Jackson 3
+    hattı), dev'de açık / prod'da kapalı, cookieAuth scheme dokümante,
+    NoResourceFoundException → 404 side-fix. 466 H2 test + dev runtime kontrolü yeşil.
 ```
 
 > FULL_ANALYSIS §14'deki "Critical" bloğu bu session'ın kararlarıyla şu şekilde güncellenir: frontend test altyapısı (K-39) ve API tutarlılık geçişi (K-37) aynı önceliktedir; springdoc (D-6) bilinçli olarak onların ARKASINA alınmıştır.
