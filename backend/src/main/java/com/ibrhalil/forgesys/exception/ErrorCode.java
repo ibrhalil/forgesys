@@ -44,6 +44,14 @@ public enum ErrorCode {
     MODULE_ALREADY_ACTIVE(HttpStatus.CONFLICT, "Module is already activated for this tenant"),
     SUBSCRIPTION_NOT_FOUND(HttpStatus.CONFLICT, "Tenant has no active subscription"),
     MODULE_PLAN_REQUIRED(HttpStatus.FORBIDDEN, "Module requires a higher subscription plan"),
+    APP_NAME_TAKEN(HttpStatus.BAD_REQUEST, "App name is already in use"),
+    APP_PROPERTY_NAME_TAKEN(HttpStatus.BAD_REQUEST, "Property name is already in use in this app"),
+    APP_PROPERTY_TYPE_INVALID(HttpStatus.BAD_REQUEST, "Property type is not supported"),
+    APP_PROPERTY_CONFIG_INVALID(HttpStatus.BAD_REQUEST, "Property configuration is invalid for its type"),
+    APP_VIEW_NAME_TAKEN(HttpStatus.BAD_REQUEST, "View name is already in use in this app"),
+    APP_VIEW_CONFIG_INVALID(HttpStatus.BAD_REQUEST, "View configuration is invalid"),
+    APP_RECORD_VALUE_INVALID(HttpStatus.BAD_REQUEST, "Record value does not match the property type"),
+    APP_LIMIT_REACHED(HttpStatus.FORBIDDEN, "Plan limit reached; upgrade to add more"),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred");
 
     private final HttpStatus status;

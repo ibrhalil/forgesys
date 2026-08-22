@@ -89,6 +89,18 @@ Detay + uygulama kararları: [`docs/DECISIONS.md K-16`](docs/DECISIONS.md#k-16) 
 - Endpoint'ler: `GET /api/v1/modules` (`iam:module:read`) + `POST /modules/{key}/activate` (`iam:module:write`, idempotent).
 - Testler: 398 H2 + `ModuleActivationIT` (gated gerçek PG — provisioning hook, permission seed, modül history izolasyonu).
 
+### Faz 3.0.B — Custom App Builder Backend (K-15) — UYGULANDI (2026-08-22)
+
+Detay + uygulama kararları: [`docs/DECISIONS.md K-15`](docs/DECISIONS.md#k-15).
+
+- `apps` modülü (`ModuleDefinition.APPS`, `ownMigrations=true`, FREE + default — `default-keys: pm,apps`): `db/migration/module/apps/V1__app_builder.sql` → `t_apps`/`t_app_properties(config jsonb)`/`t_app_records`/`t_app_record_values(value jsonb, GIN jsonb_path_ops, backtick-quoted kolon — H2 reserved)`/`t_app_views(config jsonb)`. Value satırları soft-delete'siz (`GeneratedIdAuditEntity`) — clear = satır silinir.
+- JSONB mapping düz `String` + `columnDefinition="jsonb"` (AuditLog emsali; hypersistence-utils YOK) + `stringtype=unspecified`. Entity'ler: `App`/`AppProperty`/`AppRecord`/`AppRecordValue`/`AppView` + `PropertyType`/`ViewType` enum'ları.
+- Plan limitleri `PlanDefinition`'da (maxApps/maxRecordsPerApp: 3/1k · 25/50k · -1/-1) — soft-block `PlanLimitService` (403 `app_limit_reached`). Test-profile fallback default-keys bilinçli `pm` kalır.
+- Service'ler: `AppBuilderService` (app/property/view CRUD; FORMULA reddedilir, SELECT/RELATION config doğrulama, property tipi immutable) + `AppRecordService` (record CRUD, PATCH partial-merge — JSON null clear, required korunur; bulk value fetch N+1'siz) + `AppPropertyValueValidator` (USER/RELATION tenant içi varlık kontrolü) + `AppQueryValidator`/`AppViewConfigValidator` (structured filter/sort DSL — injection yüzeyi yok; BOARD groupBy/CALENDAR dateProperty zorunlu).
+- `AppRecordSearchExecutor` — native PG JSONB search (`@>` EQ, `#>>` CONTAINS/DATE, `::numeric` NUMBER, GIN-backed; explicit `?N` parametreler, enum-fragment SQL). `POST /apps/{id}/records/search` PG-only (H2'de koşmaz).
+- Endpoint'ler: `/api/v1/apps` CRUD + nested `/{id}/properties|views|records` (+`/search`) — `apps:app:*` + `apps:record:*` permission'ları; ErrorCode'lar `APP_*`; constraint-map `apps_name`/`app_properties_name`/`app_views_name`.
+- Testler: 466 H2 (34 yeni unit + 29 yeni controller) + `AppBuilderIT` (gated gerçek PG — aktivasyon, history izolasyonu, JSONB search semantiği, iki-tenant izolasyon).
+
 ### Faz A — Kritik Güvenlik (önce)
 - [x] **[P0 RISK-19]** JWT tenant binding — `JwtAuthenticationFilter`'da token tenant claim == request tenant (TenantContext) kontrolü; mismatch → SecurityContext temizle. Cross-tenant escalation kapatır.
 - [x] **[P1 RISK-21]** `tokenInvalidBefore` filter kontrolü + `changePassword`/`resetPassword`/`logout`'ta `tokenInvalidBefore = now()` set. (2026-07-24)

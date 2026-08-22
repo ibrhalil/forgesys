@@ -59,6 +59,17 @@ public final class PermissionCatalog {
     public static final String PM_TASK_WRITE = "pm:task:write";
     public static final String PM_TASK_DELETE = "pm:task:delete";
 
+    // apps:* — custom app builder (K-15 / Epic 3.0.B). Definitions live in
+    // ModuleDefinition.APPS (module-owned, seeded on activation); the constants stay
+    // here as the single naming source referenced by controllers. Property/view CRUD
+    // is covered by apps:app:write (they are part of the app definition, not data).
+    public static final String APPS_APP_READ = "apps:app:read";
+    public static final String APPS_APP_WRITE = "apps:app:write";
+    public static final String APPS_APP_DELETE = "apps:app:delete";
+    public static final String APPS_RECORD_READ = "apps:record:read";
+    public static final String APPS_RECORD_WRITE = "apps:record:write";
+    public static final String APPS_RECORD_DELETE = "apps:record:delete";
+
     public record PermissionDefinition(String name, String description) {
     }
 

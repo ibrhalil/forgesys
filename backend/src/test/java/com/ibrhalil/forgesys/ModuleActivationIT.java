@@ -133,7 +133,11 @@ class ModuleActivationIT {
             List<String> names = permissionRepository.findAll().stream()
                     .map(Permission::getName)
                     .toList();
-            for (ModuleDefinition def : ModuleDefinition.values()) {
+            // Provisioning activates the DEFAULT module set (test profile: built-in
+            // fallback "pm" — the registry's APPS ships but is opt-in here), so exactly
+            // the default modules' permissions must be seeded.
+            for (String key : new com.ibrhalil.forgesys.config.ModuleProperties(null).effectiveDefaultKeys()) {
+                ModuleDefinition def = ModuleDefinition.fromKey(key).orElseThrow();
                 def.permissions().forEach(expected ->
                         assertThat(names).contains(expected.name()));
             }

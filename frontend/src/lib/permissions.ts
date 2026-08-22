@@ -29,6 +29,13 @@ export const PERMISSIONS = {
   TASK_READ: 'pm:task:read',
   TASK_WRITE: 'pm:task:write',
   TASK_DELETE: 'pm:task:delete',
+  // apps:* — custom app builder module (K-15 / Faz 3.0.B); seeded on module activation.
+  APP_READ: 'apps:app:read',
+  APP_WRITE: 'apps:app:write',
+  APP_DELETE: 'apps:app:delete',
+  APP_RECORD_READ: 'apps:record:read',
+  APP_RECORD_WRITE: 'apps:record:write',
+  APP_RECORD_DELETE: 'apps:record:delete',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
