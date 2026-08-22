@@ -19,6 +19,7 @@
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — architecture diagram, request lifecycle, schema-per-tenant, entity hierarchy, **config profiles** (single source). (TR/mixed)
 - [`docs/ROADMAP.md`](docs/ROADMAP.md) — phase/epic roadmap (no ticket numbers, goal-oriented). (TR/mixed)
 - [`docs/DECISIONS.md`](docs/DECISIONS.md) — decision log (K-XX architecture, RISK-XX risk, DEBT-XX tech debt). (TR/mixed)
+- [`docs/FULL_ANALYSIS.md`](docs/FULL_ANALYSIS.md) + [`docs/ANALYSIS_ADDENDUM.md`](docs/ANALYSIS_ADDENDUM.md) — 2026-08-22 planning session: system analysis, simplification plan, frozen decisions (§11 + addendum §8), prioritized action plan. (TR)
 - Each module has its own `AGENTS.md`: [`common/`](common/AGENTS.md) · [`persistence/`](persistence/AGENTS.md) · [`backend/`](backend/AGENTS.md) · [`frontend/`](frontend/AGENTS.md). (all EN)
 
 ## Setup (summary)

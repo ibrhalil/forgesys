@@ -1,6 +1,6 @@
 # Mimari
 
-ForgeSys — modüler çok-kiracılı (multi-tenant) SaaS platformu. Schema-per-tenant izolasyonu, UUID PK, soft-delete + optimistic locking, Spring Data auditing. Hibrit ürün modeli: built-in modüller (Tasks/Notes/Warehouse/Logistics) + tenant custom app'leri (Notion-style App Builder). Bu doküman **mevcut Faz 1 altyapısını** belgeler; auth/RBAC/modüller [`ROADMAP.md`](ROADMAP.md)'de planlanmıştır.
+ForgeSys — modüler çok-kiracılı (multi-tenant) SaaS platformu. Schema-per-tenant izolasyonu, UUID PK, soft-delete + optimistic locking, Spring Data auditing. Hibrit ürün modeli: built-in modüller (pm: Projects & Tasks bugün; Notes/Warehouse/Logistics planlı) + tenant custom app'leri (Notion-style App Builder, `apps` modülü). Bu doküman **mevcut sistemi** belgeler: auth (K-34), RBAC (K-26), audit (K-19), plan/modül sistemi (K-16) ve app builder (K-15) uygulanmış durumdadır; kalan epikler [`ROADMAP.md`](ROADMAP.md)'de.
 
 ## Sistem Bileşenleri
 
@@ -21,13 +21,13 @@ flowchart LR
     end
     subgraph DataHost[Data Layer]
         PG[(PostgreSQL 16<br/>public + tenant_* schemas)]
-        Redis[(Redis 7.4<br/>cache + token blacklist<br/>Faz 2.6)]
+        Redis[(Redis 7.4<br/>refresh token store + rotation<br/>jti blacklist + rate limit)]
     end
 
     UI --> Vite
     Vite -- proxy --> SB
     SB --> PG
-    SB -. Faz 2.6 .-> Redis
+    SB --> Redis
 ```
 
 **Dev:** Browser → Vite (`:3000`) → backend (`:8080`). **Prod:** Nginx gateway planlandı (Faz 1.5 — erteli), şu an Docker compose içinde tek app container.
@@ -99,6 +99,7 @@ flowchart TB
             TJoin1[t_user_roles<br/>t_user_groups<br/>t_role_permissions<br/>t_group_roles<br/>t_role_parents]
             TAcc1[t_user_accounts<br/>t_user_profiles]
             TMod1[t_projects<br/>t_tasks<br/>t_audit_logs<br/>t_login_history]
+            TApps1[t_apps . t_app_properties<br/>t_app_records . t_app_record_values<br/>t_app_views]
         end
         subgraph T2[tenant_stark]
             TU2[t_users]
@@ -108,6 +109,7 @@ flowchart TB
             TJoin2[t_user_roles<br/>t_user_groups<br/>t_role_permissions<br/>t_group_roles<br/>t_role_parents]
             TAcc2[t_user_accounts<br/>t_user_profiles]
             TMod2[t_projects<br/>t_tasks<br/>t_audit_logs<br/>t_login_history]
+            TApps2[t_apps . t_app_properties<br/>t_app_records . t_app_record_values<br/>t_app_views]
         end
     end
 ```
@@ -123,8 +125,11 @@ flowchart TB
 | Şema             | Tablo               | Amaç                                 | Migration           |
 |------------------|---------------------|--------------------------------------|---------------------|
 | `public`         | `t_companies`       | Tenant kayıt (subdomain→schema map, status)  | `public/V1__tenant_registry.sql` |
-| `public`         | `t_organization_domains` | Org-owned email domain'leri (1:N, opsiyonel, K-32) | `public/V1__tenant_registry.sql` |
+| `public`         | `t_organization_domains` | Org-owned email domain'leri (1:N, opsiyonel, K-32) — **kaldırılacak** ([K-38](DECISIONS.md#k-38): sıfır-referans ölü küme) | `public/V1__tenant_registry.sql` |
 | `public`         | `t_tenant_verification_tokens` | K-21 signup token'ları (admin credential'lar gömülü) | `public/V1.1__signup_verification_tokens.sql` |
+| `public`         | `t_plans`           | Plan kataloğu (FREE/PRO/ENTERPRISE; `PlanSyncRunner` upsert — registry kodda, [K-16](DECISIONS.md#k-16)) | `public/V2__plans_subscriptions_modules.sql` |
+| `public`         | `t_subscriptions`   | Tenant→plan aboneliği (FREE default) | `public/V2__plans_subscriptions_modules.sql` |
+| `public`         | `t_tenant_modules`  | Tenant modül aktivasyon kayıtları   | `public/V2__plans_subscriptions_modules.sql` |
 | `tenant_<sub>`   | `t_users`           | Kullanıcı hesabı (credential'lar)    | `tenant/V1__iam_users.sql` |
 | `tenant_<sub>`   | `t_user_accounts`   | Security state (lock, failed login)  | `tenant/V1__iam_users.sql` |
 | `tenant_<sub>`   | `t_user_profiles`   | PII (isim, telefon, adres)           | `tenant/V1__iam_users.sql` |
@@ -140,6 +145,7 @@ flowchart TB
 | `tenant_<sub>`   | `t_tasks`           | Task modülü (project-scoped)         | `tenant/V1.3__pm_projects_tasks.sql` |
 | `tenant_<sub>`   | `t_audit_logs`      | Audit trail (append-only, K-19)      | `tenant/V1.2__audit.sql` |
 | `tenant_<sub>`   | `t_login_history`   | Login denemeleri (append-only, K-19) | `tenant/V1.2__audit.sql` |
+| `tenant_<sub>`   | `t_apps` + 4        | App builder ailesi: `t_app_properties(config jsonb)`, `t_app_records`, `t_app_record_values(value jsonb, GIN)`, `t_app_views(config jsonb)` — `apps` modülü aktivasyonda düşer | `module/apps/V1__app_builder.sql` (per-module history `flyway_schema_history_mod_apps`, [K-15](DECISIONS.md#k-15)) |
 
 > Refresh token'lar tabloda DEĞİL — Redis-first (K-34, [DECISIONS](DECISIONS.md#k-34)); eski `t_refresh_tokens` ölü tablosu K-36 temizliğinde kaldırıldı. Migration'ların tamamı pre-1.0.0 squash'ı ile alan-bazlı `V1.x` baseline ailesine indirildi ([K-36](DECISIONS.md#k-36)) — yeni migration'lar `V2`'den devam eder.
 
@@ -230,15 +236,37 @@ classDiagram
     class Permission
     class Group
     class TenantVerificationToken
+    class Plan
+    class Subscription
+    class TenantModule
+    class Project
+    class Task
+    class AuditLog
+    class LoginHistory
+    class App
+    class AppProperty
+    class AppRecord
+    class AppRecordValue
+    class AppView
 
     BaseEntity <|-- Company
     BaseEntity <|-- User
     BaseEntity <|-- Role
     BaseEntity <|-- Permission
     BaseEntity <|-- Group
+    BaseEntity <|-- Project
+    BaseEntity <|-- Task
+    BaseEntity <|-- App
+    BaseEntity <|-- AppProperty
+    BaseEntity <|-- AppRecord
+    BaseEntity <|-- AppView
     SoftDeleteAuditEntity <|-- UserAccount
     SoftDeleteAuditEntity <|-- UserProfile
     GeneratedIdAuditEntity <|-- TenantVerificationToken
+    GeneratedIdAuditEntity <|-- Plan
+    GeneratedIdAuditEntity <|-- AuditLog
+    GeneratedIdAuditEntity <|-- LoginHistory
+    GeneratedIdAuditEntity <|-- AppRecordValue
 ```
 
 - **`@MappedSuperclass`** — DB tablosu karşılığı yok, sadece alanları concrete entity'lere inherits.
@@ -246,6 +274,7 @@ classDiagram
 - `@SQLDelete` her concrete entity'de ayrı (table-specific `UPDATE ... SET is_deleted = true, version = version + 1`).
 - `UserAccount`/`UserProfile` `@MapsId` ile `User`'a shared PK (gereksiz FK yok).
 - Tüm ID'ler UUID (`GenerationType.UUID`). Tablo adları `t_` prefix'li. Constraint'ler `idx_*`, `uk_*`, `fk_*`.
+- `Subscription`/`TenantModule` (public şema) `BaseEntity`; `UserDirectoryView` read model'i (`@Immutable @Subselect`) hiyerarşi dışıdır. `AppRecordValue` soft-delete'siz (`GeneratedIdAuditEntity`) — clear = satır silinir (K-15).
 
 > Detaylar: [`persistence/AGENTS.md`](../persistence/AGENTS.md)
 

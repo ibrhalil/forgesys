@@ -10,18 +10,15 @@ which is **not** source code. Source code lives in `common/`, `persistence/`,
 |-------------------|----------------------------------------------------------------------|----------------------------------|
 | `config/`         | Externalized Spring Boot overrides for prod (`SPRING_CONFIG_ADDITIONAL_LOCATION`). Empty by default — drop `application-prod.yaml` here to override jar-baked values. | Directory only (`.gitkeep`)       |
 | `data/postgres/`  | PostgreSQL bind-mount volume (dev + prod).                           | **No** (runtime data)             |
+| `data/redis/`     | Redis AOF bind-mount volume (**prod only** — dev uses a named volume). | **No** (runtime data)            |
 | `init-sql/`       | Postgres `/docker-entrypoint-initdb.d/` scripts (run once on init).  | Yes                               |
 | `logs/`           | Spring Boot + container log bind-mount.                              | **No** (runtime data)             |
 | `ssl/`            | TLS certificates / private keys for Nginx and app HTTPS.             | **No** — secrets, never committed |
 | `templates/`      | Externalized runtime templates (e.g. email HTML/CSS).                | Yes (templates can be committed)  |
 
-> **Redis data** lives in a Docker-managed **named volume** (`redis-data`,
-> declared in `docker-compose.yml`), not under `infra/data/`. The earlier
-> bind-mount to `./infra/data/redis` caused recurring permission errors on the
-> host because the container wrote `appendonlydir/` as UID 999, which host
-> scanners (IDE watchers, `git`, `find`) couldn't traverse — especially on
-> Windows/WSL2. Named volume isolates Redis's AOF data inside Docker's own
-> storage, eliminating the host-level UID mismatch entirely.
+> **Redis data — dev vs prod:**
+> - **dev** (`docker-compose.yml`): Docker-managed **named volume** (`redis-data`), NOT under `infra/data/`. The earlier dev bind-mount to `./infra/data/redis` caused recurring permission errors on the host because the container wrote `appendonlydir/` as UID 999, which host scanners (IDE watchers, `git`, `find`) couldn't traverse — especially on Windows/WSL2. Named volume isolates Redis's AOF data inside Docker's own storage, eliminating the host-level UID mismatch entirely.
+> - **prod** (`docker-compose-prod.yml`): **bind-mount `./infra/data/redis`** (alongside postgres data — single backup/inspection point on the host). Ownership is fixed by the `data-init` one-shot service (`chown -R 999:999`); the redis container gets `DAC_OVERRIDE` to traverse the 700 `appendonlydir/` on restart-with-existing-data.
 
 ## PostgreSQL data layout
 

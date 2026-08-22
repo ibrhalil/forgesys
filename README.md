@@ -23,7 +23,9 @@
 - **Kullanıcı yönetimi:** DB-side user directory read model (rol/grup sayıları, N+1'siz), grup-üyesi scoped görünürlük (`iam:group-member:read`), hesap aktivite geçmişi, admin unlock
 - **Audit & log:** 3 katman (audit + login history + request/traceId); append-only DB trigger; yetki değişim delta kaydı ("kim kime ne verdi/aldı"); arama
 - **Projects & Tasks modülü:** tip-bazlı proje yapısı + TASKS tipinde görev yönetimi (Kanban board UI dahil)
-- **Admin console (frontend):** login/register/tenant-verify; users/roles/groups/permissions/sessions/audit/login-history/projects sayfaları; permission-gated lazy navigation
+- **Modül & plan sistemi (K-16):** FREE/PRO/ENTERPRISE planları; plan bazlı modül aktivasyonu (plan gate → modül Flyway → permission seed); modül/plan registry'leri kodda
+- **Custom App Builder backend'i (K-15):** tenant'ların kendi mini-uygulamalarını yaratması — JSONB EAV modeli (app/property/view/record CRUD, native PG JSONB search, plan limitleri). UI Faz 4.2'de
+- **Admin console (frontend):** login/register/tenant-verify; users/roles/groups/permissions/sessions/audit/login-history/projects/modules sayfaları; permission-gated lazy navigation
 - **Self-service:** `/users/me/**` (profil + şifre değiştirme) — her authenticated user kendi hesabını yönetir
 - **Platform admin:** `/platform/companies` cross-tenant yönetim (K-25) + rezerve `system` tenant bootstrap (K-24)
 - **İki fazlı tenant signup (K-21):** `POST /api/v1/auth/company/register` → 202 + PROVISIONING + doğrulama maili → `POST /verify` → şema + Flyway + admin user → ACTIVE
@@ -33,9 +35,11 @@
 
 **Planlanan (kararlar kilitlendi — yol haritası [`docs/ROADMAP.md`](docs/ROADMAP.md)):**
 - **Built-in modüller:** Notes, Warehouse, Logistics (plan bazlı aktivasyon; Tasks pm modülü olarak geldi)
-- **Custom App Builder** (Notion-style, JSONB EAV)
+- **App Builder UI** (Faz 4.2 — backend K-15 ile tamamlandı)
 - Mail gönderimi (SMTP — doğrulama linkleri şu an log'a düşüyor)
 - Billing (Stripe/iyzico), Nginx gateway, CI/CD, LDAP/SSO
+
+> Süreç/kalite kararları (2026-08-22 planlama session'ı): [`docs/FULL_ANALYSIS.md`](docs/FULL_ANALYSIS.md) + [`docs/ANALYSIS_ADDENDUM.md`](docs/ANALYSIS_ADDENDUM.md) · ADR'ler: [`docs/DECISIONS.md`](docs/DECISIONS.md) K-37..K-40.
 
 ## Teknoloji Stack'i
 
@@ -104,8 +108,9 @@ Konfigürasyon **profile-based** çalışır. Aktif profil `SPRING_PROFILES_ACTI
 | `SPRING_DATASOURCE_URL` | DB bağlantı URL'i |
 | `SPRING_DATASOURCE_USERNAME` / `SPRING_DATASOURCE_PASSWORD` | DB credential'ları |
 | `SPRING_DATA_REDIS_HOST` / `SPRING_DATA_REDIS_PORT` | Redis |
-| `BASE_DOMAIN` | Subdomain çözümleme için base domain |
 
+> `PASSWORD_PEPPER` (K-23 — `.env.example`'te tanımlı) compose `environment:` listesinde **iletilmez**; `infra/config/application-prod.yaml` overlay'i üzerinden konteynere ulaşır (`SPRING_CONFIG_ADDITIONAL_LOCATION`). Pepper'ı overlay ile set etmeden prod ayağa kalkmaz (fail-fast).
+>
 > `.env` yalnızca **prod** Docker Compose içindir; `dev` profilinde gerekmez. `.env` `.gitignore`'dadır, asla commit edilmez. Şablon: `.env.example`.
 
 ## Çalıştırma
@@ -282,7 +287,7 @@ forgesys/
 |--------------------|----------------------------------------------------------------|---------------------------------|
 | `config/`          | Prod için externalized Spring override'ları                     | Sadece `.gitkeep`               |
 | `data/postgres/`   | PostgreSQL bind-mount volume (dev + prod)                       | Hayır (runtime veri)            |
-| `data/redis/`      | Redis AOF bind-mount volume                                     | Hayır (runtime veri)            |
+| `data/redis/`      | Redis AOF bind-mount volume (prod; dev named volume kullanır)  | Hayır (runtime veri)            |
 | `init-sql/`        | Docker `/docker-entrypoint-initdb.d/` script'leri (ilk kurulum) | Evet                            |
 | `logs/`            | Spring Boot + container log bind-mount                          | Hayır (runtime veri)            |
 | `ssl/`             | TLS sertifikaları (Nginx / app HTTPS)                           | **Hayır** — secret, asla commit |
