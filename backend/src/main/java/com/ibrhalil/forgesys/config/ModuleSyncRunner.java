@@ -58,11 +58,11 @@ public class ModuleSyncRunner implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        for (Company company : companyRepository.findAll()) {
+        for (CompanyRepository.TenantSchemaView tenant : companyRepository.findAllTenantSchemas()) {
             try {
-                self.getObject().syncCompany(company.getId());
+                self.getObject().syncCompany(tenant.getId());
             } catch (Exception e) {
-                log.error("Module sync failed for company: {}", company.getId(), e);
+                log.error("Module sync failed for company: {}", tenant.getId(), e);
             }
         }
     }

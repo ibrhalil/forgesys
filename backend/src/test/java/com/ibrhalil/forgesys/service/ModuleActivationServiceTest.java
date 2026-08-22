@@ -7,15 +7,11 @@ import com.ibrhalil.forgesys.config.PlanDefinition;
 import com.ibrhalil.forgesys.entity.Company;
 import com.ibrhalil.forgesys.entity.ModuleStatus;
 import com.ibrhalil.forgesys.entity.Permission;
-import com.ibrhalil.forgesys.entity.Plan;
-import com.ibrhalil.forgesys.entity.Subscription;
-import com.ibrhalil.forgesys.entity.SubscriptionStatus;
 import com.ibrhalil.forgesys.entity.TenantModule;
 import com.ibrhalil.forgesys.exception.BusinessException;
 import com.ibrhalil.forgesys.exception.ErrorCode;
 import com.ibrhalil.forgesys.persistence.repository.CompanyRepository;
 import com.ibrhalil.forgesys.persistence.repository.PermissionRepository;
-import com.ibrhalil.forgesys.persistence.repository.SubscriptionRepository;
 import com.ibrhalil.forgesys.persistence.repository.TenantModuleRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -48,7 +44,7 @@ import static org.mockito.Mockito.when;
 class ModuleActivationServiceTest {
 
     @Mock private CompanyRepository companyRepository;
-    @Mock private SubscriptionRepository subscriptionRepository;
+    @Mock private PlanLimitService planLimitService;
     @Mock private TenantModuleRepository tenantModuleRepository;
     @Mock private PermissionRepository permissionRepository;
     @Mock private TenantMigrationSupport tenantMigrationSupport;
@@ -61,7 +57,7 @@ class ModuleActivationServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ModuleActivationService(companyRepository, subscriptionRepository,
+        service = new ModuleActivationService(companyRepository, planLimitService,
                 tenantModuleRepository, permissionRepository, tenantMigrationSupport,
                 auditService, self, modulePropertiesProvider);
         company = new Company();
@@ -74,7 +70,7 @@ class ModuleActivationServiceTest {
 
     @Test
     void doActivate_seedsPermissionsAndWritesActivationRecord() {
-        stubSubscription(plan("free", 0));
+        stubActivePlan(PlanDefinition.FREE);
         when(tenantModuleRepository.findByCompanyIdAndModuleKey(company.getId(), "pm"))
                 .thenReturn(Optional.empty());
         when(permissionRepository.findByName(any(String.class))).thenReturn(Optional.empty());
@@ -124,7 +120,7 @@ class ModuleActivationServiceTest {
 
     @Test
     void doActivate_withoutSubscription_throws() {
-        when(subscriptionRepository.findByCompanyId(company.getId())).thenReturn(Optional.empty());
+        when(planLimitService.tryActivePlan(company)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.activateForCompany(company, ModuleDefinition.PM))
                 .isInstanceOf(BusinessException.class)
@@ -134,7 +130,7 @@ class ModuleActivationServiceTest {
 
     @Test
     void doActivate_planBelowMinimum_throwsModulePlanRequired() {
-        stubSubscription(plan("free", 0));
+        stubActivePlan(PlanDefinition.FREE);
         ModuleDefinition gated = mock(ModuleDefinition.class);
         lenient().when(gated.key()).thenReturn("gated");
         lenient().when(gated.displayName()).thenReturn("Gated Module");
@@ -151,7 +147,7 @@ class ModuleActivationServiceTest {
 
     @Test
     void doActivate_moduleWithOwnMigrations_runsModuleFlyway() {
-        stubSubscription(plan("pro", 1));
+        stubActivePlan(PlanDefinition.PRO);
         ModuleDefinition withMigrations = mock(ModuleDefinition.class);
         lenient().when(withMigrations.key()).thenReturn("notes");
         lenient().when(withMigrations.displayName()).thenReturn("Notes");
@@ -185,7 +181,7 @@ class ModuleActivationServiceTest {
     @Test
     void activateDefaultModules_fallsBackToBuiltInDefaultsWhenPropertiesAbsent() {
         when(modulePropertiesProvider.getIfAvailable(any())).thenReturn(new ModuleProperties(null));
-        stubSubscription(plan("free", 0));
+        stubActivePlan(PlanDefinition.FREE);
         when(tenantModuleRepository.findByCompanyIdAndModuleKey(company.getId(), "pm"))
                 .thenReturn(Optional.empty());
         when(permissionRepository.findByName(any(String.class))).thenReturn(Optional.of(new Permission()));
@@ -209,22 +205,8 @@ class ModuleActivationServiceTest {
 
     // --- helpers ---------------------------------------------------------
 
-    private void stubSubscription(Plan plan) {
-        Subscription subscription = new Subscription();
-        subscription.setCompany(company);
-        subscription.setPlan(plan);
-        subscription.setStatus(SubscriptionStatus.ACTIVE);
-        when(subscriptionRepository.findByCompanyId(company.getId()))
-                .thenReturn(Optional.of(subscription));
-    }
-
-    private Plan plan(String key, int rank) {
-        Plan plan = new Plan();
-        plan.setId(UUID.randomUUID());
-        plan.setKey(key);
-        plan.setName(key);
-        plan.setRank(rank);
-        plan.setActive(true);
-        return plan;
+    /** Plan resolution is delegated to {@link PlanLimitService} (K-40 single source). */
+    private void stubActivePlan(PlanDefinition plan) {
+        when(planLimitService.tryActivePlan(company)).thenReturn(Optional.of(plan));
     }
 }

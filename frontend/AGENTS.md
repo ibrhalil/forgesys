@@ -11,6 +11,7 @@ cd frontend
 npm install --include=optional
 npm run dev       # http://localhost:3000 (/api -> :8080 proxy)
 npm run lint      # oxlint
+npm test          # vitest run (jsdom + React Testing Library)
 npm run build     # tsc -b && vite build -> dist/
 npm run preview   # serve the build output locally
 ```
@@ -20,7 +21,8 @@ npm run preview   # serve the build output locally
 Every dependency is pinned to an **exact version** (`.npmrc`: `save-exact=true`).
 
 - **dependencies:** `@tanstack/react-query` 5.80.7, `react`/`react-dom` 19.2.7, `react-icons` 5.7.0, `react-router-dom` 7.7.0, `react-select` 5.10.2, `react-toastify` 11.1.0, `zustand` 5.0.5
-- **devDependencies:** `@tailwindcss/vite` 4.3.3 + `tailwindcss` 4.3.3, `@types/*`, `@vitejs/plugin-react` 6.0.3, `oxlint` 1.71.0, `typescript` 6.0.2, `vite` 8.1.1
+- **devDependencies:** `@tailwindcss/vite` 4.3.3 + `tailwindcss` 4.3.3, `@types/*`, `@vitejs/plugin-react` 6.0.3, `oxlint` 1.71.0, `typescript` 6.0.2, `vite` 8.1.1, `vitest` 4.1.11 + `jsdom` 29.0.1 + `@testing-library/react` 16.3.2 (+dom 10.x) + `@testing-library/jest-dom` 6.9.1 + `@testing-library/user-event` 14.6.6
+  - Test dep'leri Node 20 pin'ine göre seçildi (jest-dom 7 / jsdom 30 Node >=22 ister).
 - **Lint:** oxlint (`.oxlintrc.json` — plugins: `react`/`typescript`/`oxc`; `react/rules-of-hooks`=error, `react/only-export-components`=[warn, `{allowConstantExport: true}`])
 - **Styling:** Tailwind CSS v4 via `@theme` tokens in `src/index.css` (no `tailwind.config`). Font: Outfit + Inter (Google Fonts, `index.html`).
 
@@ -82,9 +84,12 @@ src/
     projects/              #   Projects pages + TaskBoard (components/), pm module
     audit/                 #   AuditLogs + LoginHistory (iam:audit:read)
     sessions/              #   self/admin/all sessions pages + SessionList component (K-28)
-  lib/                     # api (fetch + 401 refresh), i18n (t/useT + messages), notify, format, select, cn
+  lib/                     # api (fetch + 401 refresh), i18n (t/useT + messages), notify, format, select, cn,
+                           # useListPageState (list-page scaffold: page/sort/search + debounce + page-reset),
+                           # useClientPagination, useDebouncedValue
   store/                   # zustand: authStore (session + authorities), tenantStore (X-Tenant-ID),
                            # localeStore (sf_locale, TR/EN)
+  test/                    # Vitest suite (K-39): setup.ts + api/LoginPage/DataTable/Modal/useListPageState tests
   types/index.ts           # shared-only types: RBAC summaries, ApiErrorResponse, pagination
 ```
 
@@ -92,7 +97,7 @@ src/
 
 - `features/X/api.ts` — plain fetch wrappers per endpoint group (uses `api` from `lib/api`).
 - `features/X/hooks.ts` — TanStack Query hooks; **query keys are the collection name** (`['users', params]`, `['roles', id]`, `['users', id, 'effective-permissions']`); mutations invalidate their collection prefix.
-- **Server-side list search/sort:** pages keep a `SortState` (`{field, dir}`) + a search string, pass `sorts: [sort]` and `q` (debounced via `lib/useDebouncedValue`, 300ms) inside `PageParams`; sort/search changes reset `page` to 0. `Column.sortKey` marks a DataTable column sortable (may differ from `key` — the users "name" column sorts by `email`); the value MUST be in the backend feature's sort whitelist or the request 400s. `PageResponse` is the API-owned wire shape (`data[] + meta`), normalized by `normalizePage` (legacy Spring Data layout tolerated).
+- **Server-side list search/sort:** pages get the whole scaffold from `lib/useListPageState` (`{page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, q}` — debounced search + the page-reset contracts) and pass `sorts: [sort]` and `q` inside `PageParams`. `Column.sortKey` marks a DataTable column sortable (may differ from `key` — the users "name" column sorts by `email`); the value MUST be in the backend feature's sort whitelist or the request 400s. `PageResponse` is the API-owned wire shape (`data[] + meta`), normalized by `normalizePage` (legacy Spring Data layout tolerated).
 - **Rows-per-page:** choices live in `lib/pagination.ts` (`PAGE_SIZE_OPTIONS`, backend cap 1000); pages hold `pageSize` state and reset to page 0 on change. DataTable renders minimal segment buttons up to 6 options, then a ghost native `<select>` — extending the list never crowds the footer. Pages whose backend returns the full list in one response (e.g. permissions) paginate locally via `lib/useClientPagination` and wire the footer identically.
 - `features/X/types.ts` — request/response types for that domain. Shared summaries (`RoleSummary` etc.) stay in `src/types/index.ts`.
 - Cross-feature imports are allowed (e.g. groups pages use `useRoles`); keep them at hook/type level, not page level.
@@ -131,4 +136,4 @@ src/
 - **`SelectInput`** is the single select component (react-select). Behavior is prop-driven: single (default), `isMulti`, `isClearable`, `creatable`, async `loadOptions`, and `size="sm"` for compact inline controls (e.g. TaskCard status mover). Menu renders in a portal (escapes Modal overflow). The old native `SelectField` was removed.
 - **Icons:** `react-icons` (Lucide set, subpath import `react-icons/lu` — Vite tree-shakes). Never add inline SVGs; pick a Lucide icon.
 - **Light corporate theme tokens:** `src/index.css` `@theme` — pale-sky page bg (`--color-bg: #e0f2fe`), white surfaces (`--color-surface/sidebar`), raspberry accent (`--color-accent: #c2185b`); utilities like `bg-surface`/`text-muted`/`border-glass`. App is light-only (dark theme removed). Never use raw `text-white`/`bg-white/5` outside the gradient logo tiles — use tokens so a future theme stays possible.
-- **Tests:** none yet (Vitest/RTL planned, not present).
+- **Tests (K-39):** Vitest + React Testing Library, `npm test` (CI runs it too). Suite lives in `src/test/` (`setup.ts` + `*.test.ts(x)`); config in `vitest.config.ts` (jsdom, `globals: false` — tests import `describe/it/expect/vi` from `'vitest'` explicitly; `setup.ts` registers RTL cleanup + jest-dom matchers). Mocks: `vi.stubGlobal('fetch', ...)` for `lib/api` (no MSW), `useStore.setState({...})` for zustand stores, `useLocaleStore.setState({ locale: 'en' })` for stable query strings. **A new frontend feature does not merge without tests** — at minimum a hook/logic test plus a render test for new UI primitives.

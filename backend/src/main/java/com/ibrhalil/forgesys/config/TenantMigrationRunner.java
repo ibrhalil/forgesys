@@ -1,6 +1,5 @@
 package com.ibrhalil.forgesys.config;
 
-import com.ibrhalil.forgesys.entity.Company;
 import com.ibrhalil.forgesys.persistence.repository.CompanyRepository;
 import com.ibrhalil.forgesys.service.TenantMigrationSupport;
 import lombok.RequiredArgsConstructor;
@@ -23,16 +22,16 @@ public class TenantMigrationRunner implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        List<Company> companies = companyRepository.findAll();
-        if (companies.isEmpty()) {
+        List<CompanyRepository.TenantSchemaView> tenants = companyRepository.findAllTenantSchemas();
+        if (tenants.isEmpty()) {
             log.info("No tenants found, skipping tenant migration");
             return;
         }
-        log.info("Migrating {} tenant schema(s) at startup", companies.size());
-        for (Company company : companies) {
-            String schemaName = company.getSchemaName();
+        log.info("Migrating {} tenant schema(s) at startup", tenants.size());
+        for (CompanyRepository.TenantSchemaView tenant : tenants) {
+            String schemaName = tenant.getSchemaName();
             if (schemaName == null || schemaName.isBlank()) {
-                log.warn("Skipping tenant with blank schema name: id={}", company.getId());
+                log.warn("Skipping tenant with blank schema name: id={}", tenant.getId());
                 continue;
             }
             try {

@@ -4,6 +4,7 @@ import com.ibrhalil.forgesys.common.exception.TenantNotFoundException;
 import com.ibrhalil.forgesys.common.tenant.TenantContext;
 import com.ibrhalil.forgesys.config.PlanDefinition;
 import com.ibrhalil.forgesys.entity.Company;
+import com.ibrhalil.forgesys.entity.Plan;
 import com.ibrhalil.forgesys.entity.Subscription;
 import com.ibrhalil.forgesys.entity.SubscriptionStatus;
 import com.ibrhalil.forgesys.exception.BusinessException;
@@ -14,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Arrays;
 import java.util.Optional;
 
 /**
@@ -55,10 +57,28 @@ public class PlanLimitService {
     }
 
     /**
+     * The ACTIVE plan for a known company — the single plan-resolution chain
+     * (K-40): Subscription -&gt; {@code t_plans.key} -&gt; {@link PlanDefinition} registry.
+     * Empty when no ACTIVE subscription exists or the plan key is unknown to the
+     * registry (degraded state — callers decide whether that is an error; e.g.
+     * {@code ModuleActivationService} shows it in the catalog but rejects activation).
+     */
+    @Transactional(readOnly = true)
+    public Optional<PlanDefinition> tryActivePlan(Company company) {
+        Optional<String> planKey = subscriptionRepository.findByCompanyId(company.getId())
+                .filter(s -> s.getStatus() == SubscriptionStatus.ACTIVE)
+                .map(Subscription::getPlan)
+                .map(Plan::getKey);
+        return planKey.flatMap(key -> Arrays.stream(PlanDefinition.values())
+                .filter(definition -> definition.key().equals(key))
+                .findFirst());
+    }
+
+    /**
      * The current tenant's ACTIVE plan (resolved from {@link TenantContext} -&gt; Company
-     * -&gt; Subscription -&gt; {@code t_plans.key} -&gt; registry). Mirrors the degraded-state
-     * behavior of {@code ModuleActivationService}: no ACTIVE subscription -&gt; 409
-     * {@link ErrorCode#SUBSCRIPTION_NOT_FOUND}.
+     * -&gt; {@link #tryActivePlan(Company)}). Throws 409
+     * {@link ErrorCode#SUBSCRIPTION_NOT_FOUND} in every degraded state (no tenant
+     * context and unknown schema raise {@link TenantNotFoundException}).
      */
     @Transactional(readOnly = true)
     public PlanDefinition activePlan() {
@@ -66,18 +86,7 @@ public class PlanLimitService {
                 .orElseThrow(() -> new TenantNotFoundException("Tenant context is not set"));
         Company company = companyRepository.findBySchemaName(schemaName)
                 .orElseThrow(() -> new TenantNotFoundException("Unknown tenant schema: " + schemaName));
-        Subscription subscription = subscriptionRepository.findByCompanyId(company.getId())
-                .filter(s -> s.getStatus() == SubscriptionStatus.ACTIVE)
-                .orElseThrow(() -> new BusinessException(ErrorCode.SUBSCRIPTION_NOT_FOUND,
-                        "Tenant has no active subscription"));
-        String planKey = Optional.ofNullable(subscription.getPlan()).map(plan -> plan.getKey())
-                .orElseThrow(() -> new BusinessException(ErrorCode.SUBSCRIPTION_NOT_FOUND,
-                        "Tenant subscription has no plan"));
-        for (PlanDefinition definition : PlanDefinition.values()) {
-            if (definition.key().equals(planKey)) {
-                return definition;
-            }
-        }
-        throw new BusinessException(ErrorCode.SUBSCRIPTION_NOT_FOUND, "Unknown plan key: " + planKey);
+        return tryActivePlan(company).orElseThrow(() ->
+                new BusinessException(ErrorCode.SUBSCRIPTION_NOT_FOUND, "Tenant has no active subscription"));
     }
 }

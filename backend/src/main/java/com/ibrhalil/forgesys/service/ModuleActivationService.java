@@ -5,18 +5,16 @@ import com.ibrhalil.forgesys.common.tenant.TenantContext;
 import com.ibrhalil.forgesys.config.ModuleDefinition;
 import com.ibrhalil.forgesys.config.ModuleProperties;
 import com.ibrhalil.forgesys.config.PermissionCatalog;
+import com.ibrhalil.forgesys.config.PlanDefinition;
 import com.ibrhalil.forgesys.dto.ModuleResponse;
 import com.ibrhalil.forgesys.entity.Company;
 import com.ibrhalil.forgesys.entity.ModuleStatus;
 import com.ibrhalil.forgesys.entity.Permission;
-import com.ibrhalil.forgesys.entity.Subscription;
-import com.ibrhalil.forgesys.entity.SubscriptionStatus;
 import com.ibrhalil.forgesys.entity.TenantModule;
 import com.ibrhalil.forgesys.exception.BusinessException;
 import com.ibrhalil.forgesys.exception.ErrorCode;
 import com.ibrhalil.forgesys.persistence.repository.CompanyRepository;
 import com.ibrhalil.forgesys.persistence.repository.PermissionRepository;
-import com.ibrhalil.forgesys.persistence.repository.SubscriptionRepository;
 import com.ibrhalil.forgesys.persistence.repository.TenantModuleRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -56,7 +54,7 @@ import java.util.stream.Collectors;
 public class ModuleActivationService {
 
     private final CompanyRepository companyRepository;
-    private final SubscriptionRepository subscriptionRepository;
+    private final PlanLimitService planLimitService;
     private final TenantModuleRepository tenantModuleRepository;
     private final PermissionRepository permissionRepository;
     private final TenantMigrationSupport tenantMigrationSupport;
@@ -198,13 +196,13 @@ public class ModuleActivationService {
     /**
      * Rank of the tenant's ACTIVE subscription plan; empty when no subscription row
      * exists or it is not ACTIVE (degraded state — list endpoints show it, activation
-     * rejects).
+     * rejects). Delegates to {@link PlanLimitService#tryActivePlan(Company)} — the
+     * single plan-resolution chain (K-40); the rank comes from the code-side
+     * {@link PlanDefinition} registry ({@code PlanSyncRunner} upserts the same values
+     * into {@code t_plans}).
      */
     private Optional<Integer> activePlanRank(Company company) {
-        return subscriptionRepository.findByCompanyId(company.getId())
-                .filter(s -> s.getStatus() == SubscriptionStatus.ACTIVE)
-                .map(Subscription::getPlan)
-                .map(Plan -> Plan.getRank());
+        return planLimitService.tryActivePlan(company).map(PlanDefinition::rank);
     }
 
     private Company currentCompany() {

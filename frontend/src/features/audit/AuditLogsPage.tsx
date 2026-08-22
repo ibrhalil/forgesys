@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import type { AuditLog } from './types';
 import { useAuditLogs } from './hooks';
 import { DataTable, type Column } from '../../components/ui/DataTable';
@@ -8,10 +7,7 @@ import { PAGE_SIZE_OPTIONS } from '../../lib/pagination';
 import { Badge } from '../../components/ui/Badge';
 import { formatDateTime } from '../../lib/format';
 import { useT } from '../../lib/i18n';
-import type { SortState } from '../../types';
-import { useDebouncedValue } from '../../lib/useDebouncedValue';
-
-const DEFAULT_PAGE_SIZE = 10;
+import { useListPageState } from '../../lib/useListPageState';
 
 /**
  * Read-only admin view over {@code t_audit_logs} (K-19). Requires
@@ -21,25 +17,9 @@ const DEFAULT_PAGE_SIZE = 10;
  */
 export function AuditLogsPage() {
   const { t } = useT();
-  const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const [search, setSearch] = useState('');
-  const [sort, setSort] = useState<SortState>({ field: 'createdDate', dir: 'desc' });
-  const q = useDebouncedValue(search, 300);
+  const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, q } =
+    useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' } });
   const { data, isLoading, isFetching } = useAuditLogs({ page, size: pageSize, sort: `${sort.field},${sort.dir}`, q: q || undefined });
-
-  const handleSort = (field: string) => {
-    setSort((prev) =>
-      prev.field === field
-        ? { field, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
-        : { field, dir: 'asc' },
-    );
-    setPage(0);
-  };
-
-  useEffect(() => {
-    setPage(0);
-  }, [q]);
 
   const columns: Column<AuditLog>[] = [
     { key: 'createdAt', header: t('audit.date'), sortKey: 'createdDate', render: (l) => <span className="whitespace-nowrap text-muted">{formatDateTime(l.createdAt)}</span> },
@@ -76,12 +56,12 @@ export function AuditLogsPage() {
         page={data?.page ?? page}
         pageSize={data?.size ?? pageSize}
         pageSizeOptions={PAGE_SIZE_OPTIONS}
-        onPageSizeChange={(size) => { setPageSize(size); setPage(0); }}
+        onPageSizeChange={setPageSize}
         totalElements={data?.totalElements ?? 0}
         totalPages={data?.totalPages ?? 0}
         onPageChange={setPage}
         sort={sort}
-        onSortChange={handleSort}
+        onSortChange={toggleSort}
         toolbar={<SearchInput value={search} onChange={setSearch} placeholder={t('audit.searchPh')} />}
       />
     </Page>

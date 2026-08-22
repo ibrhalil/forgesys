@@ -1,13 +1,12 @@
 import { PERMISSIONS } from '../../lib/permissions';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { UserDirectoryView } from './types';
 import { isLocked } from './types';
 import { useUsers, useDeleteUser, useUnlockUser } from './hooks';
 import { useAuthStore } from '../../store/authStore';
 import { useT } from '../../lib/i18n';
-import { useDebouncedValue } from '../../lib/useDebouncedValue';
-import type { SortState } from '../../types';
+import { useListPageState } from '../../lib/useListPageState';
 
 import { LuEye, LuKeyRound, LuLockOpen, LuMonitor, LuShield, LuTrash2, LuUsers as LuGroup } from 'react-icons/lu';
 import { notify } from '../../lib/notify';
@@ -23,15 +22,10 @@ import { AssignRolesModal } from './components/AssignRolesModal';
 import { AssignGroupsModal } from './components/AssignGroupsModal';
 import { ResetPasswordModal } from './components/ResetPasswordModal';
 
-const DEFAULT_PAGE_SIZE = 10;
-
 export function UsersPage() {
   const { t } = useT();
-  const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const [sort, setSort] = useState<SortState>({ field: 'email', dir: 'asc' });
-  const [search, setSearch] = useState('');
-  const q = useDebouncedValue(search, 300);
+  const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, q } =
+    useListPageState({ defaultSort: { field: 'email', dir: 'asc' } });
   const { data, isLoading, isFetching } = useUsers({ page, size: pageSize, sorts: [sort], q: q || undefined });
   const delUser = useDeleteUser();
   const unlockUser = useUnlockUser();
@@ -39,20 +33,6 @@ export function UsersPage() {
   const currentUserId = useAuthStore((s) => s.user?.id);
   const canWrite = useAuthStore((s) => s.hasAuthority(PERMISSIONS.USER_WRITE));
   const canDelete = useAuthStore((s) => s.hasAuthority(PERMISSIONS.USER_DELETE));
-
-  // A new search term invalidates the current page position.
-  useEffect(() => {
-    setPage(0);
-  }, [q]);
-
-  const handleSort = (field: string) => {
-    setSort((prev) =>
-      prev.field === field
-        ? { field, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
-        : { field, dir: 'asc' },
-    );
-    setPage(0);
-  };
 
   const [assignRolesTo, setAssignRolesTo] = useState<UserDirectoryView | null>(null);
   const [assignGroupsTo, setAssignGroupsTo] = useState<UserDirectoryView | null>(null);
@@ -136,12 +116,12 @@ export function UsersPage() {
         page={data?.page ?? page}
         pageSize={data?.size ?? pageSize}
         pageSizeOptions={PAGE_SIZE_OPTIONS}
-        onPageSizeChange={(size) => { setPageSize(size); setPage(0); }}
+        onPageSizeChange={setPageSize}
         totalElements={data?.totalElements ?? 0}
         totalPages={data?.totalPages ?? 0}
         onPageChange={setPage}
         sort={sort}
-        onSortChange={handleSort}
+        onSortChange={toggleSort}
         toolbar={<SearchInput value={search} onChange={setSearch} placeholder={t('users.searchPh')} />}
         actionsHeader={t('common.actions')}
         actions={(u) => (

@@ -1,7 +1,6 @@
 package com.ibrhalil.forgesys.config;
 
 import com.ibrhalil.forgesys.common.tenant.TenantContext;
-import com.ibrhalil.forgesys.entity.Company;
 import com.ibrhalil.forgesys.entity.Permission;
 import com.ibrhalil.forgesys.entity.Role;
 import com.ibrhalil.forgesys.entity.User;
@@ -18,7 +17,6 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -61,11 +59,10 @@ public class RbacSeeder implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        List<Company> companies = companyRepository.findAll();
-        for (Company company : companies) {
-            String schemaName = company.getSchemaName();
+        for (CompanyRepository.TenantSchemaView tenant : companyRepository.findAllTenantSchemas()) {
+            String schemaName = tenant.getSchemaName();
             if (schemaName == null || schemaName.isBlank()) {
-                log.warn("Skipping RBAC seed for tenant with blank schema name: id={}", company.getId());
+                log.warn("Skipping RBAC seed for tenant with blank schema name: id={}", tenant.getId());
                 continue;
             }
             try {

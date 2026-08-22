@@ -126,7 +126,8 @@ class ModuleSyncRunnerTest {
         Company failing = new Company();
         failing.setId(UUID.randomUUID());
         failing.setSchemaName("tenant_bad");
-        when(companyRepository.findAll()).thenReturn(List.of(failing, company));
+        when(companyRepository.findAllTenantSchemas())
+                .thenReturn(List.of(view(failing.getId()), view(company.getId())));
         when(companyRepository.findById(failing.getId()))
                 .thenThrow(new RuntimeException("sync exploded"));
         when(companyRepository.findById(company.getId())).thenReturn(Optional.of(company));
@@ -137,5 +138,13 @@ class ModuleSyncRunnerTest {
 
         // The second company was still synced after the first one blew up.
         verify(moduleActivationService).activateDefaultModules(company);
+    }
+
+    private CompanyRepository.TenantSchemaView view(UUID id) {
+        return new CompanyRepository.TenantSchemaView() {
+            @Override public UUID getId() { return id; }
+            @Override public String getSchemaName() { return "tenant_" + id; }
+            @Override public CompanyStatus getStatus() { return CompanyStatus.ACTIVE; }
+        };
     }
 }

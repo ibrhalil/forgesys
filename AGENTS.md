@@ -161,7 +161,7 @@ Detay + uygulama kararları: [`docs/DECISIONS.md K-15`](docs/DECISIONS.md#k-15).
 
 ### Sadeleştirme Planı (2026-08-22 planning session)
 
-Analiz + kararlar: [`docs/FULL_ANALYSIS.md`](docs/FULL_ANALYSIS.md) + [`docs/ANALYSIS_ADDENDUM.md`](docs/ANALYSIS_ADDENDUM.md) · ADR'ler: [K-37..K-40](docs/DECISIONS.md). Durum: **K-38 (ölü kod kaldırma) ve K-37 (API tutarlılık geçişi) UYGULANDI** (2026-08-22; K-38 baseline V1 düzenlemesi içerir — local DB reset gerektirir). Kalan: K-40 (startup projection + tek kaynak çözümlemeler — Session 3) → K-39 (frontend kalite: strict TS + Vitest/RTL + `useListPageState`) → springdoc-openapi. Standart kararlar listesi (tekrar tartışılmaz): FULL_ANALYSIS §11 + ADDENDUM §8 (madde 21-24 dahil).
+Analiz + kararlar: [`docs/FULL_ANALYSIS.md`](docs/FULL_ANALYSIS.md) + [`docs/ANALYSIS_ADDENDUM.md`](docs/ANALYSIS_ADDENDUM.md) · ADR'ler: [K-37..K-40](docs/DECISIONS.md). Durum: **K-38 (ölü kod kaldırma), K-37 (API tutarlılık geçişi) ve K-40 (startup projection + tek kaynak çözümlemeler) UYGULANDI** (2026-08-22; K-38 baseline V1 düzenlemesi içerir — local DB reset gerektirir). Kalan: K-39 (frontend kalite: strict TS + Vitest/RTL + `useListPageState`) → springdoc-openapi. Standart kararlar listesi (tekrar tartışılmaz): FULL_ANALYSIS §11 + ADDENDUM §8 (madde 21-24 dahil).
 
 ### Doğrulanan (uyumlu, aksiyon yok)
 
