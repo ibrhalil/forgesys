@@ -9,4 +9,7 @@ import java.util.UUID;
 
 @Repository
 public interface NoteRepository extends JpaRepository<Note, UUID>, JpaSpecificationExecutor<Note> {
+
+    /** Whether the project holds any note — locks the project type while content exists (K-45). */
+    boolean existsByProjectId(UUID projectId);
 }

@@ -20,7 +20,6 @@ import com.ibrhalil.forgesys.exception.ErrorCode;
 import com.ibrhalil.forgesys.exception.ResourceNotFoundException;
 import com.ibrhalil.forgesys.persistence.repository.CompanyRepository;
 import com.ibrhalil.forgesys.persistence.repository.ProjectRepository;
-import com.ibrhalil.forgesys.persistence.repository.TaskRepository;
 import com.ibrhalil.forgesys.persistence.repository.TenantModuleRepository;
 import com.ibrhalil.forgesys.web.filter.FilterFieldSet;
 import com.ibrhalil.forgesys.web.filter.FilterFieldType;
@@ -69,7 +68,7 @@ public class ProjectService {
     private static final int MAX_PARENT_DEPTH = 50;
 
     private final ProjectRepository projectRepository;
-    private final TaskRepository taskRepository;
+    private final ProjectContentGuard projectContentGuard;
     private final TenantModuleRepository tenantModuleRepository;
     private final CompanyRepository companyRepository;
     private final AuditService auditService;
@@ -167,11 +166,11 @@ public class ProjectService {
     }
 
     /**
-     * Whether the project holds content of its current type. Tasks land here (K-45
-     * step 2); note/app checks join with their project-scoping migrations.
+     * Delegates to {@link ProjectContentGuard}: tasks + notes today, apps with their
+     * project-scoping migration (K-45 step 5).
      */
     private boolean projectHasContent(UUID projectId) {
-        return taskRepository.existsByProjectId(projectId);
+        return projectContentGuard.hasContent(projectId);
     }
 
     /**

@@ -11,11 +11,14 @@ import com.ibrhalil.forgesys.dto.ModuleResponse;
 import com.ibrhalil.forgesys.entity.Company;
 import com.ibrhalil.forgesys.entity.ModuleStatus;
 import com.ibrhalil.forgesys.entity.Permission;
+import com.ibrhalil.forgesys.entity.Project;
+import com.ibrhalil.forgesys.entity.ProjectType;
 import com.ibrhalil.forgesys.entity.TenantModule;
 import com.ibrhalil.forgesys.exception.BusinessException;
 import com.ibrhalil.forgesys.exception.ErrorCode;
 import com.ibrhalil.forgesys.persistence.repository.CompanyRepository;
 import com.ibrhalil.forgesys.persistence.repository.PermissionRepository;
+import com.ibrhalil.forgesys.persistence.repository.ProjectRepository;
 import com.ibrhalil.forgesys.persistence.repository.TenantModuleRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -54,10 +57,14 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ModuleActivationService {
 
+    /** Per-type default container name (K-45); mirrored in the module V2 migrations. */
+    static final String DEFAULT_PROJECT_NAME = "Genel";
+
     private final CompanyRepository companyRepository;
     private final PlanLimitService planLimitService;
     private final TenantModuleRepository tenantModuleRepository;
     private final PermissionRepository permissionRepository;
+    private final ProjectRepository projectRepository;
     private final TenantMigrationSupport tenantMigrationSupport;
     private final AuditService auditService;
     private final ObjectProvider<ModuleActivationService> self;
@@ -164,6 +171,7 @@ public class ModuleActivationService {
         }
         tenantMigrationSupport.migrateModule(company.getSchemaName(), module);
         self.getObject().seedModulePermissionsInNewTx(module);
+        self.getObject().ensureDefaultProjectInNewTx(module);
 
         TenantModule row = existing.orElseGet(TenantModule::new);
         row.setCompany(company);
@@ -192,6 +200,36 @@ public class ModuleActivationService {
                 return permissionRepository.save(permission);
             });
         }
+    }
+
+    /**
+     * Ensures the module's per-type default container ("Genel", K-45) exists — the
+     * migration already did the work on PostgreSQL (this becomes a no-op); this path
+     * covers re-activation after the default was soft-deleted and schemas where the
+     * module migration is a no-op. Content-collection types only (NOTES/APPS): a
+     * TASKS default would be meaningless noise — task boards are created explicitly.
+     * Same REQUIRES_NEW isolation as the permission seed (tenant-schema write under a
+     * possibly {@code public}-pinned caller session).
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void ensureDefaultProjectInNewTx(ModuleDefinition module) {
+        ProjectType type = module.projectType();
+        if (type == null || type == ProjectType.TASKS) {
+            return;
+        }
+        if (!projectRepository.findDefaultIdsByType(type).isEmpty()) {
+            return;
+        }
+        Project project = projectRepository.findByName(DEFAULT_PROJECT_NAME)
+                .filter(candidate -> candidate.getType() == type)
+                .orElseGet(Project::new);
+        if (project.getId() == null) {
+            project.setName(DEFAULT_PROJECT_NAME);
+            project.setType(type);
+        }
+        project.setDefault(true);
+        projectRepository.save(project);
+        log.info("Ensured default '{}' container for module '{}' (type {})", DEFAULT_PROJECT_NAME, module.key(), type);
     }
 
     /**

@@ -44,6 +44,7 @@ class ModuleActivationServiceTest {
     @Mock private PlanLimitService planLimitService;
     @Mock private TenantModuleRepository tenantModuleRepository;
     @Mock private PermissionRepository permissionRepository;
+    @Mock private com.ibrhalil.forgesys.persistence.repository.ProjectRepository projectRepository;
     @Mock private TenantMigrationSupport tenantMigrationSupport;
     @Mock private AuditService auditService;
     @Mock private ObjectProvider<ModuleActivationService> self;
@@ -56,8 +57,8 @@ class ModuleActivationServiceTest {
     @BeforeEach
     void setUp() {
         service = new ModuleActivationService(companyRepository, planLimitService,
-                tenantModuleRepository, permissionRepository, tenantMigrationSupport,
-                auditService, self, modulePropertiesProvider);
+                tenantModuleRepository, permissionRepository, projectRepository,
+                tenantMigrationSupport, auditService, self, modulePropertiesProvider);
         company = new Company();
         company.setId(UUID.randomUUID());
         company.setSchemaName("tenant_unit");
@@ -167,6 +168,53 @@ class ModuleActivationServiceTest {
         service.activateForCompany(company, withMigrations);
 
         verify(tenantMigrationSupport).migrateModule("tenant_unit", withMigrations);
+    }
+
+    @Test
+    void ensureDefaultProject_createsForContentCollectionType() {
+        when(projectRepository.findDefaultIdsByType(com.ibrhalil.forgesys.entity.ProjectType.NOTES))
+                .thenReturn(List.of());
+        when(projectRepository.findByName("Genel")).thenReturn(Optional.empty());
+        when(projectRepository.save(any(com.ibrhalil.forgesys.entity.Project.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        service.ensureDefaultProjectInNewTx(ModuleDefinition.NOTES);
+
+        org.mockito.ArgumentCaptor<com.ibrhalil.forgesys.entity.Project> captor =
+                org.mockito.ArgumentCaptor.forClass(com.ibrhalil.forgesys.entity.Project.class);
+        verify(projectRepository).save(captor.capture());
+        assertThat(captor.getValue().getName()).isEqualTo("Genel");
+        assertThat(captor.getValue().getType()).isEqualTo(com.ibrhalil.forgesys.entity.ProjectType.NOTES);
+        assertThat(captor.getValue().isDefault()).isTrue();
+    }
+
+    @Test
+    void ensureDefaultProject_skipsTasksTypeAndExistingDefaults() {
+        service.ensureDefaultProjectInNewTx(ModuleDefinition.PM);
+        verify(projectRepository, never()).save(any(com.ibrhalil.forgesys.entity.Project.class));
+
+        when(projectRepository.findDefaultIdsByType(com.ibrhalil.forgesys.entity.ProjectType.NOTES))
+                .thenReturn(List.of(UUID.randomUUID()));
+        service.ensureDefaultProjectInNewTx(ModuleDefinition.NOTES);
+        verify(projectRepository, never()).save(any(com.ibrhalil.forgesys.entity.Project.class));
+    }
+
+    @Test
+    void ensureDefaultProject_adoptsExistingSameNamedProject() {
+        com.ibrhalil.forgesys.entity.Project existing = new com.ibrhalil.forgesys.entity.Project();
+        existing.setId(UUID.randomUUID());
+        existing.setName("Genel");
+        existing.setType(com.ibrhalil.forgesys.entity.ProjectType.NOTES);
+        when(projectRepository.findDefaultIdsByType(com.ibrhalil.forgesys.entity.ProjectType.NOTES))
+                .thenReturn(List.of());
+        when(projectRepository.findByName("Genel")).thenReturn(Optional.of(existing));
+        when(projectRepository.save(any(com.ibrhalil.forgesys.entity.Project.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        service.ensureDefaultProjectInNewTx(ModuleDefinition.NOTES);
+
+        verify(projectRepository).save(existing);
+        assertThat(existing.isDefault()).isTrue();
     }
 
     @Test

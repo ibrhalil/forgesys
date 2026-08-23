@@ -13,11 +13,9 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -26,52 +24,36 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.UUID;
 
 /**
- * Flat note surface (K-44, re-scoped by K-45): the cross-container list —
- * {@code ?projectId=} narrows it to one container. Writes without an explicit
- * {@code projectId} land in the tenant's default NOTES container. Container-nested
- * reads/writes live on {@link ProjectNoteController}.
+ * Notes nested under their NOTES-type project container (K-45) — the TaskController
+ * pattern: the container must exist (404) and be a NOTES container (409
+ * {@code project_type_mismatch}). Update/delete stay on the flat {@code /notes/{id}}
+ * surface (a note is addressable by its own id once created).
  */
 @RestController
-@RequestMapping("/api/v1/notes")
+@RequestMapping("/api/v1/projects/{projectId}/notes")
 @RequiredArgsConstructor
-public class NoteController {
+public class ProjectNoteController {
 
     private final NoteService noteService;
 
     @GetMapping
     @PreAuthorize("hasAuthority('notes:note:read')")
     public ResponseEntity<PageResponse<NoteResponse>> list(
+            @PathVariable UUID projectId,
             @PageableDefault(sort = "updatedAt", direction = Sort.Direction.DESC) Pageable pageable,
             @RequestParam(required = false) String q,
             @RequestParam(required = false) UUID categoryId,
-            @RequestParam(required = false) Boolean pinned,
-            @RequestParam(required = false) UUID projectId) {
+            @RequestParam(required = false) Boolean pinned) {
         SortGuard.require(pageable, NoteService.FILTER_FIELDS);
-        return ResponseEntity.ok(PageResponse.of(noteService.search(q, categoryId, pinned, projectId, pageable)));
-    }
-
-    @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('notes:note:read')")
-    public ResponseEntity<NoteResponse> get(@PathVariable UUID id) {
-        return ResponseEntity.ok(noteService.findById(id));
+        return ResponseEntity.ok(PageResponse.of(
+                noteService.searchInProject(projectId, q, categoryId, pinned, pageable)));
     }
 
     @PostMapping
     @PreAuthorize("hasAuthority('notes:note:write')")
-    public ResponseEntity<NoteResponse> create(@Valid @RequestBody NoteRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(noteService.create(request));
-    }
-
-    @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('notes:note:write')")
-    public ResponseEntity<NoteResponse> update(@PathVariable UUID id, @Valid @RequestBody NoteRequest request) {
-        return ResponseEntity.ok(noteService.update(id, request));
-    }
-
-    @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('notes:note:delete')")
-    public ResponseEntity<Void> delete(@PathVariable UUID id) {
-        noteService.delete(id);
-        return ResponseEntity.noContent().build();
+    public ResponseEntity<NoteResponse> create(
+            @PathVariable UUID projectId,
+            @Valid @RequestBody NoteRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(noteService.createInProject(projectId, request));
     }
 }
