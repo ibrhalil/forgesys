@@ -157,6 +157,29 @@ class ModuleActivationIT {
     }
 
     /**
+     * K-45 step 4 on real PostgreSQL: activating the notes module runs
+     * {@code module/notes/V1+V2} — notes/categories gain their {@code project_id}
+     * (NOT NULL) and the tenant's default NOTES container ("Genel") exists.
+     */
+    @Test
+    void notesActivationScopesNotesAndEnsuresDefaultProject() throws Exception {
+        moduleActivationService.activateForCompany(company, ModuleDefinition.NOTES);
+
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement();
+             ResultSet rs = statement.executeQuery(
+                     "SELECT count(*) FROM " + schemaName + ".t_projects"
+                             + " WHERE project_type = 'NOTES' AND is_default = true AND is_deleted = false")) {
+            assertThat(rs.next()).isTrue();
+            assertThat(rs.getInt(1)).as("exactly one default NOTES container").isEqualTo(1);
+        }
+        assertThat(columnNullable("t_notes", "project_id")).as("t_notes.project_id NOT NULL").isEqualTo("NO");
+        assertThat(columnNullable("t_note_categories", "project_id"))
+                .as("t_note_categories.project_id NOT NULL").isEqualTo("NO");
+        assertThat(tenantModuleRepository.findByCompanyIdAndModuleKey(company.getId(), "notes")).isPresent();
+    }
+
+    /**
      * A module with its own Flyway location migrates against a module-scoped history
      * table ({@code flyway_schema_history_mod_demo}) — isolated from the core tenant
      * history, versions never collide. Uses a Mockito-mocked {@link ModuleDefinition}
@@ -196,6 +219,18 @@ class ModuleActivationIT {
              ResultSet rs = statement.executeQuery("SELECT to_regclass('" + qualifiedName + "') IS NOT NULL")) {
             rs.next();
             return rs.getBoolean(1);
+        }
+    }
+
+    private String columnNullable(String table, String column) throws SQLException {
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement();
+             ResultSet rs = statement.executeQuery(
+                     "SELECT is_nullable FROM information_schema.columns"
+                             + " WHERE table_schema = '" + schemaName + "' AND table_name = '" + table + "'"
+                             + " AND column_name = '" + column + "'")) {
+            rs.next();
+            return rs.getString(1);
         }
     }
 }

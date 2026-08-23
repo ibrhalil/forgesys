@@ -25,9 +25,9 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.UUID;
 
 /**
- * Note-category CRUD (K-44 / Epic 3.2) — the shared taxonomy behind
- * {@link NoteController}. Paged with a {@code q} name search (categories are
- * design-bounded, so no filter-engine surface beyond the search).
+ * Flat note-category surface (K-44, re-scoped by K-45): the cross-container list —
+ * {@code ?projectId=} narrows it. Container-nested reads/writes live on
+ * {@link ProjectNoteCategoryController}.
  */
 @RestController
 @RequestMapping("/api/v1/note-categories")
@@ -40,9 +40,10 @@ public class NoteCategoryController {
     @PreAuthorize("hasAuthority('notes:category:read')")
     public ResponseEntity<PageResponse<NoteCategoryResponse>> list(
             @PageableDefault(sort = "name") Pageable pageable,
-            @RequestParam(required = false) String q) {
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) UUID projectId) {
         SortGuard.require(pageable, NoteCategoryService.FILTER_FIELDS);
-        return ResponseEntity.ok(PageResponse.of(noteCategoryService.search(q, pageable)));
+        return ResponseEntity.ok(PageResponse.of(noteCategoryService.search(q, projectId, pageable)));
     }
 
     @GetMapping("/{id}")

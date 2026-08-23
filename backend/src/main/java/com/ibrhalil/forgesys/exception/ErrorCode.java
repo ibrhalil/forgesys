@@ -25,6 +25,8 @@ public enum ErrorCode {
     PROJECT_TYPE_CHANGE_FORBIDDEN(HttpStatus.CONFLICT, "Project type cannot change while the project holds content"),
     PROJECT_CYCLE_FORBIDDEN(HttpStatus.CONFLICT, "Project parent would create a containment cycle"),
     PROJECT_DEFAULT_IMMUTABLE(HttpStatus.CONFLICT, "The default project's type and parent cannot be changed"),
+    PROJECT_TYPE_MISMATCH(HttpStatus.CONFLICT, "The project's type does not accept this content"),
+    NOTE_CATEGORY_PROJECT_MISMATCH(HttpStatus.CONFLICT, "The note category belongs to a different project"),
     NOTE_CATEGORY_NAME_TAKEN(HttpStatus.BAD_REQUEST, "Note category name is already in use"),
     PERMISSION_NAME_TAKEN(HttpStatus.BAD_REQUEST, "Permission name is already in use"),
     PERMISSION_IN_USE(HttpStatus.CONFLICT, "Permission is still assigned to one or more roles; remove it from all roles before deleting"),

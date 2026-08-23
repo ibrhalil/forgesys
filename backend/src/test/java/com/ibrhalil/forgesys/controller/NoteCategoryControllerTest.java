@@ -2,6 +2,9 @@ package com.ibrhalil.forgesys.controller;
 
 import com.ibrhalil.forgesys.entity.Note;
 import com.ibrhalil.forgesys.entity.NoteCategory;
+import com.ibrhalil.forgesys.entity.Project;
+import com.ibrhalil.forgesys.entity.ProjectType;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
@@ -18,9 +21,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Note-category CRUD (K-44 / Epic 3.2). Covers 401/403, list + {@code q} search,
- * create/update with duplicate-name rejection, delete (keeps notes — they become
- * uncategorized with a null categoryName), 404s.
+ * Flat note-category surface (K-44, re-scoped by K-45). Covers 401/403, list +
+ * {@code q} search, create/update with duplicate-name rejection, delete (keeps
+ * notes — they become uncategorized with a null categoryName), project-immutability
+ * on update, 404s.
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -28,6 +32,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class NoteCategoryControllerTest extends AbstractRbacWebTest {
 
     private static final MediaType JSON = MediaType.APPLICATION_JSON;
+
+    private Project defaultNotesProject;
+
+    @BeforeEach
+    void seedDefaultNotesContainer() {
+        defaultNotesProject = new Project();
+        defaultNotesProject.setName("Genel");
+        defaultNotesProject.setType(ProjectType.NOTES);
+        defaultNotesProject.setDefault(true);
+        entityManager.persist(defaultNotesProject);
+        entityManager.flush();
+    }
 
     @Test
     void listRequiresAuthentication() throws Exception {
@@ -65,7 +81,22 @@ class NoteCategoryControllerTest extends AbstractRbacWebTest {
                                 {"name":"Ideas","color":"#10b981"}"""))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.name").value("Ideas"))
-                .andExpect(jsonPath("$.color").value("#10b981"));
+                .andExpect(jsonPath("$.color").value("#10b981"))
+                .andExpect(jsonPath("$.projectId").value(defaultNotesProject.getId().toString()));
+    }
+
+    @Test
+    void updateRejectsProjectMove() throws Exception {
+        Project other = seedNotesProject("Second");
+        NoteCategory category = seedCategory("Work");
+
+        mockMvc.perform(put("/api/v1/note-categories/" + category.getId())
+                        .contentType(JSON)
+                        .cookie(auth("writer@tenant.test", "notes:category:write"))
+                        .content("""
+                                {"name":"Work","projectId":"%s"}""".formatted(other.getId())))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("note_category_project_mismatch"));
     }
 
     @Test
@@ -129,9 +160,19 @@ class NoteCategoryControllerTest extends AbstractRbacWebTest {
                 .andExpect(jsonPath("$.code").value("resource_not_found"));
     }
 
+    private Project seedNotesProject(String name) {
+        Project project = new Project();
+        project.setName(name);
+        project.setType(ProjectType.NOTES);
+        entityManager.persist(project);
+        entityManager.flush();
+        return project;
+    }
+
     private NoteCategory seedCategory(String name) {
         NoteCategory category = new NoteCategory();
         category.setName(name);
+        category.setProjectId(defaultNotesProject.getId());
         entityManager.persist(category);
         entityManager.flush();
         return category;
@@ -142,6 +183,7 @@ class NoteCategoryControllerTest extends AbstractRbacWebTest {
         note.setTitle(title);
         note.setContent(content);
         note.setCategoryId(categoryId);
+        note.setProjectId(defaultNotesProject.getId());
         note.setPinned(pinned);
         entityManager.persist(note);
         entityManager.flush();

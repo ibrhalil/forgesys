@@ -2,6 +2,9 @@ package com.ibrhalil.forgesys.controller;
 
 import com.ibrhalil.forgesys.entity.Note;
 import com.ibrhalil.forgesys.entity.NoteCategory;
+import com.ibrhalil.forgesys.entity.Project;
+import com.ibrhalil.forgesys.entity.ProjectType;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
@@ -18,10 +21,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Note CRUD (K-44 / Epic 3.2). Covers 401/403, happy-path list with {@code q} /
- * {@code categoryId} / {@code pinned} filters, create (markdown content + defaults),
- * unknown-category 404, update (partial semantics: null pinned leaves unchanged),
- * delete, and duplicate-title legitimacy (no uniqueness on notes).
+ * Flat note surface (K-44, re-scoped by K-45). Covers 401/403, happy-path list with
+ * {@code q} / {@code categoryId} / {@code pinned} / {@code projectId} filters, create
+ * (markdown content + defaults — lands in the default container when no
+ * {@code projectId} is given), unknown-category 404, update (partial semantics: null
+ * pinned leaves unchanged), delete, and duplicate-title legitimacy.
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -29,6 +33,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class NoteControllerTest extends AbstractRbacWebTest {
 
     private static final MediaType JSON = MediaType.APPLICATION_JSON;
+
+    private Project defaultNotesProject;
+
+    @BeforeEach
+    void seedDefaultNotesContainer() {
+        defaultNotesProject = new Project();
+        defaultNotesProject.setName("Genel");
+        defaultNotesProject.setType(ProjectType.NOTES);
+        defaultNotesProject.setDefault(true);
+        entityManager.persist(defaultNotesProject);
+        entityManager.flush();
+    }
 
     @Test
     void listRequiresAuthentication() throws Exception {
@@ -93,6 +109,21 @@ class NoteControllerTest extends AbstractRbacWebTest {
     }
 
     @Test
+    void listFiltersByProjectId() throws Exception {
+        Project otherContainer = seedNotesProject("Second");
+        seedNote("In Genel", "", null, false);
+        seedNoteIn(otherContainer.getId(), "In Second", "", null, false);
+
+        mockMvc.perform(get("/api/v1/notes")
+                        .param("projectId", otherContainer.getId().toString())
+                        .cookie(auth("reader@tenant.test", "notes:note:read")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].title").value("In Second"))
+                .andExpect(jsonPath("$.data[0].projectName").value("Second"));
+    }
+
+    @Test
     void createReturns201WithDefaults() throws Exception {
         NoteCategory category = seedCategory("Work", null);
 
@@ -106,6 +137,8 @@ class NoteControllerTest extends AbstractRbacWebTest {
                 .andExpect(jsonPath("$.title").value("New note"))
                 .andExpect(jsonPath("$.content").value("# Heading"))
                 .andExpect(jsonPath("$.categoryName").value("Work"))
+                .andExpect(jsonPath("$.projectId").value(defaultNotesProject.getId().toString()))
+                .andExpect(jsonPath("$.projectName").value("Genel"))
                 .andExpect(jsonPath("$.pinned").value(false));
     }
 
@@ -190,20 +223,35 @@ class NoteControllerTest extends AbstractRbacWebTest {
                 .andExpect(status().isNoContent());
     }
 
+    private Project seedNotesProject(String name) {
+        Project project = new Project();
+        project.setName(name);
+        project.setType(ProjectType.NOTES);
+        entityManager.persist(project);
+        entityManager.flush();
+        return project;
+    }
+
     private NoteCategory seedCategory(String name, String color) {
         NoteCategory category = new NoteCategory();
         category.setName(name);
         category.setColor(color);
+        category.setProjectId(defaultNotesProject.getId());
         entityManager.persist(category);
         entityManager.flush();
         return category;
     }
 
     private Note seedNote(String title, String content, UUID categoryId, boolean pinned) {
+        return seedNoteIn(defaultNotesProject.getId(), title, content, categoryId, pinned);
+    }
+
+    private Note seedNoteIn(UUID projectId, String title, String content, UUID categoryId, boolean pinned) {
         Note note = new Note();
         note.setTitle(title);
         note.setContent(content);
         note.setCategoryId(categoryId);
+        note.setProjectId(projectId);
         note.setPinned(pinned);
         entityManager.persist(note);
         entityManager.flush();
