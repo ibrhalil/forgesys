@@ -52,6 +52,7 @@ public enum ErrorCode {
     APP_VIEW_CONFIG_INVALID(HttpStatus.BAD_REQUEST, "View configuration is invalid"),
     APP_RECORD_VALUE_INVALID(HttpStatus.BAD_REQUEST, "Record value does not match the property type"),
     APP_LIMIT_REACHED(HttpStatus.FORBIDDEN, "Plan limit reached; upgrade to add more"),
+    SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "A backing service is temporarily unavailable; please retry later"),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred");
 
     private final HttpStatus status;

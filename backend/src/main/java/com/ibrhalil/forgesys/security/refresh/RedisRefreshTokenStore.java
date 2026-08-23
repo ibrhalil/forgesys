@@ -4,6 +4,7 @@ import com.ibrhalil.forgesys.security.jwt.JwtCookieProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Profile;
+import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -41,6 +42,13 @@ import java.util.UUID;
  * This closes the read-modify-write race two concurrent refreshes would otherwise open.
  * The stable {@code sessionId} and original device metadata are preserved across
  * rotation; only {@code lastSeen} advances.
+ *
+ * <p>Deliberate Redis-outage behavior ([RISK-36] P2 fix): {@link #issue} is the only
+ * fail-closed path — a token that could not be stored must not be handed out, so the
+ * exception propagates and maps to 503 {@code service_unavailable}. Every other
+ * operation degrades: {@code rotate} reports {@code Unknown} (clean 401, no 500),
+ * and the session/list/revoke reads return empty/false best-effort, matching the
+ * store's existing best-effort contract. Recovery is automatic once Redis returns.
  */
 @Component
 @Profile("!test")
@@ -100,7 +108,14 @@ public class RedisRefreshTokenStore implements RefreshTokenStore {
         String oldHash = sha256Hex(presented);
         String newRaw = generateToken();
         String newHash = sha256Hex(newRaw);
-        List<String> res = redis.execute(ROTATE, List.of(tokenKey(oldHash)), newHash);
+        List<String> res;
+        try {
+            res = redis.execute(ROTATE, List.of(tokenKey(oldHash)), newHash);
+        } catch (DataAccessException e) {
+            log.warn("Refresh rotation failed (Redis unavailable); treating as unknown token: {}",
+                    e.getMostSpecificCause().getMessage());
+            return new RotationResult.Unknown();
+        }
         if (res == null || res.isEmpty()) {
             return new RotationResult.Unknown();
         }
@@ -149,61 +164,77 @@ public class RedisRefreshTokenStore implements RefreshTokenStore {
         boolean revokedAny = false;
         Set<String> visited = new HashSet<>();
         String currentHash = sha256Hex(presented);
-        while (currentHash != null && visited.add(currentHash)) {
-            String key = tokenKey(currentHash);
-            Map<Object, Object> record = redis.opsForHash().entries(key);
-            if (record.isEmpty()) {
-                break;
+        try {
+            while (currentHash != null && visited.add(currentHash)) {
+                String key = tokenKey(currentHash);
+                Map<Object, Object> record = redis.opsForHash().entries(key);
+                if (record.isEmpty()) {
+                    break;
+                }
+                redis.delete(key);
+                revokedAny = true;
+                UUID userId = parseUserId(record.get("userId"));
+                if (userId != null) {
+                    String tenant = string(record.get("tenant"));
+                    redis.opsForSet().remove(indexKey(tenant, userId), currentHash);
+                }
+                // null for ACTIVE records (no successor) → the chain ends.
+                currentHash = string(record.get("rotatedTo"));
             }
-            redis.delete(key);
-            revokedAny = true;
-            UUID userId = parseUserId(record.get("userId"));
-            if (userId != null) {
-                String tenant = string(record.get("tenant"));
-                redis.opsForSet().remove(indexKey(tenant, userId), currentHash);
-            }
-            // null for ACTIVE records (no successor) → the chain ends.
-            currentHash = string(record.get("rotatedTo"));
+        } catch (DataAccessException e) {
+            log.warn("Refresh revoke interrupted (Redis unavailable); revoked={} so far: {}",
+                    revokedAny, e.getMostSpecificCause().getMessage());
         }
         return revokedAny;
     }
 
     @Override
     public void revokeAllForUser(UUID userId, String tenant) {
-        String idx = indexKey(tenant, userId);
-        Set<String> hashes = redis.opsForSet().members(idx);
-        if (hashes != null) {
-            for (String h : hashes) {
-                redis.delete(tokenKey(h));
+        try {
+            String idx = indexKey(tenant, userId);
+            Set<String> hashes = redis.opsForSet().members(idx);
+            if (hashes != null) {
+                for (String h : hashes) {
+                    redis.delete(tokenKey(h));
+                }
             }
+            redis.delete(idx);
+            log.debug("Revoked all refresh tokens for user {} tenant {}", userId, tenant);
+        } catch (DataAccessException e) {
+            log.warn("Bulk refresh revoke failed (Redis unavailable) for user {} tenant {}: {}",
+                    userId, tenant, e.getMostSpecificCause().getMessage());
         }
-        redis.delete(idx);
-        log.debug("Revoked all refresh tokens for user {} tenant {}", userId, tenant);
     }
 
     @Override
     public List<ActiveSession> listSessions(UUID userId, String tenant) {
-        Set<String> hashes = redis.opsForSet().members(indexKey(tenant, userId));
-        if (hashes == null) {
+        try {
+            Set<String> hashes = redis.opsForSet().members(indexKey(tenant, userId));
+            if (hashes == null) {
+                return List.of();
+            }
+            List<ActiveSession> sessions = new ArrayList<>();
+            for (String h : hashes) {
+                Map<Object, Object> record = redis.opsForHash().entries(tokenKey(h));
+                if (record.isEmpty() || !STATE_ACTIVE.equals(record.get("state"))) {
+                    continue;
+                }
+                ActiveSession session = toActiveSession(record);
+                if (session != null) {
+                    sessions.add(session);
+                }
+            }
+            // Newest activity first.
+            sessions.sort((a, b) -> {
+                int c = b.lastSeen().compareTo(a.lastSeen());
+                return c != 0 ? c : b.loginAt().compareTo(a.loginAt());
+            });
+            return sessions;
+        } catch (DataAccessException e) {
+            log.warn("Session listing failed (Redis unavailable) for user {} tenant {}: {}",
+                    userId, tenant, e.getMostSpecificCause().getMessage());
             return List.of();
         }
-        List<ActiveSession> sessions = new ArrayList<>();
-        for (String h : hashes) {
-            Map<Object, Object> record = redis.opsForHash().entries(tokenKey(h));
-            if (record.isEmpty() || !STATE_ACTIVE.equals(record.get("state"))) {
-                continue;
-            }
-            ActiveSession session = toActiveSession(record);
-            if (session != null) {
-                sessions.add(session);
-            }
-        }
-        // Newest activity first.
-        sessions.sort((a, b) -> {
-            int c = b.lastSeen().compareTo(a.lastSeen());
-            return c != 0 ? c : b.loginAt().compareTo(a.loginAt());
-        });
-        return sessions;
     }
 
     @Override
@@ -218,6 +249,10 @@ public class RedisRefreshTokenStore implements RefreshTokenStore {
             while (cursor.hasNext()) {
                 keys.add(cursor.next());
             }
+        } catch (DataAccessException e) {
+            log.warn("Tenant session scan failed (Redis unavailable) for tenant {}: {}",
+                    tenant, e.getMostSpecificCause().getMessage());
+            return List.of();
         }
         List<ActiveSession> sessions = new ArrayList<>();
         for (String key : keys) {
@@ -240,23 +275,29 @@ public class RedisRefreshTokenStore implements RefreshTokenStore {
     @Override
     public boolean revokeSession(UUID userId, String tenant, UUID sessionId) {
         String idx = indexKey(tenant, userId);
-        Set<String> hashes = redis.opsForSet().members(idx);
-        if (hashes == null) {
+        try {
+            Set<String> hashes = redis.opsForSet().members(idx);
+            if (hashes == null) {
+                return false;
+            }
+            for (String h : hashes) {
+                String key = tokenKey(h);
+                Map<Object, Object> record = redis.opsForHash().entries(key);
+                if (record.isEmpty() || !STATE_ACTIVE.equals(record.get("state"))) {
+                    continue;
+                }
+                if (sessionId.equals(parseUserId(record.get("sessionId")))) {
+                    redis.delete(key);
+                    redis.opsForSet().remove(idx, h);
+                    return true;
+                }
+            }
+            return false;
+        } catch (DataAccessException e) {
+            log.warn("Session revoke failed (Redis unavailable) for user {} session {}: {}",
+                    userId, sessionId, e.getMostSpecificCause().getMessage());
             return false;
         }
-        for (String h : hashes) {
-            String key = tokenKey(h);
-            Map<Object, Object> record = redis.opsForHash().entries(key);
-            if (record.isEmpty() || !STATE_ACTIVE.equals(record.get("state"))) {
-                continue;
-            }
-            if (sessionId.equals(parseUserId(record.get("sessionId")))) {
-                redis.delete(key);
-                redis.opsForSet().remove(idx, h);
-                return true;
-            }
-        }
-        return false;
     }
 
     @Override
@@ -265,11 +306,16 @@ public class RedisRefreshTokenStore implements RefreshTokenStore {
             return Optional.empty();
         }
         String hash = sha256Hex(presentedToken);
-        Map<Object, Object> record = redis.opsForHash().entries(tokenKey(hash));
-        if (record.isEmpty() || !STATE_ACTIVE.equals(record.get("state"))) {
+        try {
+            Map<Object, Object> record = redis.opsForHash().entries(tokenKey(hash));
+            if (record.isEmpty() || !STATE_ACTIVE.equals(record.get("state"))) {
+                return Optional.empty();
+            }
+            return Optional.ofNullable(toActiveSession(record));
+        } catch (DataAccessException e) {
+            log.warn("Session lookup failed (Redis unavailable): {}", e.getMostSpecificCause().getMessage());
             return Optional.empty();
         }
-        return Optional.ofNullable(toActiveSession(record));
     }
 
     // --- helpers --------------------------------------------------------

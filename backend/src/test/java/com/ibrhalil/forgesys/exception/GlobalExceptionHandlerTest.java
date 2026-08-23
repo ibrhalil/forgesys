@@ -73,6 +73,19 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void dataAccessFailureMapsTo503ServiceUnavailable() {
+        org.springframework.dao.DataAccessResourceFailureException ex =
+                new org.springframework.dao.DataAccessResourceFailureException("Redis down");
+
+        ApiErrorResponse body = handler.handleDataAccess(ex, request).getBody();
+
+        assertThat(body).isNotNull();
+        assertThat(body.status()).isEqualTo(503);
+        assertThat(body.code()).isEqualTo("service_unavailable");
+        assertThat(body.message()).doesNotContain("Redis down"); // no infra detail leak
+    }
+
+    @Test
     void unhandledExceptionMapsToInternalError() {
         ApiErrorResponse body = handler.handleGeneralException(new RuntimeException("boom"), request).getBody();
 

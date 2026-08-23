@@ -10,13 +10,14 @@ import java.security.SecureRandom;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.Comparator;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -85,16 +86,26 @@ public class InMemoryRefreshTokenStore implements RefreshTokenStore {
         if (presented == null || presented.isBlank()) {
             return false;
         }
-        String hash = sha256Hex(presented);
-        Entry entry = tokens.remove(hash);
-        if (entry == null) {
-            return false;
+        // Follow the rotation chain (parity with RedisRefreshTokenStore.revoke): a
+        // ROTATED record's rotatedTo successor is the live token of the SAME session.
+        // Revoking an already-rotated token (logout racing a silent refresh) must kill
+        // the successor too, or the session survives logout.
+        boolean revokedAny = false;
+        Set<String> visited = new HashSet<>();
+        String currentHash = sha256Hex(presented);
+        while (currentHash != null && visited.add(currentHash)) {
+            Entry entry = tokens.remove(currentHash);
+            if (entry == null) {
+                break;
+            }
+            Set<String> set = index.get(indexKey(entry.tenant, entry.userId));
+            if (set != null) {
+                set.remove(currentHash);
+            }
+            revokedAny = true;
+            currentHash = entry.rotatedTo();
         }
-        Set<String> set = index.get(indexKey(entry.tenant, entry.userId));
-        if (set != null) {
-            set.remove(hash);
-        }
-        return true;
+        return revokedAny;
     }
 
     @Override
