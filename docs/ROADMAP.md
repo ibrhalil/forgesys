@@ -4,7 +4,7 @@
 
 ## Mevcut Durum
 
-Platform çekirdeği kullanımda: schema-per-tenant multi-tenancy, iki fazlı tenant signup, auth (RS256 JWT cookie + Redis refresh rotasyon/reuse detection), tam RBAC (rol kalıtımı + `all_permissions` + last-admin guard + privilege-change session revoke), audit/login/request log (append-only + `@AuditLog` AOP + delta), modül & plan sistemi (registry kodda), üç modül aktif (**pm** Projects & Tasks, **apps** App Builder — backend+UI, **notes**), admin console (permission-gated), Prometheus metrics (prod ayrı management portu), CI (backend + frontend + gated gerçek PG/Redis IT) + GHCR publish (deploy manuel).
+Platform çekirdeği kullanımda: schema-per-tenant multi-tenancy, iki fazlı tenant signup, auth (RS256 JWT cookie + Redis refresh rotasyon/reuse detection), tam RBAC (rol kalıtımı + `all_permissions` + last-admin guard + privilege-change session revoke), audit/login/request log (append-only + `@AuditLog` AOP + delta), modül & plan sistemi (registry kodda), üç modül aktif ve **tipli proje konteynerine** çapalı (**pm** TASKS, **apps** APPS koleksiyonu, **notes** NOTES — K-45), admin console (permission-gated), Prometheus metrics (prod ayrı management portu), CI (backend + frontend + gated gerçek PG/Redis IT) + GHCR publish (deploy manuel).
 
 ## Tamamlanan Epikler (özet)
 
@@ -14,7 +14,8 @@ Platform çekirdeği kullanımda: schema-per-tenant multi-tenancy, iki fazlı te
 | IAM hardening | privilege-change revoke, max-sessions, append-only audit + delta, app-level rate limit, rol kalıtımı, `all_permissions`, last-admin guard, user directory read model + scoped görünürlük, RbacSeeder escalation fix | RISK-35, RISK-36 |
 | Faz 3.0 — module system + app builder backend | plan/modül registry + aktivasyon, JSONB EAV, plan limitleri, structured view DSL | K-15, K-16 |
 | pm modülü | project-scoped tasks + Kanban board UI | — |
-| notes modülü | standalone markdown notes + kategoriler (default-aktif) | K-44 |
+| notes modülü | markdown notes + kategoriler (default-aktif; K-45 ile proje-scoped) | K-44 (+K-45) |
+| **K-45 — tipli proje konteyneri (Faz 1)** | `Project` typed container (TASKS/NOTES/APPS; katalog aktif modüllerden), notes/apps proje-scoping migration'ları + nested API'ler, tip-değişim/döngü/default guard'ları, "Genel" default konteynerler, üç yönlü proje detay UI'ı | K-45 |
 | Faz 4 — frontend | admin console + App Builder UI (TABLE/BOARD/CALENDAR/LIST/GALLERY renderer'ları, filtre/sort DSL, picker'lar, plan göstergeleri) | K-20, K-42 |
 | Kalite/sadeleştirme seti | ölü kod kaldırma, API tutarlılık geçişi, migration squash, strict TS + Vitest/RTL, startup projection, springdoc-openapi | K-36..K-41 |
 | Observability + CI/CD | Prometheus expose, CI 3-job + gated IT'ler + GHCR publish | K-43 |
@@ -41,6 +42,10 @@ Platform çekirdeği kullanımda: schema-per-tenant multi-tenancy, iki fazlı te
 - [ ] Nginx gateway + wildcard TLS (K-33 — proje %90 sonrası; eski Faz 1.5 epikleri bu kapsamda uygulanır)
 - [ ] Pepper rotasyon runbook (docs)
 - [ ] Deploy otomasyonu (GHCR publish var; sunucuya rollout manuel)
+
+### K-45 sonraki artışlar (taahhütsüz yön — K-45'te tanımlı)
+- [ ] Faz 2 — proje görünüm sekmeleri (AppView'in DSL konsepti Task/Note listelerine genişletilir; tablo soyutlaması genelleştirilmez)
+- [ ] Faz 3 (talep-kapılı) — `t_links` polymorphic bağlantı katmanı (dondurulmuş anti-şişme kuralları K-45'te)
 
 ### Faz 6 — Billing (K-16 finansal taraf)
 - [ ] Ödeme sağlayıcı spike (Stripe vs iyzico — Türkiye pazarı) + entegrasyon + webhook

@@ -263,6 +263,8 @@ curl -X POST http://localhost:8080/api/v1/auth/company/verify \
 
 > `/register` ve `/verify` `TenantFilter`'dan muaf (`shouldNotFilter` — `/api/v1/auth/company/**`). Login tenant'a özgü (subdomain çözümleme).
 
+> **Tipli proje konteyneri (K-45):** projeler türsüz var edilemez (`TASKS | NOTES | APPS`); yaratılabilir tür kataloğu tenant'ın AKTİF modüllerinden türer (`GET /api/v1/projects/types`). Notlar ve app'ler kendi türlerinin konteynerine çapalıdır (`/api/v1/projects/{id}/notes`, `/projects/{id}/apps` — TaskController deseni); üst `/notes` `/apps` yüzeyleri `?projectId=` filtreli çapraz-konteyner görünümleri olarak yaşar, hedef verilmeden yazmalar tipin "Genel" default konteynerine düşer.
+
 ## Proje Yapısı
 
 > Mimari diyagram, HTTP request yaşam döngüsü, şema-per-tenant modeli ve entity hiyerarşisi için bkz. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
@@ -337,7 +339,7 @@ Kurallar: Subject <72 karakter, küçük harfle başlasın, nokta ile bitmesin, 
   docker compose up -d --force-recreate db
   ```
 - **DB "healthy" ama uygulama bağlantı hatası veriyor** -> eski `pg_isready` healthcheck'i authentication'a kadar gitmediği için bozuk data dizinini "healthy" gösterebiliyordu; artık gerçek `SELECT 1` sorgusu kullanılıyor. "unhealthy" görüyorsan yukarıdaki reset komutunu çalıştır.
-- **Flyway validation hatası (checksum mismatch) startup'ta** -> migration geçmişi pre-1.0.0 squash'ı ile alan-bazlı `V1.x` baseline ailesine indirildi ([K-36](docs/DECISIONS.md#k-36), 2026-08-22). Eski geçmişle yaratılmış local DB'ler sıfırlanmalı: `docker compose down && rm -rf infra/data/postgres && docker compose up -d` — taze DB'de baseline ailesi baştan koşar.
+- **Flyway validation hatası (checksum mismatch) startup'ta** -> migration geçmişi pre-1.0.0 squash'ı ile alan-bazlı `V1.x` baseline ailesine indirildi ([K-36](docs/DECISIONS.md#k-36), 2026-08-22). Eski geçmişle yaratılmış local DB'ler sıfırlanmalı: `docker compose down && rm -rf infra/data/postgres && docker compose up -d` — taze DB'de baseline ailesi baştan koşar. (Not: `tenant/V3` migration'ı K-45 çalışması sırasında değişti — o pencerede kurulan local DB'ler de aynı şekilde sıfırlanmalı, [K-45](docs/DECISIONS.md#k-45).)
 - **Backend ayağa kalkıyor ama frontend static servis etmiyor** -> `./mvnw clean install` (tüm modülleri yeniden build).
 - **Frontend "Backend DOWN" gösteriyor** -> Backend çalışmıyor; başlat veya mock veriyle devam et (normal davranış).
 - **Vite/Rolldown/Lightning CSS native binding bulunamıyor** -> Node 20.20.2'yi (`nvm use`) kullanıp `node_modules` dizinini temizleyerek `npm install --include=optional` çalıştır.
