@@ -74,10 +74,13 @@ public class ProjectService {
     private final AuditService auditService;
 
     @Transactional(readOnly = true)
-    public Page<ProjectResponse> search(String q, UUID parentProjectId, Pageable pageable) {
+    public Page<ProjectResponse> search(String q, UUID parentProjectId, ProjectType type, Pageable pageable) {
         List<FilterCriteria> filters = new ArrayList<>();
         if (parentProjectId != null) {
             filters.add(new FilterCriteria(Project_.PARENT_PROJECT_ID, FilterOperator.EQ, List.of(parentProjectId.toString())));
+        }
+        if (type != null) {
+            filters.add(new FilterCriteria(Project_.TYPE, FilterOperator.EQ, List.of(type.name())));
         }
         Specification<Project> spec = FilterSpecifications.from(FILTER_FIELDS,
                 StringUtils.hasText(q) ? q.trim() : null, filters);

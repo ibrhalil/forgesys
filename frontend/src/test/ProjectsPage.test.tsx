@@ -1,0 +1,78 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ProjectsPage } from '../features/projects/ProjectsPage';
+import { useAuthStore } from '../store/authStore';
+import { useLocaleStore } from '../store/localeStore';
+
+const EMPTY_PAGE = {
+  data: [],
+  meta: { page: 0, pageSize: 10, totalElements: 0, totalPages: 0, hasNext: false, hasPrevious: false },
+};
+
+/** ACTIVE-module catalog (GET /projects/types) — the create modal derives from it (K-45). */
+let typesPayload: { type: string; moduleKey: string; defaultProjectId: string | null }[];
+
+function renderPage() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <ProjectsPage />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+
+describe('ProjectsPage (typed container catalog)', () => {
+  beforeEach(() => {
+    useLocaleStore.setState({ locale: 'en' });
+    useAuthStore.setState({ hasAuthority: () => true });
+    typesPayload = [{ type: 'TASKS', moduleKey: 'pm', defaultProjectId: null }];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        const payload = url.startsWith('/api/v1/projects/types')
+          ? typesPayload
+          : url.startsWith('/api/v1/projects?')
+            ? EMPTY_PAGE
+            : EMPTY_PAGE;
+        return new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }),
+    );
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("create modal offers only the ACTIVE modules' types", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole('button', { name: /New Project/ }));
+    // Open the type select — only the TASKS entry (notes/apps not activated).
+    await user.click(await screen.findByText('Pick a type…'));
+    expect(await screen.findByRole('option', { name: /Tasks — task board/ })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /Notes/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /Apps/ })).not.toBeInTheDocument();
+  });
+
+  it('lists every catalog type once the modules are active', async () => {
+    typesPayload = [
+      { type: 'TASKS', moduleKey: 'pm', defaultProjectId: null },
+      { type: 'NOTES', moduleKey: 'notes', defaultProjectId: 'p-notes' },
+      { type: 'APPS', moduleKey: 'apps', defaultProjectId: 'p-apps' },
+    ];
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole('button', { name: /New Project/ }));
+    await user.click(await screen.findByText('Pick a type…'));
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: /Tasks — task board/ })).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: /Notes — note collection/ })).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: /Apps — custom app collection/ })).toBeInTheDocument();
+    });
+  });
+});

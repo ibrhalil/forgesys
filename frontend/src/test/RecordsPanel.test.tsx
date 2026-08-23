@@ -12,6 +12,8 @@ const APP_ID = '77777777-7777-7777-7777-777777777777';
 function appFixture(views: AppDetail['views']): AppDetail {
   return {
     id: APP_ID,
+    projectId: 'proj-1',
+    projectName: 'Genel',
     name: 'Orders',
     description: null,
     icon: null,

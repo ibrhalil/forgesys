@@ -40,8 +40,12 @@ export function useDeleteNote() {
 }
 
 // ─── Note categories ───
-export function useNoteCategories() {
-  return useQuery({ queryKey: ['note-categories'], queryFn: () => noteCategoriesApi.list() });
+/** Categories — unscoped (cross-container chip data) or narrowed to one container. */
+export function useNoteCategories(projectId?: string) {
+  return useQuery({
+    queryKey: ['note-categories', { projectId }],
+    queryFn: () => noteCategoriesApi.list({ size: 100, sort: 'name,asc', projectId }),
+  });
 }
 
 export function useCreateNoteCategory() {

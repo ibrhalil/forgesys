@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { appsApi } from './api';
+import { appsApi, type AppListParams } from './api';
 import type { PageParams } from '../../types';
 import type { AppPropertyRequest, AppRecordRequest, AppRequest, AppViewRequest } from './types';
 import { ApiError } from '../../lib/api';
@@ -20,7 +20,7 @@ function toastMutationError(err: unknown): void {
 }
 
 // ─── Apps ───
-export function useApps(params: PageParams = {}) {
+export function useApps(params: AppListParams = {}) {
   return useQuery({ queryKey: ['apps', params], queryFn: () => appsApi.list(params) });
 }
 

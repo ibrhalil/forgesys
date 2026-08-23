@@ -1,11 +1,26 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { projectsApi, tasksApi } from './api';
-import type { PageParams } from '../../types';
-import type { ProjectRequest, TaskRequest } from './types';
+import { projectsApi, tasksApi, type ProjectListParams } from './api';
+import type { ProjectRequest, ProjectType, TaskRequest } from './types';
+import { useT } from '../../lib/i18n';
+
+/** Localized label per project type (badges, selects, placeholders). */
+export function useProjectTypeLabels(): Record<ProjectType, string> {
+  const { t } = useT();
+  return {
+    TASKS: t('projects.typeTasks'),
+    NOTES: t('projects.typeNotes'),
+    APPS: t('projects.typeApps'),
+  };
+}
 
 // ─── Projects ───
-export function useProjects(params: PageParams = {}) {
-  return useQuery({ queryKey: ['projects', params], queryFn: () => projectsApi.list(params) });
+export function useProjects(params: ProjectListParams = {}, enabled = true) {
+  return useQuery({ queryKey: ['projects', params], queryFn: () => projectsApi.list(params), enabled });
+}
+
+/** Creatable type catalog (ACTIVE modules only) — backs create modals + selectors (K-45). */
+export function useProjectTypes() {
+  return useQuery({ queryKey: ['projects', 'types'], queryFn: () => projectsApi.types() });
 }
 
 export function useProject(id: string | undefined) {

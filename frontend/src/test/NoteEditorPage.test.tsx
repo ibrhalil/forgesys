@@ -11,6 +11,8 @@ const NOTE = {
   id: 'note-1',
   title: 'API design',
   content: '# Heading\n\n- item',
+  projectId: 'proj-notes',
+  projectName: 'Journal',
   categoryId: 'cat-1',
   categoryName: 'Work',
   pinned: false,
@@ -132,6 +134,37 @@ describe('NoteEditorPage', () => {
       const post = calls.find((c) => c.method === 'POST');
       expect(post?.url).toBe('/api/v1/notes');
       expect(post?.body).toMatchObject({ title: 'Fresh note', content: '' });
+    });
+  });
+
+  it('carries the ?projectId= param into the create POST (project panel entry)', async () => {
+    const user = userEvent.setup();
+    const created = { ...NOTE, id: 'note-2', title: 'Panel note' };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        calls.push({ url, method: init?.method ?? 'GET', body: init?.body ? JSON.parse(String(init.body)) : undefined });
+        const payload = url.startsWith('/api/v1/note-categories')
+          ? CATEGORIES_PAYLOAD
+          : url === '/api/v1/notes' && init?.method === 'POST'
+            ? created
+            : null;
+        if (payload === null) {
+          return new Response(JSON.stringify({ code: 'resource_not_found' }), { status: 404 });
+        }
+        return new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }),
+    );
+
+    renderAt('/notes/new?projectId=proj-notes');
+    const title = await screen.findByPlaceholderText('e.g. Meeting notes');
+    await user.type(title, 'Panel note');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => {
+      const post = calls.find((c) => c.method === 'POST');
+      expect(post?.body).toMatchObject({ title: 'Panel note', projectId: 'proj-notes' });
     });
   });
 });

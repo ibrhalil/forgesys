@@ -1,9 +1,10 @@
 import { PERMISSIONS } from '../../lib/permissions';
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useNote, useNoteCategories, useCreateNote, useUpdateNote, useDeleteNote } from './hooks';
+import { useProjectTypes, useProjects } from '../projects/hooks';
 import type { NoteCategory } from './types';
 import { notify, extractFieldErrors } from '../../lib/notify';
 import { LuEye, LuPin, LuSquarePen, LuTrash2 } from 'react-icons/lu';
@@ -19,19 +20,28 @@ import { useT } from '../../lib/i18n';
 import { useAuthStore } from '../../store/authStore';
 
 /**
- * Note editor (K-44): title + category + pinned + markdown content with a
- * write/preview toggle. New notes land here after the backend create (PUT-shaped
- * local draft until the first save creates the note, then the URL becomes the
- * note's own). Raw HTML is never rendered — react-markdown without rehype-raw
- * ignores it by design, so the preview cannot inject markup.
+ * Note editor (K-44, re-scoped by K-45): title + target project + category + pinned +
+ * markdown content with a write/preview toggle. New notes carry the chosen project
+ * (defaulted from the catalog's default NOTES container or the ?projectId= param that
+ * the project panel passes); editing keeps the note's container fixed. Raw HTML is
+ * never rendered — react-markdown without rehype-raw ignores it by design, so the
+ * preview cannot inject markup.
  */
 export function NoteEditorPage() {
   const { t } = useT();
   const navigate = useNavigate();
   const { noteId } = useParams<{ noteId: string }>();
   const isNew = noteId === 'new';
+  const [searchParams] = useSearchParams();
   const { data: note, isLoading } = useNote(isNew ? undefined : noteId);
-  const { data: categories } = useNoteCategories();
+  const { data: typeCatalog } = useProjectTypes();
+  const defaultNotesProjectId = typeCatalog?.find((c) => c.type === 'NOTES')?.defaultProjectId ?? null;
+  const [projectId, setProjectId] = useState<string | null>(searchParams.get('projectId'));
+  const { data: projects } = useProjects(
+    { page: 0, size: 100, sorts: [{ field: 'name', dir: 'asc' }], type: 'NOTES' },
+    isNew,
+  );
+  const { data: categories } = useNoteCategories(isNew ? (projectId ?? undefined) : (note?.projectId ?? undefined));
   const update = useUpdateNote();
   const create = useCreateNote();
   const delNote = useDeleteNote();
@@ -55,6 +65,14 @@ export function NoteEditorPage() {
     }
   }, [note]);
 
+  // Late catalog resolve: ?projectId= absent → default NOTES container once known.
+  useEffect(() => {
+    if (isNew && !projectId && defaultNotesProjectId) {
+      setProjectId(defaultNotesProjectId);
+    }
+  }, [isNew, projectId, defaultNotesProjectId]);
+
+  const projectOptions = (projects?.items ?? []).map((p) => ({ value: p.id, label: p.name }));
   const categoryOptions = (categories?.items ?? []).map((c: NoteCategory) => ({ value: c.id, label: c.name }));
   const saving = create.isPending || update.isPending;
 
@@ -62,7 +80,13 @@ export function NoteEditorPage() {
     setFieldErrors({});
     try {
       if (isNew) {
-        const created = await create.mutateAsync({ title, content, categoryId, pinned });
+        const created = await create.mutateAsync({
+          title,
+          content,
+          categoryId,
+          pinned,
+          projectId: projectId ?? undefined,
+        });
         notify.success(t('notes.saved'));
         navigate(`/notes/${created.id}`, { replace: true });
       } else {
@@ -118,6 +142,29 @@ export function NoteEditorPage() {
                 disabled={!canWrite}
               />
             </div>
+            {isNew ? (
+              <SelectInput
+                className="w-48"
+                label={t('projects.project')}
+                placeholder={t('common.loading')}
+                options={projectOptions}
+                value={projectOptions.find((o) => o.value === projectId) ?? null}
+                onChange={(next) => {
+                  setProjectId((next as { value: string } | null)?.value ?? null);
+                  // Categories are per-container — a stale selection must not survive.
+                  setCategoryId(null);
+                }}
+              />
+            ) : (
+              note?.projectName && (
+                <div className="pb-1.5">
+                  <span className="text-xs font-medium uppercase tracking-wide text-muted">{t('projects.project')}</span>
+                  <div className="mt-1.5">
+                    <Badge tone="blue">{note.projectName}</Badge>
+                  </div>
+                </div>
+              )
+            )}
             <SelectInput
               className="w-48"
               label={t('notes.categoryCol')}

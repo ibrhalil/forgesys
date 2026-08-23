@@ -1,10 +1,27 @@
 import { api, normalizePage, toQuery } from '../../lib/api';
 import type { PageParams, PageResponse } from '../../types';
-import type { Project, ProjectRequest, Task, TaskRequest } from './types';
+import type { Project, ProjectRequest, ProjectType, ProjectTypeInfo, Task, TaskRequest } from './types';
+
+export interface ProjectListParams extends PageParams {
+  parentProjectId?: string;
+  type?: ProjectType;
+}
 
 export const projectsApi = {
-  list: (params: PageParams = {}) =>
-    api.get<PageResponse<Project>>(`/api/v1/projects${toQuery(params)}`).then(normalizePage),
+  list: (params: ProjectListParams = {}) => {
+    // toQuery only carries page/size/sort(s)/q — thread the project-specific filters
+    // on top of it (the notes buildQuery convention).
+    const { parentProjectId, type, ...page } = params;
+    const sp = new URLSearchParams(toQuery(page).replace(/^\?/, ''));
+    if (parentProjectId) sp.set('parentProjectId', parentProjectId);
+    if (type) sp.set('type', type);
+    const qs = sp.toString();
+    return api
+      .get<PageResponse<Project>>(`/api/v1/projects${qs ? `?${qs}` : ''}`)
+      .then(normalizePage);
+  },
+  /** Creatable type catalog — derived from the tenant's ACTIVE modules (K-45). */
+  types: () => api.get<ProjectTypeInfo[]>('/api/v1/projects/types'),
   get: (id: string) => api.get<Project>(`/api/v1/projects/${id}`),
   create: (data: ProjectRequest) => api.post<Project>('/api/v1/projects', data),
   update: (id: string, data: ProjectRequest) => api.put<Project>(`/api/v1/projects/${id}`, data),

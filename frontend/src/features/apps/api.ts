@@ -13,10 +13,22 @@ import type {
   AppViewRequest,
 } from './types';
 
+export interface AppListParams extends PageParams {
+  /** Cross-container narrowing (flat list) — the project panel also lands here. */
+  projectId?: string;
+}
+
 export const appsApi = {
   // ─── Apps ───
-  list: (params: PageParams = {}) =>
-    api.get<PageResponse<App>>(`/api/v1/apps${toQuery(params)}`).then(normalizePage),
+  list: (params: AppListParams = {}) => {
+    const { projectId, ...page } = params;
+    const sp = new URLSearchParams(toQuery(page).replace(/^\?/, ''));
+    if (projectId) sp.set('projectId', projectId);
+    const qs = sp.toString();
+    return api
+      .get<PageResponse<App>>(`/api/v1/apps${qs ? `?${qs}` : ''}`)
+      .then(normalizePage);
+  },
   get: (id: string) => api.get<AppDetail>(`/api/v1/apps/${id}`),
   create: (data: AppRequest) => api.post<App>('/api/v1/apps', data),
   update: (id: string, data: AppRequest) => api.put<App>(`/api/v1/apps/${id}`, data),

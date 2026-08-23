@@ -13,6 +13,8 @@ const APP_ID = '44444444-4444-4444-4444-444444444444';
 
 const APP: AppDetail = {
   id: APP_ID,
+  projectId: 'proj-1',
+  projectName: 'Genel',
   name: 'Orders',
   description: null,
   icon: null,

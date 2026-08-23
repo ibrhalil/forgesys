@@ -45,6 +45,18 @@ export function AppsPage() {
       ),
     },
     { key: 'description', header: t('common.description'), render: (a) => <span className="text-muted">{a.description ?? '—'}</span> },
+    {
+      key: 'project',
+      header: t('projects.project'),
+      render: (a) =>
+        a.projectName ? (
+          <Link to={`/projects/${a.projectId}`} className="text-muted transition-colors hover:text-accent">
+            {a.projectName}
+          </Link>
+        ) : (
+          <span className="text-muted">—</span>
+        ),
+    },
     { key: 'createdDate', header: t('apps.createdDate'), sortKey: 'createdDate', render: (a) => <span className="text-muted">{formatDateTime(a.createdDate)}</span> },
   ];
 

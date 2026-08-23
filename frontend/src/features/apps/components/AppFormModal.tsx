@@ -16,7 +16,16 @@ const APP_ICONS = [
 ];
 
 /** Create + edit app — name, optional emoji icon, description. */
-export function AppFormModal({ app, onClose }: { app?: App; onClose: () => void }) {
+export function AppFormModal({
+  app,
+  projectId,
+  onClose,
+}: {
+  app?: App;
+  /** Target APPS container for creates (the project panel passes its own id). */
+  projectId?: string;
+  onClose: () => void;
+}) {
   const { t } = useT();
   const create = useCreateApp();
   const update = useUpdateApp();
@@ -34,7 +43,12 @@ export function AppFormModal({ app, onClose }: { app?: App; onClose: () => void 
         await update.mutateAsync({ id: app.id, data: { name, description: description || undefined, icon: icon || null } });
         notify.success(t('apps.updated'));
       } else {
-        await create.mutateAsync({ name, description: description || undefined, icon: icon || undefined });
+        await create.mutateAsync({
+          name,
+          description: description || undefined,
+          icon: icon || undefined,
+          projectId: projectId || undefined,
+        });
         notify.success(t('apps.created'));
       }
       onClose();
