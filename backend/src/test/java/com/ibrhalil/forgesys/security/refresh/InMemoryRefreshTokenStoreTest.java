@@ -67,6 +67,32 @@ class InMemoryRefreshTokenStoreTest {
     }
 
     @Test
+    void revokeFollowsRotationChainAndKillsTheSuccessorToken() {
+        // logout racing a silent refresh: the presented (already rotated) token's
+        // successor is the session's live token — parity with RedisRefreshTokenStore.revoke
+        IssuedRefresh first = store.issue(userId, "u@acme.com", TENANT, "10.0.0.1", "UA");
+        IssuedRefresh second = ((RotationResult.Rotated) store.rotate(first.token())).issued();
+
+        assertThat(store.revoke(first.token())).isTrue();
+
+        assertThat(store.rotate(second.token())).isInstanceOf(RotationResult.Unknown.class);
+        assertThat(store.activeSessionFor(second.token())).isEmpty();
+        assertThat(store.listSessions(userId, TENANT)).isEmpty();
+    }
+
+    @Test
+    void revokeOfTheLiveTokenEndsTheSessionWithoutAChain() {
+        IssuedRefresh first = store.issue(userId, "u@acme.com", TENANT, "10.0.0.1", "UA");
+        IssuedRefresh second = ((RotationResult.Rotated) store.rotate(first.token())).issued();
+
+        assertThat(store.revoke(second.token())).isTrue();
+
+        // the OLD (rotated) token stays revocation-proof-history: presenting it is reuse
+        assertThat(store.rotate(first.token())).isInstanceOf(RotationResult.ReuseDetected.class);
+        assertThat(store.listSessions(userId, TENANT)).isEmpty();
+    }
+
+    @Test
     void revokeAllForUserKillsEveryActiveToken() {
         IssuedRefresh a = store.issue(userId, "u@acme.com", TENANT, null, null);
         IssuedRefresh b = store.issue(userId, "u@acme.com", TENANT, null, null);

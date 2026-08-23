@@ -3,6 +3,7 @@ package com.ibrhalil.forgesys.security.ratelimit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Profile;
+import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.core.script.RedisScript;
@@ -74,13 +75,22 @@ public class RedisRateLimiter implements RateLimiter {
     @SuppressWarnings("unchecked")
     public RateLimitResult tryConsume(String key, int capacity, int refillTokens, int refillPeriodSeconds) {
         long now = Instant.now().getEpochSecond();
-        List<String> res = redis.execute(CONSUME,
-                List.of("rl:" + key),
-                String.valueOf(capacity),
-                String.valueOf(refillTokens),
-                String.valueOf(refillPeriodSeconds),
-                String.valueOf(now),
-                String.valueOf(TTL_SECONDS));
+        List<String> res;
+        try {
+            res = redis.execute(CONSUME,
+                    List.of("rl:" + key),
+                    String.valueOf(capacity),
+                    String.valueOf(refillTokens),
+                    String.valueOf(refillPeriodSeconds),
+                    String.valueOf(now),
+                    String.valueOf(TTL_SECONDS));
+        } catch (DataAccessException e) {
+            // Redis down (connection refused etc.) — fail OPEN so a Redis blip never takes
+            // auth down (defense-in-depth must not become a self-DoS). Logged for alerting;
+            // the per-account lockout ([RISK-22]) still applies.
+            log.warn("Rate-limit Redis unavailable for key {}; failing open: {}", key, e.getMostSpecificCause().getMessage());
+            return new RateLimitResult(true, 0L);
+        }
         if (res == null || res.size() < 2) {
             // Redis unavailable / unexpected reply — fail OPEN so a Redis blip never takes
             // auth down (defense-in-depth must not become a self-DoS). Logged for alerting.

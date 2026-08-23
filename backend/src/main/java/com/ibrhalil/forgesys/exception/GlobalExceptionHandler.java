@@ -7,6 +7,7 @@ import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -190,6 +191,18 @@ public class GlobalExceptionHandler {
                 : code.defaultMessage();
         log.warn("Data integrity violation [{}] at {}: {}", code.code(), request.getRequestURI(), ex.getMostSpecificCause().getMessage());
         return build(code, message, request.getRequestURI());
+    }
+
+    /**
+     * Backing-store connectivity failure (Redis/DB down — e.g. a refresh-token
+     * {@code issue} that cannot persist). Surfaced as 503 {@code service_unavailable}
+     * instead of a generic 500 so clients can distinguish "retry later" from a real
+     * bug. {@link DataIntegrityViolationException} keeps its more specific handler.
+     */
+    @ExceptionHandler(DataAccessException.class)
+    public ResponseEntity<ApiErrorResponse> handleDataAccess(DataAccessException ex, HttpServletRequest request) {
+        log.error("Data access failure at {}: {}", request.getRequestURI(), ex.getMostSpecificCause().getMessage());
+        return build(ErrorCode.SERVICE_UNAVAILABLE, ErrorCode.SERVICE_UNAVAILABLE.defaultMessage(), request.getRequestURI());
     }
 
     @ExceptionHandler(Exception.class)
