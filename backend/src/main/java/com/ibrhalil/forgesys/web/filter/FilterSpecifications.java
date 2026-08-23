@@ -123,6 +123,15 @@ public final class FilterSpecifications {
 
     // ── criteria helpers (LIKE escaping, Comparable casts) ──
 
+    /**
+     * Case-insensitive LIKE: the column is lowered by the DB and the pattern was
+     * lowered with {@code Locale.ROOT} in Java. This assumes the DB lower() folds
+     * ASCII the same way Locale.ROOT does — true for the en-locale PostgreSQL
+     * instances and for the H2 test JVM (whose default locale is pinned to English
+     * via the surefire {@code user.language=en} argLine; a Turkish-locale JVM would
+     * otherwise turn {@code lower('I')} into {@code 'ı'} and break case-insensitive
+     * search on H2).
+     */
     private static Predicate likeIgnoreCase(CriteriaBuilder cb, Expression<String> path, String pattern) {
         return cb.like(cb.lower(path), pattern, '\\');
     }

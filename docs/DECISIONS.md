@@ -337,6 +337,23 @@ Her kayıt:
 
 ---
 
+### K-44
+**Notes Modülü (standalone, markdown) — Faz 3.2 (2026-08-23)**
+- **Bağlam:** ROADMAP Epic 3.2 — built-in Notes modülü. Açık kararlar: standalone vs proje-scoped, görünürlük (ABAC?), editör tipi (rich-text?), default aktivasyon.
+- **Karar:**
+  - **Standalone:** `/api/v1/notes` + `/api/v1/note-categories` — projelerden bağımsız. `ProjectType.NOTES` placeholder'ı VE coming-soon dalı bilinçli DOKUNULMADI (proje-scoped notlar ayrı bir ihtiyaç olursa ayrı değerlendirilir; standalone notlar proje kavramına bağlı değil).
+  - **Tenant-shared görünürlük:** `notes:note:read` olan herkes tüm tenant notlarını görür (pm deseni). ABAC/personal notlar ERTENDİ — `Ownable`/`OwnershipGuard` şablonu ilk gerçek ownership ihtiyacıyla (Warehouse/Logistics olabilir) geri döner.
+  - **Markdown editör, raw HTML YOK:** `react-markdown@10` + `remark-gfm@4` (yeni frontend dep'leri — kullanıcı onaylı). Edit textarea + preview toggle; `rehype-raw` BİLİNÇLİ eklenmedi → raw HTML render edilmez, XSS yüzeyi yapısal olarak kapalı (test'le doğrulandı). WYSIWYG (TipTap vb.) erteli.
+  - **Modül yapısı (APPS emsali):** `ModuleDefinition.NOTES` (`ownMigrations=true`, minPlan FREE, plan limiti yok — pm deseni) → `db/migration/module/notes/V1__notes.sql` + bağımsız `flyway_schema_history_mod_notes`. Tablolar: `t_notes` (title/content TEXT/category_id FK `ON DELETE SET NULL`/pinned; title'da unique YOK — tekrar meşru) + `t_note_categories` (name + color token; partial unique). Default aktif: `default-keys: pm,apps,notes` (test fallback `pm` kalır — H2'de modül migration örtük koşmaz).
+  - **Permission'lar:** `notes:note:read/write/delete` + `notes:category:read/write` (kategori delete `category:write` altında — kategori paylaşmış taksonomi, veri değil). Aktivasyonda seed, Admin implicit (all_permissions).
+  - **API:** `GET /notes` (`?q=` title+content OR-CONTAINS + `?categoryId=` + `?pinned=` AND-birleşik; `updatedAt` default sort desc) + CRUD; `GET /note-categories` (`?q=` name) + CRUD. `NoteResponse.categoryName` server-side çözülür (chip için ikinci round-trip yok). `@AuditLog` AOP (K-27 deseni); `ErrorCode.NOTE_CATEGORY_NAME_TAKEN` + constraint-map `note_categories_name`.
+  - **Yan bulgu — H2 Türkçe-locale `lower()` bug'ı:** `q=API` araması Türkçe JVM'de boş dönüyordu (H2 `lower('I')`→`'ı'`, Java needle `Locale.ROOT`→`'i'`). Çözüm: surefire `argLine=-Duser.language=en -Duser.country=US` — test JVM'i deterministik (CI + en-locale PG ile uyumlu). `FilterSpecifications.likeIgnoreCase` javadoc'u varsayımı belgeler. Prod PG DB locale'i İngilizce olmalı (Docker default) — Türkçe-locale PG'de ASCII case-insensitive arama için ayrıca `lower()` collation ayarı gerekir (bilinçli varsayım).
+- **Bilinçli yapılmayanlar (tekrar tartışılmaz):** ABAC görünürlük, WYSIWYG editör, raw HTML render, full-text search (PG tsvector — arama şimdilik `q` LIKE), not başına unique başlık, kategori rengi sunucu-tarafı validasyon (UI token'ı, yorumlanmaz).
+- **Durum:** UYGULANDI (2026-08-23). Doğrulama: backend 527 H2 test yeşil (22 yeni: 13 NoteController + 9 NoteCategoryController — 401/403/q+filter/create-default/unknown-404/update-partial/delete/category-SET-NULL); frontend 123 Vitest yeşil (7 yeni: NotesPage satır/chip/pin/sort-regression/filtre parametreleri + NoteEditorPage load+PUT/preview-raw-HTML-kapalı/new-note POST) + lint + build. Modül aktivasyon + migration mekanizması `ModuleActivationIT` kapsamında (yeni IT gerekmedi).
+- **Etki:** Üçüncü modül (`pm`, `apps`, `notes`) — modül sistemi deseni (registry + ownMigrations + permission seed) tekrar doğrulandı. `default-keys` değişimi mevcut tenant'lara `ModuleSyncRunner` backfill'i ile yayılır.
+
+---
+
 ## Risk Kayıtları (RISK-XX)
 
 ### RISK-3

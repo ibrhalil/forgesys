@@ -7,6 +7,7 @@ import {
   LuLayoutGrid,
   LuLogIn,
   LuMonitor,
+  LuNotebookPen,
   LuShield,
   LuShieldCheck,
   LuUsers,
@@ -33,6 +34,7 @@ export interface NavGroup {
 export const NAV_ITEMS: NavItem[] = [
   { labelKey: 'nav.projects', to: '/', icon: LuFolder, authority: PERMISSIONS.PROJECT_READ },
   { labelKey: 'nav.apps', to: '/apps', icon: LuLayoutGrid, authority: PERMISSIONS.APP_READ },
+  { labelKey: 'nav.notes', to: '/notes', icon: LuNotebookPen, authority: PERMISSIONS.NOTE_READ },
 ];
 
 /** Collapsible nav groups, in display order. A group whose items are all filtered

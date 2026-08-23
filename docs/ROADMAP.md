@@ -264,8 +264,8 @@ Kod analizi sonucu keşfedilen P0 düzeltmeler. User CRUD / log'dan ÖNCE çöz�
 ### Epic 3.1 — Built-in "Tasks" Modülü — DONE (pm modülü olarak)
 > Görev yönetimi standalone yerine **project-scoped** geldi (2026-08): eski `tenant/V4__module_projects.sql` + `V5__module_tasks.sql` (K-36 squash'ı ile `V1.3__pm_projects_tasks.sql`'e indirildi) — tip-bazlı proje yapısı (`t_projects`), TASKS tipinde `t_tasks` (proje-scoped) + Kanban board UI (Epic 4.1). `pm:*` permission namespace. Standalone Tasks modülü bu sayının yerini aldı; Notes/Warehouse/Logistics (3.2-3.4) planlandığı gibi.
 
-### Epic 3.2 — Built-in "Notes" Modülü
-`tenant` migration (sonraki versiyon): `t_notes`, `t_note_categories`. Entity + service + controller (`/api/v1/notes`). Arama + kategori filtreleme.
+### Epic 3.2 — Built-in "Notes" Modülü — DONE (2026-08-23, [K-44](DECISIONS.md#k-44))
+> Standalone + tenant-shared + markdown + default-aktif kararlarıyla geldi (APPS modül deseni: `ModuleDefinition.NOTES`, `db/migration/module/notes`, bağımsız Flyway history). `t_notes` + `t_note_categories` (`ON DELETE SET NULL`); `notes:note:*` + `notes:category:*` permission'ları; `/api/v1/notes` (`?q=` + `?categoryId=` + `?pinned=`) + `/api/v1/note-categories`; UI: NotesPage (DataTable + kategori filtre + pinned toggle) + NoteEditorPage (markdown edit/preview — `react-markdown`, raw HTML kapalı). ABAC görünürlük + WYSIWYG + full-text search bilinçli erteli (K-44 "bilinçli yapılmayanlar").
 
 ### Epic 3.3 — Built-in "Warehouse" Modülü
 `tenant` migration (sonraki versiyon): `t_products`, `t_warehouses`, `t_stock_items`, `t_stock_movements`. Entity'ler (Product/Warehouse/StockItem/StockMovement) + service + controller. Stok hareketleri (IN/OUT/TRANSFER) + minimum stok uyarısı.

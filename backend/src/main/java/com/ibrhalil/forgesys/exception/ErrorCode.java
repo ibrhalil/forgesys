@@ -22,6 +22,7 @@ public enum ErrorCode {
     ROLE_PARENT_CYCLE(HttpStatus.BAD_REQUEST, "Cannot assign a parent role that would create an inheritance cycle"),
     GROUP_NAME_TAKEN(HttpStatus.BAD_REQUEST, "Group name is already in use"),
     PROJECT_NAME_TAKEN(HttpStatus.BAD_REQUEST, "Project name is already in use"),
+    NOTE_CATEGORY_NAME_TAKEN(HttpStatus.BAD_REQUEST, "Note category name is already in use"),
     PERMISSION_NAME_TAKEN(HttpStatus.BAD_REQUEST, "Permission name is already in use"),
     PERMISSION_IN_USE(HttpStatus.CONFLICT, "Permission is still assigned to one or more roles; remove it from all roles before deleting"),
     COMPANY_SUBDOMAIN_TAKEN(HttpStatus.BAD_REQUEST, "Subdomain is already taken"),

@@ -50,6 +50,23 @@ public enum ModuleDefinition {
             new PermissionCatalog.PermissionDefinition(PermissionCatalog.APPS_RECORD_READ, "Read records of tenant custom apps"),
             new PermissionCatalog.PermissionDefinition(PermissionCatalog.APPS_RECORD_WRITE, "Create or update custom app records"),
             new PermissionCatalog.PermissionDefinition(PermissionCatalog.APPS_RECORD_DELETE, "Delete custom app records")
+    )),
+
+    /**
+     * Notes (K-44 / Epic 3.2) — standalone tenant-shared notes with categories and
+     * markdown content. {@code ownMigrations = true} (the APPS pattern): tables ship
+     * under {@code db/migration/module/notes} and land in the tenant schema on
+     * activation (per-module history {@code flyway_schema_history_mod_notes}).
+     * {@code minPlan = FREE}, no plan limits (pm convention). Visibility is
+     * tenant-shared ({@code notes:note:read} sees all tenant notes) — personal/ABAC
+     * notes were consciously deferred.
+     */
+    NOTES("notes", "Notes", PlanDefinition.FREE, true, List.of(
+            new PermissionCatalog.PermissionDefinition(PermissionCatalog.NOTES_NOTE_READ, "Read tenant notes"),
+            new PermissionCatalog.PermissionDefinition(PermissionCatalog.NOTES_NOTE_WRITE, "Create or update tenant notes"),
+            new PermissionCatalog.PermissionDefinition(PermissionCatalog.NOTES_NOTE_DELETE, "Delete tenant notes"),
+            new PermissionCatalog.PermissionDefinition(PermissionCatalog.NOTES_CATEGORY_READ, "Read note categories"),
+            new PermissionCatalog.PermissionDefinition(PermissionCatalog.NOTES_CATEGORY_WRITE, "Create or update note categories")
     ));
 
     /** Convention for per-module tenant migration locations ({@code %s} = module key). */

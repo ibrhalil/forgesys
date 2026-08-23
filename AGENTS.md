@@ -167,6 +167,10 @@ Analiz + kararlar: [`docs/FULL_ANALYSIS.md`](docs/FULL_ANALYSIS.md) + [`docs/ANA
 
 3 session: 1/3 temel (`9a8004d` — app listesi/detail/property editor/TABLE+inline edit) · 2/3 (`73e68c2` — BOARD/CALENDAR/LIST/GALLERY renderer'ları + view CRUD + satır bazlı filtre/sort DSL UI'sı + User/Relation picker'ları + id→label çözümleme) · 3/3 (record edit modalı — PATCH partial-merge diff, required-clear bloklu; plan limit göstergeleri — `GET /api/v1/apps/plan-limits`, sayılar backend `PlanDefinition` registry'sinden; emoji ikon seçimi). Detay: [`docs/DECISIONS.md K-42`](docs/DECISIONS.md#k-42) · ROADMAP Epic 4.2 DONE işaretli. Bilinçli yapılmayanlar (tekrar tartışılmaz): drag-drop (BOARD taşıma mover select ile), expression editor (satır bazlı structured DSL), CALENDAR'da kayıt aksiyonu, FORMULA property tipi (K-15'ten erteli).
 
+### Faz 3.2 — Notes Modülü (K-44) — UYGULANDI (2026-08-23)
+
+Detay + kararlar: [`docs/DECISIONS.md K-44`](docs/DECISIONS.md#k-44) · ROADMAP Epic 3.2 DONE. Standalone + tenant-shared + markdown (raw HTML kapalı — `react-markdown` + `remark-gfm`, `rehype-raw` bilinçli yok) + default-aktif (`pm,apps,notes`). APPS deseni: `ModuleDefinition.NOTES` (`ownMigrations=true`, FREE, plan limiti yok) + `db/migration/module/notes/V1__notes.sql` (`t_notes`/`t_note_categories`, FK `ON DELETE SET NULL`, kategori adı partial-unique) + `notes:note:read/write/delete` + `notes:category:read/write`. Endpoint'ler: `/api/v1/notes` (`?q=` title+content + `?categoryId=` + `?pinned=`) + `/api/v1/note-categories` CRUD. UI: `features/notes` (NotesPage + NoteEditorPage markdown edit/preview). **Yan bulgu:** H2 Türkçe-locale `lower('I')`→`'ı'` bug'ı — surefire `argLine=-Duser.language=en` ile test JVM'i sabitlendi (prod PG en-locale varsayımı belgelendi). Bilinçli ertelenen (tekrar tartışılmaz): ABAC görünürlük, WYSIWYG, full-text search (tsvector), ProjectType.NOTES placeholder dokunulmadı.
+
 ### Doğrulanan (uyumlu, aksiyon yok)
 
 ### Faz IAM — RBAC / Oturum Güvenliği (2026-07-30 başlangıç)

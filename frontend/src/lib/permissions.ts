@@ -36,6 +36,12 @@ export const PERMISSIONS = {
   APP_RECORD_READ: 'apps:record:read',
   APP_RECORD_WRITE: 'apps:record:write',
   APP_RECORD_DELETE: 'apps:record:delete',
+  // notes:* — standalone notes module (K-44 / Epic 3.2); seeded on module activation.
+  NOTE_READ: 'notes:note:read',
+  NOTE_WRITE: 'notes:note:write',
+  NOTE_DELETE: 'notes:note:delete',
+  NOTE_CATEGORY_READ: 'notes:category:read',
+  NOTE_CATEGORY_WRITE: 'notes:category:write',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
