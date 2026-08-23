@@ -5,9 +5,13 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
+import java.util.UUID;
+
 /**
- * Create/update a project. The {@link ProjectType} decides which built-in modules are
- * surfaced inside the project; it is required (every project has a kind).
+ * Create/update a typed project container (K-45). The {@link ProjectType} decides which
+ * built-in module's content lives inside the project; it is required (every project has
+ * a kind). {@code parentProjectId} adds optional nesting (validated for existence and
+ * acyclicity; {@code null} detaches).
  */
 public record ProjectRequest(
         @NotBlank(message = "Project name is required")
@@ -18,6 +22,8 @@ public record ProjectRequest(
         String description,
 
         @NotNull(message = "Project type is required")
-        ProjectType type
+        ProjectType type,
+
+        UUID parentProjectId
 ) {
 }

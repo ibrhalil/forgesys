@@ -8,6 +8,8 @@ public record ProjectResponse(
         UUID id,
         String name,
         String description,
-        ProjectType type
+        ProjectType type,
+        UUID parentProjectId,
+        boolean isDefault
 ) {
 }

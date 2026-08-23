@@ -19,4 +19,7 @@ public interface TaskRepository extends JpaRepository<Task, UUID> {
     Optional<Task> findByIdAndProjectId(UUID id, UUID projectId);
 
     boolean existsByIdAndProjectId(UUID id, UUID projectId);
+
+    /** Whether the project holds any task — locks the project type while content exists (K-45). */
+    boolean existsByProjectId(UUID projectId);
 }

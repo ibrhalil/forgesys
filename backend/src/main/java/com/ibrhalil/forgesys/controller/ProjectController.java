@@ -3,6 +3,7 @@ package com.ibrhalil.forgesys.controller;
 import com.ibrhalil.forgesys.dto.PageResponse;
 import com.ibrhalil.forgesys.dto.ProjectRequest;
 import com.ibrhalil.forgesys.dto.ProjectResponse;
+import com.ibrhalil.forgesys.dto.ProjectTypeResponse;
 import com.ibrhalil.forgesys.service.ProjectService;
 import com.ibrhalil.forgesys.web.SortGuard;
 import jakarta.validation.Valid;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -35,9 +37,21 @@ public class ProjectController {
     @PreAuthorize("hasAuthority('pm:project:read')")
     public ResponseEntity<PageResponse<ProjectResponse>> list(
             @PageableDefault(sort = "name") Pageable pageable,
-            @RequestParam(required = false) String q) {
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) UUID parentProjectId) {
         SortGuard.require(pageable, ProjectService.FILTER_FIELDS);
-        return ResponseEntity.ok(PageResponse.of(projectService.search(q, pageable)));
+        return ResponseEntity.ok(PageResponse.of(projectService.search(q, parentProjectId, pageable)));
+    }
+
+    /**
+     * The creatable project-type catalog (K-45): one entry per ACTIVE module that
+     * supplies a project type, with the per-type default container id. Registry-derived
+     * bounded list (documented {@code List} exception — never DB-paged).
+     */
+    @GetMapping("/types")
+    @PreAuthorize("hasAuthority('pm:project:read')")
+    public ResponseEntity<List<ProjectTypeResponse>> types() {
+        return ResponseEntity.ok(projectService.listAvailableTypes());
     }
 
     @GetMapping("/{id}")
