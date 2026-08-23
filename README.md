@@ -21,24 +21,27 @@
 - **Oturum yönetimi:** aktif session listesi (self + admin remote revoke, token anında düşer), max concurrent session limiti
 - **RBAC:** User/Role/Permission/Group CRUD + `@PreAuthorize` (K-26); rol kalıtımı (parent roles); `all_permissions` bayrağı (Admin implicit süper-kullanıcı); effective-permissions çözümlemesi; last-admin koruması (son aktif admin kaybedilemez)
 - **Kullanıcı yönetimi:** DB-side user directory read model (rol/grup sayıları, N+1'siz), grup-üyesi scoped görünürlük (`iam:group-member:read`), hesap aktivite geçmişi, admin unlock
-- **Audit & log:** 3 katman (audit + login history + request/traceId); append-only DB trigger; yetki değişim delta kaydı ("kim kime ne verdi/aldı"); arama
+- **Audit & log:** 3 katman (`@AuditLog` AOP audit + login history + request log); append-only DB trigger; yetki değişim delta kaydı ("kim kime ne verdi/aldı"); high-risk endpoint'lerde maskeli request body; arama
 - **Projects & Tasks modülü:** tip-bazlı proje yapısı + TASKS tipinde görev yönetimi (Kanban board UI dahil)
+- **Notes modülü (K-44):** markdown notlar + kategoriler (raw HTML render kapalı)
 - **Modül & plan sistemi (K-16):** FREE/PRO/ENTERPRISE planları; plan bazlı modül aktivasyonu (plan gate → modül Flyway → permission seed); modül/plan registry'leri kodda
 - **Custom App Builder (K-15 + K-42):** tenant'ların kendi mini-uygulamalarını yaratması — JSONB EAV modeli (app/property/view/record CRUD, native PG JSONB search, plan limitleri) + tam UI (property/view/record editörleri, TABLE/BOARD/CALENDAR/LIST/GALLERY görünüm renderer'ları, satır bazlı filtre/sort DSL UI'ı, User/Relation picker'ları, plan kullanım göstergeleri)
-- **Admin console (frontend):** login/register/tenant-verify; users/roles/groups/permissions/sessions/audit/login-history/projects/modules/apps (App Builder) sayfaları; permission-gated lazy navigation
+- **Admin console (frontend):** login/register/tenant-verify; users/roles/groups/permissions/sessions/audit/login-history/request-logs/projects/modules/notes/apps (App Builder) sayfaları; permission-gated lazy navigation
 - **Self-service:** `/users/me/**` (profil + şifre değiştirme) — her authenticated user kendi hesabını yönetir
 - **Platform admin:** `/platform/companies` cross-tenant yönetim (K-25) + rezerve `system` tenant bootstrap (K-24)
 - **İki fazlı tenant signup (K-21):** `POST /api/v1/auth/company/register` → 202 + PROVISIONING + doğrulama maili → `POST /verify` → şema + Flyway + admin user → ACTIVE
 - Entity hiyerarşisi: UUID, soft delete, optimistic locking, Spring Data auditing
 - Merkezi hata yönetimi (`ApiErrorResponse` + `ErrorCode` — stable wire codes)
+- **Observability & docs:** Prometheus metrics expose (K-43; prod'da ayrı management portu 8081) + Swagger UI (dev — K-41); CI (GitHub Actions: backend + frontend + gerçek PG/Redis integration testleri) + GHCR publish (deploy manuel)
 - Docker: PostgreSQL + Redis + app (non-root), layered jars, actuator health
 
 **Planlanan (kararlar kilitlendi — yol haritası [`docs/ROADMAP.md`](docs/ROADMAP.md)):**
-- **Built-in modüller:** Notes, Warehouse, Logistics (plan bazlı aktivasyon; Tasks pm modülü olarak geldi)
-- Mail gönderimi (SMTP — doğrulama linkleri şu an log'a düşüyor)
-- Billing (Stripe/iyzico), Nginx gateway, CI/CD, LDAP/SSO
+- **Built-in modüller:** Warehouse, Logistics (plan bazlı aktivasyon)
+- Kullanıcı lifecycle: SMTP mail + tenant içi email doğrulama + password reset
+- Notification subsystem (K-29), activity feed (K-30), E2E testler (Playwright)
+- Billing (Stripe/iyzico — Faz 6), Nginx gateway + TLS (K-33), LDAP/SSO
 
-> Süreç/kalite kararları (2026-08-22 planlama session'ı): [`docs/FULL_ANALYSIS.md`](docs/FULL_ANALYSIS.md) + [`docs/ANALYSIS_ADDENDUM.md`](docs/ANALYSIS_ADDENDUM.md) · ADR'ler: [`docs/DECISIONS.md`](docs/DECISIONS.md) K-37..K-40.
+> Süreç/kalite kararları (dondurulmuş kararlar listesi dahil): [`docs/DECISIONS.md`](docs/DECISIONS.md).
 
 ## Teknoloji Stack'i
 
