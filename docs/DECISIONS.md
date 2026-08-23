@@ -1,16 +1,47 @@
 # Karar Kayıtları (Decision Log)
 
-> Bu dosya ForgeSys'un mimari/teknik kararlarının (K-XX), risk kayıtlarının (RISK-XX) ve teknik borçlarının (DEBT-XX) tek merkezi. ID'ler karar verildiği sırayla artar, değişmez. Kararlar ticket numarasına değil, bağlam+gerekçe+etki'ye bağlıdır.
+> Bu dosya ForgeSys'un mimari/teknik kararlarının (K-XX), risk kayıtlarının (RISK-XX) ve teknik borçlarının (DEBT-XX) tek merkezi. ID'ler karar verildiği sırayla artar, değişmez.
 >
-> **Kayıt boşluğu notu (2026-08-22):** En eski kayıtlar (K-1..K-14, RISK-1/2/4..9/11/12, DEBT-1..6/8/9) bu dosyaya hiç back-fill edilmedi — karar defteri, ilk yaygın review'dan (2026-07) itibaren tutuluyor. Bu aralıklardaki ID'ler yeni kayıtlar için KULLANILMAZ (çakışma riski); yeni kayıtlar mevcut en yüksek ID'den devam eder.
+> **Kayıt boşluğu notu:** Bu dosyada bulunmayan ID'ler (ör. K-1..K-14, K-17, K-31, RISK-1/2/4..9/11/12, DEBT-1..6/8/9) ilk yaygın review'dan (2026-07) öncesine aittir ve back-fill edilmedi — yeni kayıtlar için **KULLANILMAZ**; kayıtlar mevcut en yüksek ID'den devam eder.
+>
+> Uygulama detayları (kod konvansiyonları, endpoint kataloğu, gotcha'lar) modül `AGENTS.md`'lerinde yaşar — bu dosya kararın **bağlam + sonuç**'unu taşır.
 
 ## Format
 
-Her kayıt:
-- **Bağlam:** Hangi problem/ikilem
-- **Karar:** Ne seçildi, neden
-- **Durum:** Uygulandı / Planlandı / İptal
-- **Etki:** Ne değişti, nelere dikkat
+Her kayıt: **Bağlam** (problem/ikilem) → **Karar** (ne seçildi, neden) → **Durum** (Uygulandı / Planlandı / İptal / Açık) → **Etki** (dikkat edilecekler).
+
+---
+
+## Dondurulmuş Kararlar (tekrar tartışılmaz)
+
+Standart haline gelmiş kararlar. Yeni gereksinim bunlardan biriyle çelişirse = yeni K-XX kaydı gerekir.
+
+| # | Karar | Kaynak |
+|---|-------|--------|
+| 1 | Multi-tenancy = schema-per-tenant | ARCHITECTURE.md |
+| 2 | Registry'ler kodda (enum) — DB katalog tablosu yok | K-16 |
+| 3 | Modül migration'ları `db/migration/module/<key>` + per-module Flyway history | K-16 |
+| 4 | Auth = RS256 JWT cookie + opaque refresh (Redis, rotasyon + reuse detection) | K-34 |
+| 5 | Revoke = `tokenInvalidBefore` (user-scoped) + `jti` blacklist (granular) | RISK-21 + K-34 |
+| 6 | RBAC = `@PreAuthorize` + `{module}:{resource}:{action}` namespace | K-26 |
+| 7 | Authority çözümlemesi = DB-driven (direct + active group + transitive parent) | K-26/K-35 |
+| 8 | Admin = `all_permissions` flag (implicit süper-kullanıcı) | K-35 |
+| 9 | LastAdminGuard write path'lerde (son aktif admin kaybedilemez) | RISK-35 |
+| 10 | Plan/module limitleri = soft-block 403, veri asla gizlenmez | K-15/K-16 |
+| 11 | Wire contract = `PageResponse` + `ApiErrorResponse` + stable `ErrorCode` | K-37 |
+| 12 | Sort/filter = whitelist + JPA metamodel sabitleri | backend/AGENTS.md |
+| 13 | Frontend = data-driven routing + RequirePermission + TanStack Query + Zustand | frontend/AGENTS.md |
+| 14 | Auth transport = httpOnly cookie + transparent refresh | K-34 |
+| 15 | Migration sürümleme = `V1.x` baseline + `V2+` (K-36 sonrası) | K-36 |
+| 16 | Test stratejisi = H2 default + gated gerçek PG/Redis IT | RISK-20 |
+| 17 | JSONB = düz `String` + `columnDefinition="jsonb"` (hypersistence-utils yok) | K-15 |
+| 18 | DTO mapping = manuel `toResponse` (MapStruct iptal) | K-37 |
+| 19 | Şifre = Peppered BCrypt(12) | K-23 |
+| 20 | Audit = `@AuditLog` AOP + append-only DB trigger + delta kaydı | K-19/K-27 |
+| 21 | Speculative kod eklenmez; ölü kalan kaldırılır (planlar burada yaşar, kodda değil) | K-38 |
+| 22 | API konvansiyon: `PageResponse` standart (belgeli pick-list istisnaları), tek `/me`, DELETE→204, controller adı = path namespace, DTO record (`Map` dönüş yok) | K-37 |
+| 23 | Frontend: strict TS + yeni feature'da test zorunlu; liste-sayfa scaffold'u `useListPageState` üzerinden | K-39 |
+| 24 | Startup runner'ları projection yükler; paylaşılan çözümleme zincirleri tek kaynakta yaşar | K-40 |
 
 ---
 
@@ -18,339 +49,163 @@ Her kayıt:
 
 ### K-15
 **Custom App Builder (Notion-style)**
-- **Bağlam:** Tenant'ların kendi ihtiyaçlarına özel mini-uygulamalar yaratması (Notion/Airtable mantığı) gerekiyor. Sadece sabit built-in modüllere değil, esnek veri modeline ihtiyaç var.
-- **Karar:** JSONB EAV modeliyle tenant custom app'leri desteklenir. `t_apps`, `t_app_properties`, `t_app_records`, `t_app_record_values(value JSONB)`, `t_app_views`. Property tipleri: TEXT/NUMBER/SELECT/DATE/USER/RELATION/FORMULA.
-- **Durum:** UYGULANDI (2026-08-22, Faz 3.0.B backend; UI — Faz 4.2, K-42).
-- **Etki / uygulama kararları:**
-  - **`apps` bir K-16 modülüdür** (`ModuleDefinition.APPS`, `ownMigrations=true`, minPlan=FREE): tablolar `db/migration/module/apps/V1__app_builder.sql` altında, modül-başı history (`flyway_schema_history_mod_apps`) ile tenant şemasına aktivasyonda düşer — `db/migration/module/` ağacının ilk gerçek kullanımı. FREE + default modül (`forgesys.modules.default-keys: pm,apps`); planlar modül erişimiyle değil **limitlerle** ayrışır.
-  - **Plan limitleri kod registry'sinde** (`PlanDefinition.maxApps/maxRecordsPerApp`: FREE 3/1k, PRO 25/50k, ENTERPRISE -1/-1) — `t_plans` migration GEREKMEZ. Enforcement soft-block: limitte create 403 `app_limit_reached` (`PlanLimitService`), mevcut veri asla gizlenmez/silinmez. NOT: test profile fallback'i (`ModuleProperties.DEFAULT_KEYS`) bilinçli olarak `pm` kaldı — H2'de modül migration'ı örtük koşmasın, IT'ler modülleri explicit aktive eder.
-  - **JSONB mapping düz `String` + `columnDefinition="jsonb"`** (AuditLog emsali; hypersistence-utils EKLENMEDİ) + `stringtype=unspecified` (dev/prod JDBC + IT Hikari property'si). `t_app_record_values.value` kolonu H2'de reserved word olduğundan entity'de backtick-quote (`@Column(name = "`value`")`).
-  - **FORMULA ertelendi:** enum'da durur ama yaratma `app_property_type_invalid` ile reddedilir (expression sandbox spike'ı ayrı iş). Tip validasyonu `AppPropertyValueValidator` (TEXT sınırı, NUMBER finite, SELECT opsiyon kümesi, DATE ISO-8601, USER/RELATION tenant içi varlık kontrolü — JSONB FK taşıyamadığından service-level).
-  - **View config structured DSL'dir** (spike sonucu): `{filters:[{propertyId,op,value}], sorts:[{propertyId,dir}], groupBy, dateProperty}` — serbest expression dili YOK, enjeksiyon yüzeyi yapısal olarak yok. BOARD `groupBy` (SELECT property) ve CALENDAR `dateProperty` (DATE property) zorunlu; filtre/sort kuralları `AppQueryValidator`'da record search ile PAYLAŞILIR (tek wire şekli: `AppValueFilterCriteria`/`AppValueSortCriteria`).
-  - **JSONB sorgu native PG** (`AppRecordSearchExecutor`): `@>` containment (EQ), `#>> '{}'` text erişimi (CONTAINS/ILIKE, DATE lexicographic compare), `::numeric` cast (NUMBER GT/LTE + sort), GIN `jsonb_path_ops` index. SQL yalnızca enum-türetilmiş fragment'ler + explicit `?N` positional parametrelerden kurulur (validasyon öncesi reddedilen hiçbir kullanıcı girdisi SQL'e girmez). Boş hücre yalnız IS_EMPTY/IS_NOT_EMPTY eşleşir. `POST /apps/{id}/records/search` endpoint'i PG-only — H2 testlerinde koşmaz, `AppBuilderIT` (gated, gerçek PG) doğrular.
-  - **Endpoint'ler:** `/api/v1/apps` CRUD + nested `/apps/{id}/properties|views|records` (+`/records/search`, PATCH partial-merge: JSON null clear, absent key dokunmaz). Property tipi immutable; property silinince value satırları bulk hard-delete. `apps:app:read/write/delete` + `apps:record:read/write/delete` (property/view `apps:app:write` altında — tanım, veri değil). Record/list yanıtları value satırlarını tek sorguda bulk çeker (N+1 yok).
-  - **Testler:** 34 unit (validator matrisi + servis kuralları) + 29 H2 controller (401/403→happy→404 + cross-app leak) + `AppBuilderIT` (gated gerçek PG: aktivasyon + history izolasyonu + GIN + JSONB search semantiği + iki-tenant şema izolasyonu).
+- **Bağlam:** Tenant'lar sabit built-in modüller dışında kendi mini-uygulamalarını (esnek veri modeli + view'ler) yaratabilmeli.
+- **Karar:** JSONB EAV modeli — `t_apps`/`t_app_properties(config jsonb)`/`t_app_records`/`t_app_record_values(value jsonb, GIN)`/`t_app_views(config jsonb)`. Property tipleri TEXT/NUMBER/SELECT/DATE/USER/RELATION (FORMULA erteli — yaratma reddedilir). View config structured JSON DSL (serbest expression dili yok → injection yüzeyi yapısal olarak kapalı). JSONB search native PG (`AppRecordSearchExecutor` — PG-only, H2'de koşmaz). Plan limitleri `PlanDefinition` registry'sinde, soft-block 403.
+- **Durum:** UYGULANDI (backend 2026-08-22; UI K-42, 2026-08-23).
+- **Etki:** Value satırları soft-delete'siz (clear = satır silinir). JSONB mapping düz String + `stringtype=unspecified`. Doğrulama: `AppBuilderIT` (gated gerçek PG).
 
 ### K-16
 **Plan Bazlı Modül Aktivasyonu**
-- **Bağlam:** Tüm tenant'lar tüm modülleri kullanmamalı. Free/Pro/Enterprise planları modül erişimini belirlemeli.
-- **Karar:** `t_plans`, `t_subscriptions`, `t_tenant_modules` yapısı (public `V2`). Tenant signup -> varsayılan FREE + default modüller (Tasks+Notes; bugün `pm`, `forgesys.modules.default-keys`). Modül aktivasyonu plan kontrolü + Flyway tenant migration + permission seed adımlarından oluşur.
-- **Durum:** UYGULANDI (2026-08-22, Faz 3.0.A backend çekirdeği). Finansal tarafı (gerçek ödeme, plan değişimi, deaktivasyon) Faz 6.
-- **Etki / uygulama kararları:**
-  - **Modül registry'si kodda, DB'de değil:** `t_module_catalog` tablosu İÇİNMEZ — `ModuleDefinition` enum'u (key/displayName/minPlan/ownMigrations/permissions) tek doğruluk kaynağı; `t_tenant_modules` yalnızca aktivasyon durumu taşır (`module_key` string). Bir modül koddur (entity/service/migration); registry kaydı kodla birlikte gitmeli, DB'den sapmasın.
-  - **Plan registry de kodda:** `PlanDefinition` (FREE/PRO/ENTERPRISE + rank) — `PlanSyncRunner` (`@Order(0)`, `!test`) `t_plans`'a idempotent upsert. Plan rank karşılaştırması DB satırı üzerinden (`plan.rank >= module.minPlan.rank()`).
-  - **Modül-başı ayrı Flyway history:** modül migration'ları `db/migration/module/<key>/` altında (core `tenant/` DIŞINDA — Flyway location taraması rekürsif olduğundan core ağacında kalsaydı core history'ye dahil olurdu — IT'de keşfedildi) + history tablosu `flyway_schema_history_mod_<key>` (her modül V1'den bağımsız versiyonlanır, core ile çakışma imkânsız). `baselineOnMigrate(true) + baselineVersion("0")` — modül ilk aktivasyonda non-empty schema üstünde history açar, hiçbir migration atlamaZ (core'daki K-36 baseline-yasağı modül history'sini etkilemez).
-  - **Transaction split (FK-deadlock önleme):** aktivasyon kaydı (`t_tenant_modules`) caller tx'ine KATILIR (provisioning outer tx'i commit edilmemiş `Company` satırını tutar — REQUIRES_NEW insert PG'de FK lock ile self-deadlock yapardı); yalnızca permission seed `REQUIRES_NEW` (tenant şema yazısı, outer session `public`'a pinned — RISK-26). Gerçek PG'de doğrulandı (`ModuleActivationIT`).
-  - **Provisioning hook:** `verifyAndProvision` → FREE subscription insert + `activateDefaultModules` (default keys). `ModuleSyncRunner` (`!test`) startup'ta mevcut tenantlara FREE backfill + default modüller + aktif modüllerin migration/permission re-sync'i (yeni ship edilen modül migration'ları mevcut tenantlara yayılır).
-  - **PermissionCatalog split:** `ALL` → `CORE` (iam:* + platform:* + yeni `iam:module:read/write`); modül permission'ları (`pm:*`) `ModuleDefinition` sahipliğinde, aktivasyonda seed edilir. Admin (all_permissions) modül permission'larına otomatik ulaşır.
+- **Bağlam:** Tüm tenant'lar tüm modülleri kullanmamalı; Free/Pro/Enterprise planları erişimi belirlemeli.
+- **Karar:** `t_plans`/`t_subscriptions`/`t_tenant_modules` (public `V2`). Registry kodda (`ModuleDefinition` + `PlanDefinition` enum — DB katalog tablosu YOK). Modül migration'ları `db/migration/module/<key>` altında (core `tenant/` ağacı DIŞINDA — Flyway scan recursive) + `flyway_schema_history_mod_<key>` bağımsız versyonlama. Transaction split: aktivasyon kaydı caller tx'ine katılır (FK-deadlock önleme), yalnız permission seed `REQUIRES_NEW`. Signup → FREE + default modüller; `ModuleSyncRunner` startup'ta mevcut tenantlara backfill/re-sync.
+- **Durum:** UYGULANDI (2026-08-22). Finansal taraf (ödeme, plan değişimi, deaktivasyon) Faz 6.
 
 ### K-18
-**Nginx ertelendi, Faz 2 önceli (2026-07-09)**
-- **Bağlam:** Orijinal plan Faz 1.5'te 3-container full separation + Nginx dev'de aktif idi. Kullanıcı Faz 3 öncesi tam RBAC platformu istiyor (user CRUD, yetki atama, login/token, 3 katmanlı log, admin/user frontend).
-- **Karar:** Faz 1.5 (Nginx topology) Faz 2 sonrasına ertelendi. Doğrudan Faz 2'ye geçildi. Backend-önceli sıralama: tüm Faz 2 backend bitince Faz 4.0.B frontend gelir.
-- **Durum:** Uygulandı (erteleme). **Güncelleme (2026-07-25, K-33):** Erteleme, Nginx topology planı netleştirilerek (K-33) **proje %90 tamamlanana kadar** uzatıldı. Karar gerekçesi hâlâ geçerli (backend-öncelik + Vite proxy dev'i karşılıyor).
-- **Etki:** Vite proxy dev'de Nginx'in görevini görüyor; prod tek app container (`:8080` expose). Faz 1.5 ticketları (toplamda sayılır) pasif; K-33 topology'si ile birlikte uygulanacak.
-
-### K-33
-**Nginx Gateway Topology — Planlandı (uygulama %90 sonrasına erteli, 2026-07-25)**
-- **Bağlam:** [K-18](#k-18) Faz 1.5'i ertelemişti; "VPS içinde Docker, birden fazla proje farklı portlarda, global Nginx tarafından yönetilen" shared-gateway topology'si isteniyor. Bu repo (ForgeSys) + ileride oluşturulacak diğer projeler aynı VPS'te host edilecek. Cloudflare gibi managed kolaylıklar **kullanılmayacak** (projenin kendini kanıtlama amacı taşıması). ForgeSys subdomain-based multi-tenancy (`*.forgesys.app`) wildcard TLS gerektiriyor.
-- **Karar:** Aşağıdaki topology + TLS stratejisi **planlandı**; uygulama **proje %90 tamamlandıktan sonrasına erteli** (K-18 extension). Plan hazır, sadece execute bekliyor.
-  1. **Topoloji — shared gateway, ayrı repo:** VPS'te `~/nginx-gateway/` ayrı bir git repo'da tek Nginx container. **External Docker network** (`gateway-net`) üzerinden tüm projelerin servislerine erişir. Her proje (ForgeSys dahil) compose'unda `ports:` → `expose:` (host port kapalı), `gateway-net`'e join, sabit container name. Yeni proje eklemek: compose'a network eklemek + gateway'e `conf.d/proje.conf` atmak.
-  2. **TLS — Let's Encrypt + certbot, wildcard DNS-01:** Cloudflare yok. Wildcard `*.forgesys.app` için **DNS-01 challenge** (HTTP-01 wildcard desteklemez; dinamik tenant subdomain'leri tek-tek issue edilemez). Certbot DNS plugin (Cloudflare/Route53/DigitalOcean/Namecheap/Gandi — kullanılan DNS sağlayıcıya göre) + renewal cron. Certificate `infra/ssl/`'e (ForgeSys) veya Nginx container'ına konur. **Açık uç:** DNS sağlayıcı henüz net değil (K-33 uygulama anında netleştirilecek).
-  3. **ForgeSys route (gateway'e kurulacak `infra/nginx/forgesys.conf`):** `server_name *.forgesys.app forgesys.app; proxy_pass http://forgesys-app:8080; proxy_set_header Host $host;` (Host header korunur — `TenantFilter` Host'tan subdomain çözümler). `/actuator/health` allow (healthcheck). Rate limit `/api/v1/auth/login` sıkı (RISK-22 ek katman).
-  4. **Rate limit — ikisi birden:** Nginx `limit_req` (IP/path-bazlı) + varsa Cloudflare-like başka bir katman. Gerçek IP için Nginx `set_real_ip_from` + `real_ip_header` (Cloudflare yok, direkt client IP).
-  5. **Security headers (Nginx):** HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy. **CSP Nginx'te değil** — backend `SecurityConfig`'te zaten var, duplicate/conflict önlenir.
-  6. **HTTP→HTTPS redirect + HSTS:** Nginx `:80` → `:443` redirect (Cloudflare "Always Use HTTPS" gibi kolaylık yok, Nginx kendi yapar).
-- **Durum:** PLANLANDI (uygulama %90 sonrası). K-18 ertelemesini detaylandırır + topology/TLS kararlarını sabitler.
-- **Etki:**
-  - Bu repo'da **şu an hiçbir dosya değişikliği yok** — plan notu olarak kaydedildi.
-  - `docker-compose-prod.yml` `ports: "8080:8080"` geçici olarak expose'da kalır; K-33 uygulama anında `expose:` + `gateway-net`'e geçilir.
-  - **Açık uçlar (uygulama anında netleşecek):** DNS sağlayıcı (certbot plugin seçimi), `nginx-gateway/` repo'su oluşturma, `infra/nginx/` şablonları, `infra/ssl/` cert yönetimi (renewal sonrası reload hook).
-  - K-33 uygulandığında `infra/nginx/` altına: `nginx.conf` (gzip, rate-limit zone, real_ip), `snippets/proxy-common.conf`, `snippets/security-headers.conf`, `conf.d/_template.conf` gelecek.
-  - `%90` ölçütü: Faz 2 (audit/log dahil) + Faz 3 (modüler platform + app builder backend) + Faz 4 (frontend) ana akışları; Faz 5 (TLS/CI/CD/observability) + Faz 6 (billing) hâlâ bekliyor olabilir.
-
-### K-34
-**Redis Refresh Token + Rotation + Reuse Detection + Per-Session Logout — UYGULANDI**
-- **Bağlam:** Epic 2.5/2.6. Access token kısa ömürlü (15dk) ve stateless; kullanıcı sık re-login yapmak zorunda. Uzun ömürlü refresh token + rotation gerekiyor. Mevcut `tokenInvalidBefore` user-scoped (tüm cihazlar) — tek cihaz logout (per-session) mümkün değil. Dead `RefreshToken` entity/tablosu (`t_refresh_tokens`, tenant şeması, plaintext) Epic 2.5 için bırakılmıştı. Redis altyapısı (starter + config + container) hazır ama hiç bean yoktu.
-- **Karar:** Opaque refresh token + Redis-first depolama + rotation + reuse detection:
-  1. **Format — opaque + hash-at-rest.** Refresh token 32-byte URL-safe random; Redis'e **SHA-256 hash** olarak yazılır (RISK-30 felsefesi — store/backup leak replay edilemez). JWT değil (revocability). `t_refresh_tokens` tablosu **kullanılmaz** (dead kalır, churn önlenir); Flyway migration YOK.
-  2. **Depolama — Redis hash + per-user index.** Token kaydı `refresh:tok:{hash}` (Redis hash: state/userId/email/tenant/issuedAt), TTL = refresh ömrü. Per-user index set `refresh:idx:{tenant}:{userId}` → `revokeAllForUser` için.
-  3. **Rotation + reuse detection — atomik Lua.** `rotate` sadece `ACTIVE` token'ı `ROTATED`'e çevirip yeni token üretir (atomic conditional Lua script — concurrent race kapalı). Zaten `ROTATED` (consume edilmiş) token tekrar sunulursa → **REUSE**: tüm kullanıcı refresh token'ları revoke + `tokenInvalidBefore` set (access token'lar da ölür) → `auth_refresh_token_reuse` (401). Bilinen UX sınırı: aynı token'la eşzamanlı iki refresh (grace window yok) reuse tetikler — client refresh'i serialize etmeli (standart SPA pratiği). Grace window erteli.
-  4. **Transport — ayrı cookie.** `sf_refresh_token` httpOnly cookie, `Path=/api/v1/auth` (sadece auth endpoint'lerine gönderilir), Secure (prod), SameSite=Lax. Body fallback (API client'lar, `RefreshRequest`).
-  5. **Endpoint — `POST /api/v1/auth/refresh`** (permitAll; tenant TenantFilter'dan gelir, yeni access token aynı tenanta bound — RISK-19). Authorities DB'den **re-resolve** edilir (taze yetkiler + locked/disabled re-check; locked hesap refresh edemez — RISK-22 iyileştirmesi).
-  6. **Per-session logout — jti blacklist.** Access token'a `jti` (JWT ID) claim eklendi. Logout: refresh consume + mevcut access `jti` Redis blacklist (`bl:jti:{jti}`, TTL = access ömrü). `JwtAuthenticationFilter` blacklist'i de kontrol eder → granular tek-token revoke. **Logout artık `tokenInvalidBefore` set ETMEZ** (o password change/reset/reuse için nuclear option). Diğer cihazlar çalışmaya devam eder.
-  7. **Soyutlama + test stratejisi.** `RefreshTokenStore` + `TokenBlacklistService` interface'leri, `@Profile("!test")` Redis impl + `@Profile("test")` InMemory impl (`InMemoryVerificationSender` pattern'i). Default H2 build Docker'sız yeşil; gerçek Redis doğrulaması gated `RedisRefreshTokenIT` (`-Dforgesys.redis.it=true`, `GenericContainer("redis:7.4-alpine")` + `@DynamicPropertySource` — yeni dependency YOK, testcontainers-core zaten var).
-- **Durum:** UYGULANDI (2026-07-30). 206 test yeşil (H2, 2 gated skip). PermissionCacheService (Epic 2.6'nın 3. parçası) **ertelendi** — yetkiler JWT'ye gömülü, cache sadece login/refresh mint'i optimize eder (düşük değer). K-28 session management (aktif session listesi, remote revoke endpoint'leri) bu altyapının üstüne gelir.
-- **Etki:**
-  - **`RedisConfig` yok:** Store'lar auto-config `StringRedisTemplate` kullanır (Redis hash + Lua). `GenericJackson2JsonRedisSerializer` (Jackson 2) projedeki Jackson 3 ile uyumsuz (NoClassDefFoundError) — JSON serializer gereksizdi (string/hash depolama yeterli). PermissionCacheService gelirse Jackson 3 uyumlu bir serializer ile yeniden değerlendirilir.
-  - **Per-request maliyet:** +1 Redis lookup (jti blacklist) mevcut DB lookup'a (tokenInvalidBefore) eklendi. Redis in-memory → tolere edilebilir. `tokenInvalidBefore`'ı Redis cache'lemek erteli.
-  - **Password change/reset artık refresh'leri de revoke eder** (`UserService.invalidateTokens` → `revokeAllForUser`) — çalınan refresh, şifre değişince yeni access mint edemez (yeni access'in iat > tokenInvalidBefore olsa bile).
-  - **Logout davranış değişti:** per-session (tek cihaz). Eski user-scoped `tokenInvalidBefore` logout artık password change/reset/reuse'e özel.
-  - **RISK-21 genişletildi:** granular tek-token (jti blacklist) + user-scoped (tokenInvalidBefore) iki katmanlı revoke.
-  - **K-28 (session management) unblocked:** Redis session altyapısı hazır; `/users/me/sessions` endpoint'leri + `t_sessions_log` sonraki adım.
-  - **Config:** `jwt.refresh-token-ttl-days` (default 7), `jwt.refresh-cookie-name` (`sf_refresh_token`), `jwt.refresh-cookie-secure` (prod `true`), `jwt.refresh-cookie-path` (`/api/v1/auth`) → `JwtCookieProperties` record'una eklendi. Yeni `ErrorCode`: `AUTH_REFRESH_TOKEN_INVALID` / `AUTH_REFRESH_TOKEN_REUSE`.
+**Nginx ertelendi**
+- **Bağlam:** Orijinal plan Faz 1.5'te 3-container separation + Nginx; kullanıcı tam RBAC platformunu önceliklendirdi.
+- **Karar:** Faz 1.5 Faz 2 sonrasına ertelendi; K-33 ile uygulama **proje %90 tamamlanana kadar** uzatıldı. Vite proxy dev'i karşılıyor; prod tek app container.
+- **Durum:** Uygulandı (erteleme).
 
 ### K-19
 **3 Katmanlı Log**
-- **Bağlam:** Kurumsal bir platform için observability ve denetim gerekiyor. Farklı amaçlar için farklı log türleri.
-- **Karar:** Üç ayrı log katmanı, her birinin kendi tablosu + endpoint'i:
-  1. **Audit log** — admin aksiyonları (actor/action/entity/old-new JSONB/ip/trace_id). AOP `@AuditLog` annotation ile otomatik.
-  2. **Giriş geçmişi (login history)** — user/success/ip/user_agent/reason. Login/refresh/register/logout'ta.
-  3. **Request/trace log** — MDC traceId + `X-Request-Id` header. `RequestMetadataFilter` ile.
-- **Durum:** UYGULANDI (core, 2026-07-27). 3 katmanın 2'si + trace altyapısı tamamlandı: (1) audit log — `AuditService` her admin aksiyonunu `t_audit_logs`'a yazar (User/Role/Group/PlatformCompany write metodlarında explicit `record(action, entityType, entityId, entityName)`); (2) login history — `LoginHistoryService` her login denemesini (success + failure, `reason` = `ErrorCode.code()`) `t_login_history`'e yazar (`AuthService.login` her outcome'unda, unknown email → `userId=null`); (3) request/trace — `RequestMetadataFilter` (`-102` order, tenant `-101` ve security `-100` öncesi) `X-Request-Id`/UUID + client IP (`X-Forwarded-For`/`X-Real-IP`/`getRemoteAddr`) + User-Agent'ı `RequestContext` ThreadLocal + MDC `traceId`'ye yazar (stabil per-request traceId; `ApiErrorFactory` MDC'den okur). Read side: `GET /api/v1/audit-logs` + `GET /api/v1/login-history` (`iam:audit:read`, sayfalı + opsiyonel filtre, `AuditQueryService`). Tüm yazılar `REQUIRES_NEW` + best-effort (audit asla iş sürecini bozmaz). **3. katman tablo kapandı (2026-08-23, K-27 ile birlikte):** `t_request_logs` (tenant `V2`) + `RequestLogFilter` (her request metadata + high-risk yollarda maskeli body) + `GET /request-logs` (`iam:audit:read`, filtre motoru whitelist'i) + admin UI (`RequestLogsPage`). **KALAN:** yalnızca bilinçli ertelenen K-27 parçaları (`t_pending_actions` approval workflow, anomaly detection).
-- **Etki:** Yeni tenant migration `tenant/V3__audit_login_history.sql` (`t_audit_logs` + `t_login_history`); backend `web/` package (`RequestMetadataFilter` + `RequestContext`/`RequestMeta`); yeni `iam:audit:read` permission (`PermissionCatalog` → Admin rolüne seed). Mevcut tenant'lara `TenantMigrationRunner` V3'ü startup'ta uygular.
+- **Bağlam:** Kurumsal platform için farklı amaçlara hizmet eden ayrı log katmanları gerekli.
+- **Karar:** (1) `t_audit_logs` (admin aksiyon; `@AuditLog` AOP ile yazılır; append-only trigger + yetki değişim delta JSON) (2) `t_login_history` (her login denemesi, success + failure; append-only) (3) `t_request_logs` (request metadata + high-risk yollarda maskeli body) + MDC traceId (`X-Request-Id`). Read side: `/audit-logs`, `/login-history`, `/request-logs` (`iam:audit:read`). Yazılar `REQUIRES_NEW` + best-effort.
+- **Durum:** UYGULANDI (core 2026-07-27; request-logs katmanı K-27 ile 2026-08-23).
 
 ### K-20
-**Admin/User/Log UI Faz 3 öncesi**
-- **Bağlam:** K-18 sonrası backend Faz 2 tamamlanınca frontend geliyor. Built-in modül UI'ları (Tasks/Notes) beklenebilir ama admin/user yönetimi kritik.
-- **Karar:** Epic 4.0.B (Admin/User/Log Management UI) Faz 3 öncesi gelir. Faz 4 core stack (bağımlılıklar, Tailwind, auth UI, router) burada kurulur. Tenant-scoped: her şirket kendi verisini görür.
-- **Durum:** UYGULANDI (2026-08, Epic 4.0.B — users/roles/groups/permissions/sessions/audit/login-history/projects sayfaları + permission-gated lazy navigation; request-log sayfası 2026-08-23'te eklendi). Faz 4 core stack de bu epic içinde kuruldu.
-- **Etki:** Built-in modül UI'ları hâlâ Epic 4.1'de.
+**Admin/User/Log UI önceliği**
+- **Karar:** Built-in modül UI'ları beklemeden admin/user yönetimi UI'ı (Epic 4.0.B) backend Faz 2'den hemen sonra gelir; Faz 4 core stack bu epic'te kurulur.
+- **Durum:** UYGULANDI (2026-08; request-logs sayfası 2026-08-23).
 
 ### K-21
-**Hibrit Tenant Signup Verification (2026-07-20) — UYGULANDI**
-- **Bağlam:** Mevcut `provisionTenant` open endpoint + ağır DDL (schema CREATE + Flyway) + subdomain/emailDomain squatting'e karşı korumasız. RBAC/auth kurulmadan önce signup yolunu sağlamlaştırmak gerekiyor.
-- **Karar:** İki fazlı hibrit akış:
-  1. `POST /api/v1/auth/company/register` — `PROVISIONING` Company + `TenantVerificationToken` yaratır (şema/migration YOK, hafif). `VerificationSender` ile doğrulama linki gönderir.
-  2. `POST /api/v1/auth/company/verify` — token consumes -> SENKRON schema CREATE + Flyway tenant migration + admin user -> Company `ACTIVE`, token `usedAt`.
-  Tetikleyici polling/event DEĞİL, kullanıcının linke tıklaması (HTTP request).
-- **Durum:** UYGULANDI (Epic 2.0.C). İki fazlı senkron akış `TenantProvisioningService.createPendingCompany` + `verifyAndProvision` olarak bölündü. Admin email/password phase 1'de hash'lenip token'a gömülür, phase 2 kullanıcıya tekrar sorulmaz. Ek olarak `POST /api/v1/auth/company/suggest-subdomain` (slug önerisi, Türkçe karakter normalize).
-- **Etki:**
-  - `TenantVerificationToken` entity (`public` şema, `GeneratedIdAuditEntity` — soft-delete'siz, `usedAt` ile invalidasyon). Token admin credential'larını taşır (`adminEmail`, `adminPasswordHash` pre-hashed, `adminFirstName`, `adminLastName`).
-  - `public/V3__organization_domains_and_verification_tokens.sql` migration: `t_tenant_verification_tokens` + `t_organization_domains` (K-32) + `email_domain` kolonu DROP.
-  - `VerificationSender` interface + profile bazlı impl'ler: `test`->`InMemoryVerificationSender`, `dev`/`prod`->`LogVerificationSender` (mail starter Faz 5'te; prod gerçek mail gönderimi erteli — şu an prod link log'dan alınır).
-  - `CompanyStatus.PROVISIONING` gerçekten kullanılır hale geldi.
-  - Tenant signup admin email doğrulaması (`public` şema) ile tenant içi user email doğrulaması (`User.emailVerificationToken`, tenant şeması) AYNI şey DEĞİL — tenant içi akış Epic 2.9 kapsamında (entity field'ları hazır, flow bekliyor).
-  - **SystemAdminBootstrap (K-24):** `provisionSystemTenant(request)` iki fazı arka arkaya çalıştırır, verify maili göndermez (bootstrap'te mail loop olmaz). Auto-verify.
-  - **DEBT-10 kısmen çözüldü:** `createPendingCompany` tam transactional (yalnız DB write). `verifyAndProvision` `@Transactional` işaretli ama `CREATE SCHEMA` PostgreSQL'de implicit commit → DDL transaction dışına kaçar. Kısmi-write recovery idempotency ile (`CREATE SCHEMA IF NOT EXISTS`, token `usedAt` guard). Tam transactional DDL mümkün değil (PostgreSQL sınırlaması).
-- **Not 1 (migration çakışması):** `public/V3` (tenant verification + org domains) `public/V2` (partial index) sonrası gelir. `tenant/V3` hâlâ boşta (audit/log migration'ı K-19 ile).
-- **Not 2:** Backend/persistence AGENTS.md'leri ve ARCHITECTURE.md bu kararı "uygulandı" olarak yansıtıldı.
-
-### K-32
-**Organizasyon/Domain Refactor (1:N domains, emailDomain kaldır) — UYGULANDI**
-- **Bağlam:** `t_companies.email_domain` tek string + UNIQUE + zorunlu idi. İki sorun: (1) bir organizasyonun BİRDEN FAZLA domain'i olabilir (holding şirketleri: `anakurumsal.com` + `yankurum.com`); (2) klüp/kişisel senaryosu (öğrenci gmail ile kayıt) domain gerektirmez. Ayrıca ileride LDAP/SSO bağlamak için org'nin birden fazla doğrulanmış domain'i olmalı.
-- **Karar:** K-21 ile birlikte uygulandı:
-  1. `t_companies.email_domain` kolonu + partial index'i DROP edildi (`public/V3`).
-  2. `Company` entity'sinden `emailDomain` field kaldırıldı.
-  3. `t_organization_domains` (1:N, `public` şema) — bir org N domain sahibi olabilir, opsiyonel (klüp/kişisel için boş kalabilir). `verified` boolean (custom domain doğrulama akışı ileride — Faz 5/enterprise; gelene kadar tüm domain'ler `verified=false` → self-register kapalı, invite-only).
-  4. `findByEmailDomain` repository metodu kaldırıldı.
-  5. `CompanyRegisterRequest`/`CompanyResponse`/`SystemAdminBootstrapProperties`'tan `emailDomain` kaldırıldı.
-- **Durum:** UYGULANDI. Tablo adı `t_companies` KALDI (migration maliyeti yüksek; semantik "organization" ama entity/tablo adı geriye dönük uyum için korundu).
-- **Etki:**
-  - **Domain-bazlı self-register:** `t_organization_domains` `verified=true` row'larındaki domain'ler self-register'a açık (Epic 2.9 tenant içi user register). Boş tablo → invite-only.
-  - **Custom domain doğrulama (DNS TXT/MX):** Faz 5/enterprise. K-21 ile tablo + `verified` kolonu hazır, akış ileride.
-  - **LDAP/SSO:** enterprise fazında, doğrulanmış domain'lere LDAP bağlanır. K-32 bunun ön koşuludur.
-  - **RISK-17 (partial unique index):** `t_organization_domains.domain` partial unique index (`WHERE is_deleted = FALSE`) — silinen domain tekrar kullanılabilir.
+**İki Fazlı Tenant Signup**
+- **Bağlam:** Open endpoint'te ağır DDL (schema + Flyway) + subdomain squatting riski.
+- **Karar:** Faz 1 `register` — hafif (PROVISIONING Company + `TenantVerificationToken`; admin credential'ları token'a pre-hash gömülür) + doğrulama linki maili. Faz 2 `verify` — kullanıcının linke tıklamasıyla senkron: CREATE SCHEMA + Flyway + admin user → ACTIVE. `suggest-subdomain` (Türkçe-aware slug). Bootstrap yolu: `provisionSystemTenant` (K-24 — auto-verify, mail yok).
+- **Durum:** UYGULANDI.
+- **Etki:** Token consume atomic conditional UPDATE (RISK-25). `CREATE SCHEMA` implicit commit → DEBT-10 kısmi. Mail gönderimi şu an log (SMTP Faz 5'te).
 
 ### K-22
-**Tenant Domain Handoff / Schema Archival (2026-07-22) — PLANLANDI**
-- **Bağlam:** Nadir ama gerçek bir senaryo: bir şirket aboneliğini kapatır/ödemez → `SUSPENDED`/`TERMINATED`. Daha sonra aynı email domain'i (örn. şirket iflası, domain başkasına geçti) farklı bir kişi tarafından tekrar ForgeSys'a kayıt olmak isteyebilir. Eski şirketin subdomain/emailDomain/schema_name değerleri serbest kalmalı, ama eski veri kaybolmamalı (arşiv).
-- **Karar:** İki katmanlı yaklaşım:
-  1. **Kısıt katmanı (RISK-17 partial index ile sağlandı):** Soft-delete edilmiş şirketin `subdomain`/`email_domain`/`schema_name` değerleri `WHERE is_deleted = false` partial index sayesinde aktif satırlar arasında benzersiz kalmaya devam ederken, silinen satır tekrar kullanılabilir. Yeni kayıt temiz geçer.
-  2. **Fiziksel arşiv (operasyonel, platform admin):** Eski şirketin fiziksel şeması `ALTER SCHEMA tenant_X RENAME TO tenant_X_archived` ile yeniden adlandırılır. Yeni kayıt fresh `tenant_X` şeması + Flyway ile yaratılır; eski veri `tenant_X_archived`'da platformdan ayrı (orphan) kalır.
-- **Durum:** PLANLANDI. Katman 1 (partial index) uygulandı (RISK-17, Epic 2.0.B). Katman 2 (fiziksel schema rename + reaktivasyon onay maili) platform admin tooling / Faz 6 (Billing & Abonelik) kapsamında gelecek.
-- **Etki:** RISK-17 kapsamı açıkça `t_companies` dahil 9 index olacak şekilde tasarlandı (sadece tenant-side değil) — bu senaryoyu destekler. `CompanyStatus` yaşam döngüsü (ACTIVE → SUSPENDED → TERMINATED + reaktivasyon) Faz 6 ile netleşecek.
+**Tenant Domain Handoff / Schema Archival**
+- **Bağlam:** Aboneliği kapanan şirketin subdomain/schema değeri yeni kayıt olana serbest kalmalı; eski veri kaybolmamalı.
+- **Karar:** Katman 1 — soft-delete partial index ile silinen değerler yeniden kullanılabilir (RISK-17, uygulandı). Katman 2 — fiziksel arşiv (`ALTER SCHEMA tenant_X RENAME TO tenant_X_archived`) + reaktivasyon onayı; platform admin tooling / Faz 6 kapsamı.
+- **Durum:** PLANLANDI (katman 1 uygulandı).
 
 ### K-23
-**Global Password Pepper (HMAC pre-hash + BCrypt)**
-- **Bağlam:** Şifre hash'leri DB'de BCrypt(12) olarak saklanıyor (RISK-13). BCrypt salt'ı hash'e gömüyor (per-user, standart) ama DB leak senaryosunda saldırgan hash tablosunu alıp offline brute-force yapabilir — pepper (DB dışında tutulan global secret) olmadan tek başına BCrypt yetersiz. Per-tenant pepper değerlendirildi: DB leak tehdit modeli için **ek güvenlik sağlamaz** (saldırgan DB'yi okuyor, pepper DB'de değilse zaten göremiyor — per-tenant'ın ek katkısı ancak "bir tenant'ın pepper'ı bağımsız sızarsa" senaryosunda, ki bu başka tehdit). Per-tenant pepper N key yönetimi + pepper kaybında o tenant'ın tüm şifreleri kurtarılamaz riskini getirir.
-- **Karar:** **Global** pepper, BCrypt'in native pepper desteği olmadığı için **HMAC-SHA256 pre-hash** stratejisiyle (OWASP önerisi): raw şifre önce `HMAC-SHA256(pepper, password)` → Base64 (32 byte → 44 char, BCrypt 72-byte limit altında), sonra BCrypt(12). `PepperingPasswordEncoder` BCrypt'i wrap'lar. Pepper'lı hash'ler `{sf-peppered}` marker prefix'i ile işaretlenir; legacy pepper'sız BCrypt hash'ler (`$2a$12$...`) hâlâ `matches()` ile geçerli ve ilk başarılı login'de pepper'lı formata **lazy rehash** edilir (RISK-13 felsefesiyle aynı). Pepper `forgesys.security.password-pepper` / `PASSWORD_PEPPER` env var'ından; **boşsa startup fail-fast** (SecurityConfig). test/dev profilleri non-secret default sağlar; prod mutlaka gerçek secret sağlamalı.
-- **Durum:** Uygulandı.
-- **Etki:**
-  - **DB leak tek başına artık hash kırımı için yetersiz** — pepper DB dışında (env/secret manager/config overlay).
-  - **Pepper rotasyonu ŞU AN DESTEKLENMİYOR:** pepper değişirse tüm pepper'lı hash'ler geçersiz olur (legacy hash'ler hâlâ doğrulanır ama pepper'lı olanlar değil). Rotasyon gerektiğinde özel migration akışı tasarlanmalı (tüm kullanıcılar şifre sıfırlama).
-  - Pepper'ı asla logla/commit etme (AGENTS.md "Never log sensitive data" kuralı).
-  - **Per-tenant pepper** yalnızca BYOK/regülasyon (KVKK/HIPAA) gerektiğinde tekrar değerlendirilmeli — ve o zaman JWT signing key'leri de per-tenant yapılmalı (tutarlı crypto isolation).
-  - `AuthService.login` artık read-write transaction (rehash write edebilir); pepper'lı user'larda no-op.
-  - Mevcut `DelegatingPasswordEncoder`'a geçiş ertelendi (over-engineering şu an); algoritma değişimi (Argon2id) istenirse marker+wrapper yapısı taşınabilir.
+**Global Password Pepper**
+- **Bağlam:** DB leak tek başına hash kırımına izin vermemeli. Per-tenant pepper ek key yönetim riski getirir, tehdit modeline ek katmaz → global.
+- **Karar:** HMAC-SHA256 pre-hash (OWASP) + BCrypt(12); `{sf-peppered}` marker; legacy pepper'sız hash'ler geçerli + ilk login'de lazy rehash. Pepper env/config'ten; boş → startup fail-fast.
+- **Durum:** UYGULANDI.
+- **Etki:** Pepper rotasyonu desteklenmez (rotasyon = tüm pepper'lı hash'ler resetlenir; gerekirse özel akış tasarlanır — runbook ROADMAP'te). Pepper asla loglanmaz/commit edilmez.
 
 ### K-24
-**System Tenant Bootstrap (rezerve privileged tenant)**
-- **Bağlam:** Platformun kararlı bir privileged identity'e ihtiyacı var — tenant'ları yöneten `/api/v1/platform/companies` endpoint'leri (K-25) için `platform:company:*` yetkilerini taşıyan bir admin. Bunu manuel signup'a bırakmak operational yük (her deploy'ta/refresh'te elle tenant açmak) ve güvenlik açığı (public signup ile super-admin yaratma).
-- **Karar:** `SystemAdminBootstrapRunner` (`ApplicationRunner`, `@Profile("!test")`): startup'ta rezerve `system` tenant'ını + admin user'ını idempotent olarak provision eder. Konfig `forgesys.bootstrap.system-admin.*` (application-dev.yaml default'ları gömülü). `TenantProvisioningService.provisionTenant`'ı yeniden kullanır → aynı DEBT-10 (non-transactional) borcuna tabi. Zaten `system` subdomain'inde bir Company varsa no-op. Hata loglanıp yutulur (bootstrap hatası startup'ı durdurmaz). RBAC seed (`RbacSeeder` → Admin role + tüm permission catalog) ve admin rol ataması ayrı startup adımında (`RbacSeeder.run`) yapılır.
-- **Durum:** Uygulandı.
-- **Etki:**
-  - `system` subdomain'li tenant rezerve edilir — normal signup bu subdomain'i alamaz (validateUnique reddeder).
-  - K-21 (iki fazlı signup) uygulandığında `SystemAdminBootstrapRunner` da **auto-verify** akışına geçer (`createPendingCompany` + token + aynı runner içinde `verifyAndProvision` — bootstrap'te mail tıklamayı önlemek için).
-  - Konfig secret değildir (default dev password placeholder); prod `application-prod.yaml` / `.env` üzerinden gerçek credential sağlamalı. Default password ile prod'a çıkılmamalı.
-  - DEBT-10 kapsamına girer (provisionTenant transaction'suz) — K-21 ile birlikte çözülür.
+**System Tenant Bootstrap**
+- **Karar:** `SystemAdminBootstrapRunner` startup'ta rezerve `system` tenant'ını + platform admin'ini idempotent provision eder (`provisionSystemTenant` auto-verify). Normal signup `system` subdomain'ini alamaz. Bootstrap hatası startup'ı durdurmaz (log + swallow).
+- **Durum:** UYGULANDI.
 
 ### K-25
-**Platform Admin Namespace (cross-tenant super-admin)**
-- **Bağlam:** Tenant-scoped `iam:*` permission'ları (User/Role/Permission/Group CRUD) tek bir tenant'ın içine hapsolur. Ama platformun kendisini yöneten işlemler var: tüm tenant'ları listelemek, bir tenant'ı SUSPEND/TERMINATE etmek, geleceğin billing/plan yönetimi. Bunlar **cross-tenant** işlemler — herhangi bir tenant'ın Admin rolüne verilemez.
-- **Karar:** İkinci permission namespace: `platform:company:read` / `platform:company:write` (`PermissionCatalog`'te tanımlı). Yalnızca **system tenant**'ın Admin rolüne seed edilir (çünkü `RbacSeeder` her tenant'a Admin'e tüm permission'ları verir — system tenant'ın Admin'i bu platform yetkilerini taşır, normal tenant Admin'i de teknik olarak taşır ama cross-tenant veri erişimi `TenantFilter` + `public` şema izolasyonu ile kısıtlanır; normal tenant'ların platform endpoint'leri `@PreAuthorize`'den geçse bile `executeWithoutTenantContext` ile public şemada çalışır ve system admin'i tüm şirketleri görür). `PlatformCompanyController` (`/api/v1/platform/companies`) `@PreAuthorize("hasAuthority('platform:company:*')")` ile korunur.
-- **Durum:** Uygulandı.
-- **Etki:**
-  - `PlatformCompanyService.findAll/findById/updateStatus` — `TenantContext`'i geçici olarak temizleyip (`executeWithoutTenantContext`) public şemada çalışır; tüm `t_companies` satırlarına erişir.
-  - `CompanyStatus` yaşam döngüsü (ACTIVE → SUSPENDED → TERMINATED) Faz 6 (Billing) ile netleşecek; şimdilik `PATCH /platform/companies/{id}/status` manuel admin aracı.
-  - **Bilinen zayıflık:** tüm tenant'lara seed edilen `iam:*` Admin rolü aynı zamanda `platform:*` de içerir → teorik olarak herhangi bir tenant Admin'i platform endpoint'lerini çağırabilir. K-21 sonrası veya yeni bir kararla `platform:*` permission'ları **sadece system tenant**'a seed edilecek şekilde `RbacSeeder` daraltılmalı ([RISK-18](#risk-18)).
+**Platform Admin Namespace**
+- **Bağlam:** Tenant-scoped `iam:*` dışında cross-tenant işlemler (tüm tenant listesi, SUSPEND/TERMINATE) gerekli.
+- **Karar:** `platform:company:read/write` namespace + `/api/v1/platform/companies`. `executeWithoutTenantContext` — **tek sanctioned** cross-tenant okuma yolu (başka yerde çoğaltılmaz).
+- **Durum:** UYGULANDI. Bilinen zayıflık: RISK-18.
 
 ### K-26
-**RBAC Enforcement: Method Security (`@PreAuthorize`)**
-- **Bağlam:** Permission namespace'leri (`iam:*`, `platform:*`) tanımlı, seed'leniyor, JWT claim'lere gömülüyor — ama controller'larda **enforce** edilmiyor. Yetkisiz erişim tek başına SecurityConfig'in "authenticated" kontrolüne dayanır; her authenticated user her endpoint'e ulaşabilir.
-- **Karar:** `@EnableMethodSecurity` (`SecurityConfig`) + her korumalı controller metodunda `@PreAuthorize("hasAuthority('{namespace}:{resource}:{action}')")`. Namespace'ler `PermissionCatalog`'ten gelir; `CustomUserDetails` authorities = direct roles + active group roles → permissions. Self-service endpoint'ler (`/api/v1/users/me/**`) `@PreAuthorize`'süz, yalnızca "authenticated" — her user kendi profilini/şifresini yönetir.
-- **Durum:** Uygulandı (Epic 2.9).
-- **Etki:**
-  - Tüm `iam:*` ve `platform:*` endpoint'leri `@PreAuthorize` ile korunur.
-  - Yetkisiz istek → 403 `AUTH_ACCESS_DENIED` (`RestAccessDeniedHandler`, uniform shape).
-  - Permission cache henüz YOK — her request `CustomUserDetailsService` JWT claim'lerden authorities'ı reconstruct eder (DB'siz). Redis cache (Epic 2.6) gelince `PermissionCacheService` devreye girer.
+**RBAC Enforcement (Method Security)**
+- **Karar:** `@EnableMethodSecurity` + `@PreAuthorize("hasAuthority('{module}:{resource}:{action}')")` tüm admin endpoint'lerinde; self-service `/users/me/**` authenticated-only. Yetkisiz → 403 uniform shape.
+- **Durum:** UYGULANDI.
 
 ### K-27
-**Audit & Log Genişletmesi (K-19'a ekler) — UYGULANDI (kısmen)**
-- **Bağlam:** K-19 üç katmanlı log öngörüyor (audit + login history + request/trace), ama gerçek operasyonel/güvenlik senaryoları daha geniş kapsam gerektiriyor: başarısız login denemeleri, high-risk endpoint'lerde body loglama, anomali tespiti ve yüksek riskli işlem onayı (approval workflow).
-- **Karar:** K-19 aşağıdaki eklemelerle genişletilir (Epic 2.10 uygulamasında netleşir):
-  1. **Login history → başarısız denemeler de yazılır.** Sadece login/refresh/register/logout değil; bilinmeyen email, yanlış şifre, locked account, expired token her deneme `t_login_history`'e yazılır (success=false + reason). Brute-force tespiti bu veriden beslenir.
-  2. **Request/trace log → high-risk endpoint'lerde body loglanır.** Default: sadece metadata (method/path/status/duration/userId/ip/traceId). **Ek olarak** create/delete/admin (`POST`/`DELETE`/`PATCH` `iam:*`/`platform:*`) endpoint'lerinde request body loglanır — ama maskeli (şifre/token/secret `[REDACTED]`). Body JSONB'a düşer, anomali/forensics için. Config-driven (hangi endpoint'ler "high-risk" `application.yaml`'da listelenir).
-  3. **Anomaly detection (passif, alert bazlı).** Rate limit (X delete/dk/user), unusual pattern (normalin dışında bulk delete, gece işlemi, yeni lokasyon, yeni cihaz). Bunlar **block değil alert** — anomali tespit edilince K-29 notification tetiklenir. Active block Yok (UX'i bozmamak için); sadece gözlem + bildirim.
-  4. **Approval workflow (aktif, çift onay).** Yüksek riskli işlemler (user delete, role delete, bulk operations) **ikinci bir admin onayı** gerektirir. İşlem önce `pending` state'inde yaratılır (audit log + ayrı `t_pending_actions` tablosu), ilk admin tetikler, ikinci admin onaylar/reddeder. Tenant-scoped. Hangi işlemler "approval-gerekli" config-driven (`iam:user:delete`, `iam:role:delete` default).
-- **Durum:** UYGULANDI (kısmen — 2026-08-23): `@AuditLog` AOP (`AuditLogAspect`) + high-risk body capture (mask-first: `password`/`token`/`secret` → `[REDACTED]`) + request-logs tablosu/endpoint'i (`t_request_logs` tenant `V2` + `RequestLogFilter` + `GET /request-logs`) + admin UI (`RequestLogsPage`). Daha önce gelenler: audit append-only trigger + yetki değişim old/new delta kaydı (Faz IAM 2), başarısız login loglama (K-19 core). `t_pending_actions` approval workflow + anomaly detection bilinçli ertelendi (LOW öncelik — ihtiyaç bilinçli olarak yeniden değerlendirilecek).
-- **Etki:**
-  - `t_login_history` şeması `success` zaten var; `reason` enum genişletilir (bad_credentials/unknown_user/locked/expired/...).
-  - `t_audit_logs`'a `request_body JSONB` kolonu (nullable) eklenir — sadece high-risk.
-  - Yeni `t_pending_actions` tablosu (id/action_type/actor_id/payload JSONB/status/created_at/approved_by/approved_at).
-  - Approval workflow service-layer'ı tetiklenmeli (`@ApprovalRequired` annotation veya açık servis çağrısı).
-  - Storage artışı: high-risk body loglama + pending_actions → periyodik arşiv/temizlik job'u (Faz 5).
+**Audit & Log Genişletmesi**
+- **Karar:** (1) Başarısız login denemeleri de `t_login_history`'e yazılır. (2) High-risk endpoint'lerde request body maskeli loglanır (`forgesys.audit.high-risk-paths` config; `password`/`token`/`secret` → `[REDACTED]`). (3) `@AuditLog` AOP — explicit auditService çağrılarının yerine. (4) Anomaly detection passif (block değil, alert — K-29 besler). (5) Approval workflow (`t_pending_actions`, iki-admin onayı, config-driven).
+- **Durum:** KISMEN UYGULANDI (2026-08-23): 1-3 + append-only trigger + delta kaydı + request-logs tablosu/endpoint/UI tamam. Kalan (bilinçli erteli, LOW): 4-5.
 
 ### K-28
-**Session Management & Remote Revoke — UYGULANDI**
-- **Bağlam:** Kullanıcıların aktif oturumlarını (hangi cihaz/IP/ne zaman login) görmesi, admin/yetkilinin şüpheli veya unutulmuş bir oturumu uzaktan kapatması gerekiyor. Mevcut mimaride JWT stateless (token client'ta), DB'de "aktif oturum" kaydı yok → aktif session listesi ve remote revoke mimariyle çelişiyor.
-- **Karar:** İki katmanlı tasarım:
-  1. **Active session management (runtime, stateful)** — Redis (Epic 2.6 bağımlılığı). Her refresh token = bir session kaydı (key: `session:{userId}:{sessionId}`, value: `{refreshTokenHash, device, ip, user_agent, loginAt, lastSeenAt}`, TTL = refresh token ömrü). `/api/v1/sessions` listesi bu cache'den okur. Revoke: Redis'ten key silinir + refresh token blacklist'e alınır (`TokenBlacklistService`). Stateless JWT access token revoke için `tokenInvalidBefore` (kullanıcı-bazlı "sonra geçerli token'lar invalid") veya granular access-token blacklist (Faz 2.5/2.6).
-  2. **Session audit log (kalıcı, geçmiş analiz)** — yeni `t_sessions_log` tablosu (tenant şemasında). Event bazlı: `LOGIN` / `LOGOUT` / `SESSION_REVOKED` / `EXPIRED`. Kalıcı, geçmiş analizi/forensics. Active session listesi buradan değil Redis'ten.
-  - **Admin/yetkili remote revoke:** `/api/v1/users/{id}/sessions` (list) + `DELETE /api/v1/users/{id}/sessions/{sessionId}` (revoke). İzin: `iam:user:write`. Self-service: `/api/v1/users/me/sessions` (kullanıcı kendi oturumlarını görür/kapatır).
-- **Durum:** UYGULANDI (2026-07-30, K-34 altyapısı üstünde). Aktif session listesi Redis store'dan (`listSessions`), self + admin remote revoke endpoint'leri + tenant-genel `/api/v1/sessions` (AllSessions) + max concurrent session limiti (`forgesys.security.max-sessions`, `SessionRevocationService.enforceSessionLimit`). **`t_sessions_log` İPTAL edildi** — `t_login_history`/`t_audit_logs` ile örtüşme (K-19 katmanları zaten event kaydı tutuyor); tablo hiç yaratılmadı.
-- **Etki:**
-  - Refresh token rotation (Epic 2.5) ile entegre — her rotate yeni sessionId üretir.
-  - ~~Redis key TTL → otomatik expire; ama `t_sessions_log`'a `EXPIRED` event yazımı~~ (t_sessions_log iptal — ihtiyaç olursa K-19 login-history kapsamında değerlendirilir).
-  - `UserAccount.tokenInvalidBefore` zaten var — full revoke (tüm session'lar) için kullanılabilir; granular (tek session) için Redis blacklist.
-  - "Device" bilgisi `User-Agent` header'ından türetilir.
+**Session Management & Remote Revoke**
+- **Karar:** Aktif session'lar Redis'te (her refresh token = session kaydı: device/ip/loginAt). Self (`/users/me/sessions`) + admin (`/users/{id}/sessions`) list/revoke; tenant-genel `/api/v1/sessions`; max concurrent limit (`forgesys.security.max-sessions`, en eski düşürülür). Revoke access token'ı anında düşürür (`tokenInvalidBefore` stamp). `t_sessions_log` tablosu **İPTAL** (`t_login_history`/`t_audit_logs` ile örtüşme).
+- **Durum:** UYGULANDI (2026-07-30, K-34 altyapısı üstünde).
 
 ### K-29
-**Security Notification Subsystem — PLANLANDI**
-- **Bağlam:** Güvenlik olayları (şüpheli login, yeni cihaz, bulk delete, başarısız login spike'ı, parola değişimi, rol değişikliği) ilgili tarafa bildirilmeli: etkilenen kullanıcıya, organizasyon adminine veya (gelecekte) platform adminine. Şu an mail gönderme altyapısı bile YOK (K-21 prod VerificationSender erteli). Bildirim kanalı + şablon + abonelik (notification preference) gerekir.
-- **Karar:** `NotificationService` (tenant-scoped) + iki kanal:
-  1. **In-app** — `t_notifications` tablosu (tenant şeması): user_id/type/Severity/payload JSONB/read_at/created_at. `/api/v1/notifications` (list, mark-read). Real-time için WebSocket/SSE (Faz 5+). Şimdilik polling.
-  2. **Mail** — `MailNotificationSender` (prod), `LogNotificationSender` (dev), `InMemoryNotificationSender` (test). K-21 `VerificationSender` ile aynı mail altyapısını paylaşır (`spring-boot-starter-mail` Faz 5'te).
-  - **Notification type catalog** — enum: `SUSPICIOUS_LOGIN`, `NEW_DEVICE_LOGIN`, `LOGIN_FROM_NEW_IP`, `FAILED_LOGIN_SPIKE`, `PASSWORD_CHANGED`, `ROLE_ASSIGNED`, `ROLE_REVOKED`, `BULK_DELETE_ALERT`, `SESSION_REVOKED_BY_ADMIN`, `APPROVAL_REQUESTED`, `APPROVAL_DECISION`. Her tipin template'i (subject + body HTML, `infra/templates/`).
-  - **Subscription/preference** — `t_notification_preferences` (user_id/type/in_app/mail enabled). Default: kritik (şifre değişimi, şüpheli login) her iki kanal; diğerleri in-app only.
-- **Durum:** PLANLANDI. Epic 2.10 (Audit) ve K-27 (anomaly detection) ile entegre. Mail bağımlılığı Faz 5.
-- **Etki:**
-  - `NotificationService.send(userId, type, payload)` — audit events (K-19), anomaly detection (K-27), session revoke (K-28) tarafından çağrılır.
-  - Kullanıcının "bir organizasyonda birden fazla rolü/maili" senaryosu (ileride) için notification routing esnek olmalı (şimdilik tek user = tek mail).
-  - Multi-language (TR/EN) template'ler `infra/templates/` (i18n).
+**Notification Subsystem**
+- **Bağlam:** Güvenlik olayları (şüpheli login, yeni cihaz, şifre/rol değişimi, bulk delete, session revoke) bildirim gerektiriyor.
+- **Karar:** `NotificationService.send(userId, type, payload)` + iki kanal: in-app (`t_notifications`, polling; WebSocket Faz 5+) + mail (K-21 sender infra'sını paylaşır). Type catalog (SUSPICIOUS_LOGIN, PASSWORD_CHANGED, ROLE_ASSIGNED/REVOKED, SESSION_REVOKED_BY_ADMIN, ...). Per-user kanal tercihleri (`t_notification_preferences`). Template'ler `infra/templates/` (TR/EN).
+- **Durum:** PLANLANDI. In-app kanalı bağımsız yapılabilir; mail SMTP'ye (Faz 5) bağlı. K-27 anomaly + K-28 revoke tetikleyicidir.
 
 ### K-30
-**Activity Feed (Jira-style user-facing event stream) — PLANLANDI**
-- **Bağlam:** Audit log (`t_audit_logs`) raw seviyede (actor/action/entity/old-new JSONB) — admin forensics için ideal ama normal kullanıcı için okunamaz. "Ali 'Tasarım Ekibi' grubunu oluşturdu", "Ayşe Mehmet'i 'Editor' rolüyle davet etti" gibi insan-okur activity feed kullanıcı/org admini için değerli (ekip ne yapıyor görünürlüğü, onboarding, audit-lite).
-- **Karar:** Audit log üstüne **materialized activity view** — iki seçenek değerlendirilecek (K-19 uygulamasında netleşir):
-  - **(a) Materialized view / sorgu türetme:** `t_audit_logs` üstünde bir SQL/view veya servis katmanı `actor + action + entity_payload → human-readable text` üretir. Ek tablo YOK. Sorgu maliyeti ama tutarlı.
-  - **(b) Ayrı `t_activities` tablosu:** her audit event yazıldığında async bir job listener activity satırı yazar (user-friendly text + category + visibility_scope). Daha hızlı okuma ama çift-yazma + tutarlılık riski.
-  - Önerilen: (a) önce (basitlik), (b) performans sorun olursa geçiş.
-  - **Visibility scope:** her activity public (tüm org) / team-only / private. Kullanıcı kendi activity'sini ve (yetkisi dahilinde) takım/org activity'sini görür. `/api/v1/activities` (sayfalı, filtreli).
-  - **Activity text generation:** enum-driven template map — `{action}_{entity}` → template (`{actorFullName} '{entityName}' {actionPastTense}...`). i18n (TR/EN). Örnekler: `create_group` → "{actor} '{groupName}' grubunu oluşturdu", `assign_role` → "{actor} {targetUser} kullanıcısına '{roleName}' rolünü verdi".
-- **Durum:** PLANLANDI. Backend (Epic 2.10 ile), UI (Faz 4 — activity feed ekranı).
-- **Etki:**
-  - Audit log (K-19) uygulamasında activity-friendly entity naming (her event `entity_name` human-readable tutar).
-  - Faz 4 UI'da activity feed ekranı (K-20 admin panel'e eklenir).
-  - Tenant-scoped — cross-tenant activity yok (RISK-18 çözülene kadar platform admin activity feed'i ayrı, yalnızca system tenant için).
+**Activity Feed**
+- **Bağlam:** Audit log admin forensics için; normal kullanıcıya "Ali X grubunu oluşturdu" tarzı insan-okur akış gerekli.
+- **Karar:** Audit log üstünden **türetme** (view/sorgu — ayrı tablo erteli); `{action}_{entity}` template map (i18n) ile text üretimi; visibility scope (public/team/private); `/api/v1/activities` (sayfalı, filtreli).
+- **Durum:** PLANLANDI.
+
+### K-32
+**`email_domain` kaldırıldı**
+- **Bağlam:** `t_companies.email_domain` tek string — çoklu domain (holding) ve domain'siz kayıt (klüp) senaryolarını karşılamıyordu.
+- **Karar:** Kolon + partial index DROP; entity field'ı kaldırıldı. 1:N org domains tablosu (custom domain doğrulama / LDAP-SSO ön koşulu) planlandıysa da **K-38 ile speculative kaldırıldı** — email-domain self-register akışı gelirse kendi `V2` migration'ıyla döner.
+- **Durum:** UYGULANDI (kolon DROP; tablo K-38 ile kaldırıldı).
+
+### K-33
+**Nginx Gateway Topology**
+- **Bağlam:** VPS'te shared Nginx gateway (ayrı repo) birden fazla projeyi host edecek; ForgeSys `*.forgesys.app` wildcard TLS gerektiriyor; managed CDN (Cloudflare vb.) kullanılmayacak.
+- **Karar (uygulama %90 sonrası):** Shared gateway ayrı repo + external Docker network (`gateway-net`); her proje `ports:` → `expose:` + sabit container name. Wildcard Let's Encrypt **DNS-01** (HTTP-01 wildcard desteklemez; certbot DNS plugin — sağlayıcı açık uç). Route: Host header korunur (`TenantFilter` subdomain çözer); `/actuator/health` allow; `limit_req` app-level rate limit ile birlikte. Security headers Nginx'te (CSP backend'te — duplicate yok); HTTP→HTTPS redirect + HSTS.
+- **Durum:** PLANLANDI. Açık uçlar (uygulama anında): DNS sağlayıcı/plugin, `nginx-gateway/` repo, `infra/nginx/` şablonları, cert renewal reload hook. `%90` ölçütü: Faz 2+3+4 ana akışları (Faz 5/6 bekleyebilir).
+
+### K-34
+**Redis Refresh Token + Rotation + Reuse Detection**
+- **Bağlam:** Access token kısa ömürlü/stateless; uzun refresh + rotasyon + per-session logout gerekli; dead `t_refresh_tokens` tablosu vardı.
+- **Karar:** Opaque refresh token, Redis'te **SHA-256 hash-at-rest**; atomik Lua rotasyon + reuse detection (ROTATED token tekrar sunulursa tüm session'lar revoke + `tokenInvalidBefore`). Transport: ayrı httpOnly cookie (`Path=/api/v1/auth`). `POST /auth/refresh` authorities'ı DB'den re-resolve eder (taze yetkiler + locked/disabled re-check). Per-session logout: access `jti` blacklist (Redis, TTL = access ömrü). Store impl'leri `@Profile`-split (Redis dev/prod, InMemory test — Docker'sız build).
+- **Durum:** UYGULANDI (2026-07-30). `t_refresh_tokens` tablosu K-36 squash'ında silindi.
+- **Etki:** Aynı tokenla eşzamanlı iki refresh reuse tetikler (grace window yok — client refresh'i serialize eder). Redis kesinti davranışı bilinçli: RISK-36.
 
 ### K-35
-**`all_permissions` flag — Admin implicit süper-kullanıcı + "ALL" rol kısayolu**
-- **Bağlam:** İki ayrı şikayet birleşti: (1) runtime'da `POST /permissions` ile eklenen permission Admin rolüne **hiçbir zaman** (restart'ta bile) ulaşmıyordu — `RbacSeeder.ensureAdminRole` Admin'i yalnızca hardcoded `PermissionCatalog.ALL` listesinden besliyordu, `PermissionService.create` hiçbir role atama yapmıyordu; yetkiler JWT'ye issue anında gömülü olduğundan admin yeni permission'ı göremiyordu ("haberleri olmuyor"). (2) Rol oluştururken tek tek tüm permission'ları seçmek yorucu. Önceki tasarım grant-based (yeni permission'ı Admin'e ata) düşünüldü ama kullanıcı kararı: *"admin role atama yapılmamış olsa bile tüm yetkiye sahip olsun"* — yani explicit grant defter tutmayı ve permission silme UX'ini (önce Admin'den ayır) bozmadan implicit süper-kullanıcı semantiği istendi.
-- **Karar:** `t_roles.all_permissions BOOLEAN NOT NULL DEFAULT FALSE` (tenant `V8`, `TenantMigrationRunner` mevcut tenant'lara uygular). Bir rol bu flag'i taşıyorsa, `CustomUserDetailsService.resolvePermissionNames` parent-closure walk'ından **sonra** o tenant'taki **tüm permission isimlerini** döndürür (`PermissionRepository.findAllNames` JPQL projection) — `t_role_permissions`'a hiçbir satır yazılmadan. Closure'dan sonra kontrol → parent'ı all-permissions olan rol de all-permissions sayılır. **İki kullanım, tek mekanizma:** (1) `RbacSeeder` Admin rolüne `all_permissions=true` set eder + explicit permission satırlarını clear eder (delete-UX temiz: katalog permission'ı silmek Admin yüzünden `in_use` bloğa takılmaz); (2) `PUT /roles/{id}/permissions` artık `{all:true}` (flag set + explicit set clear) veya `{permissionIds:[...]}` (explicit mod, flag false) kabul eder — "ALL" kısayolu. `RoleResponse.allPermissions` state'i expose eder. **İmmediacy:** `PermissionService.create` (ve rename'de `update`) `SessionRevocationService.revokeAllPermissionsRoleHolders` çağırır → tüm all-permissions kullanıcıların token'ı düşer, silent refresh ile yeni permission JWT'ye yansır (runtime permission'lar `@PreAuthorize`'da statik olmadığından aslında enforcement kırılmaz; bu tamamen "haberim oldu" immediacy'si + dinamik katmanlar içindir).
-- **Tradeoff / sınır:** Yetkiler issue anında snapshot olduğundan, **yeni katalog permission'ı** (release'da gelen, `@PreAuthorize`'da statik) eski token'da yok → admin re-login bekler. Runtime permission'lar için revoke bunu kapatır; release/catalog için opsiyonel startup-revoke mitigation var (şimdi değil). `@PreAuthorize("hasAuthority('x')")` enforcement katmanı **dokunulmadı** (güvenlik-critical core'a cerrahi yok) — admin'in JWT'si kelimenin tam anlamıyla tüm permission isimlerini içerir, mevcut `hasAuthority` olduğu gibi çalışır. Frontend değişmedi (`/me` authorities tüm isimleri listeler).
-- **Durum:** UYGULANDI (2026-07-31). 302 test yeşil (H2). Önceki planlanmış name-based Admin detection'ı supersede eder (flag replaces name). RISK-18 ile ilişkili: `all_permissions` Admin'e tüm IAM + platform yetkilerini implicit verir (pratikte TenantFilter public şema erişimini yönetir).
-- **Etki:** Admin (ve herhangi bir "ALL" rolü / onu taşıyan group üyesi) artık runtime permission'lardan haberdar; rol permission atama UI'ında "ALL" toggle; permission silme artık Admin yüzünden bloklanmaz.
+**`all_permissions` Flag**
+- **Bağlam:** Runtime eklenen permission'lar Admin'e ulaşmıyordu; rol kurarken tüm permission'ları tek tek seçmek yorucuydu.
+- **Karar:** `t_roles.all_permissions` — flag'li rol tenant'taki tüm permission'ları implicit taşır (`PermissionRepository.findAllNames`, parent-closure sonrası çözümlenir → parent'ı all-permissions olan rol de all-permissions). `RbacSeeder` Admin'i flag'li seed eder (explicit grant satırı yok → permission silme `in_use` bloğuna takılmaz); `PUT /roles/{id}/permissions` `{all:true}` kısayolu. Runtime permission create/rename → holder token revoke (immediacy).
+- **Durum:** UYGULANDI (2026-07-31).
 
 ### K-36
-**Pre-1.0.0 migration squash — migration geçmişini `V1`'e indir (2026-08-22)**
-- **Bağlam:** Proje henüz hiçbir prod ortama deploy edilmedi (tek geliştirici, local DB'ler). Buna rağmen migration geçmişi `public/V1..V3` + `tenant/V1..V8` olarak birikmişti; developer'lar "normal olmayan" migration akışından (squash edilemeyecek kadar büyümeden) şikayetçiydi. Versiyon 1.0.0'a ulaşılmadı — checksum/geçmiş uyumu gözetilmesi gereken deploy edilmiş hiçbir DB yok.
-- **Karar:** Pre-1.0.0 penceresinden yararlanılarak her iki location'daki tüm migration'lar **`V1.x` baseline ailesine** indirildi (final durum birleştirildi; dotted versiyonlar Flyway'de sırayla koşar, her biri ayrı checksum satırı üretir — dosya bazlı kategorizasyon, tek dosya şişmesi yok):
-  - `public/V1__tenant_registry.sql` (t_companies + t_organization_domains) + `public/V1.1__signup_verification_tokens.sql` (t_tenant_verification_tokens)
-  - `tenant/V1__iam_users.sql` (t_users/accounts/profiles) + `V1.1__iam_rbac.sql` (roles/permissions/groups + join'ler + t_role_parents + all_permissions) + `V1.2__audit.sql` (t_audit_logs + t_login_history + append-only trigger'lar) + `V1.3__pm_projects_tasks.sql` (t_projects + t_tasks)
-
-  Squash sırasında iki ertelenmiş Faz F kalemi bedava kapatıldı: (1) ölü `t_refresh_tokens` tablosu + `RefreshToken` entity'si + `RefreshTokenRepository` silindi (refresh zaten Redis-first, K-34); (2) `version BIGINT NOT NULL DEFAULT 0` tüm soft-delete tablolarına gömüldü. Partial unique index'ler doğrudan yazıldı (V2'nin "constraint yarat → DROP → partial index" dansı kalktı). `baselineOnMigrate` her yerden kaldırıldı (`TenantMigrationSupport`, dev/prod yaml, `CrossTenantIsolationTest`) — fresh-DB-only dünyada gereksiz; non-empty şemada baseline V1'i sessizce atlayıp şemayı boş bırakma riski taşırdı.
-- **Durum:** UYGULANDI (2026-08-22). Local DB'ler sıfırlandı (`infra/data/postgres` silindi + recreate) — checksum değiştiğinden sıfırlamayan herkes Flyway validation hatası alır (README troubleshooting).
-- **Etki:** Yeni migration'lar her iki location'da `V2`'den devam eder. `TenantMigrationRunner` (RISK-16) değişmedi — yeni tenant migration'ları mevcut tenant'lara yine startup'ta uygular. Tarihi kayıtlardaki `V2..V8` ref'leri tarihî gerçeklik olarak duruyor; güncel şema kaynağı `V1.x` baseline ailesi + üstüne gelen yeni versiyonlar.
+**Pre-1.0 Migration Squash**
+- **Bağlam:** Deploy edilmiş DB yokken migration geçmişi `V1..V8` birikmişti.
+- **Karar:** Tüm pre-1.0.0 migration'lar alan-bazlı `V1.x` baseline ailesine indirildi (public: `V1`, `V1.1`; tenant: `V1`..`V1.3`). Ölü `t_refresh_tokens` + `RefreshToken` entity silindi; `version BIGINT NOT NULL DEFAULT 0` gömüldü; `baselineOnMigrate` kaldırıldı (fresh-DB-only). Yeni migration'lar `V2+`.
+- **Durum:** UYGULANDI (2026-08-22). Local DB'ler sıfırlandı (checksum değişti — README troubleshooting).
 
 ### K-37
-**Pre-1.0 API/wire tutarlılık geçişi — tek seferlik (2026-08-22 kararı)**
-- **Bağlam:** 85 endpoint boyunca biriken konvansiyon sapmaları: sayfalama bölünmüş (`PageResponse` kullananlar vs `PermissionController`/`TaskController`/app property-view/session listelerinin unpaged `List<T>` dönüşleri); çift `/me` (`GET /auth/me` claims-only vs `GET /users/me` DB); `DELETE /users/{id}/lock` → 200+body (diğer DELETE'ler 204); user-session namespace 4 controller'a bölünmüş (`SessionController` `/api/v1/users/**` path'leri taşıyor, ad≠path; ayrıca `AllSessionsController`); `AuditController` class-level `@RequestMapping`'siz tek istisna; `AuthController.registerCompany` `Map<String,Object>` döndürüyor (dokümante tek istisna). Envanter: [`ANALYSIS_ADDENDUM.md`](ANALYSIS_ADDENDUM.md) §2.
-- **Karar:** K-36 squash'ı ile aynı pre-1.0 penceresi (deploy edilmiş client yok) kullanılarak **tek seferlik tutarlılık geçişi** yapılır — deprecasyon süreci gerekmez,backward-compat yükü alınmaz: (1) standart `PageResponse` (sınırlı pick-list'ler için belgeli istisna kabul — endpoint başına netleştirilir); (2) tek `/me` (`/users/me` canonical, `/auth/me` kalkar); (3) DELETE→204; (4) session endpoint'leri tek controller'da toplanır; (5) class-level mapping konvansiyonu; (6) `Map` dönüşü → response record (DTO mapping manuel `toResponse` convention'ı ile — MapStruct Roadmap'te zaten iptal edilmişti, bu kararla kökten kapanır). **Springdoc-openapi bu geçişten SONRA eklenir** (şema stabilken; dev'de açık, prod'da kapalı) — dependency onayı ask-first kuralıyla implementation anında.
-- **Durum:** UYGULANDI (2026-08-22, Session 2). Uygulananlar: (1) `PermissionController` + `TaskController` listeleri `PageResponse` + `SortGuard` whitelist (`PermissionService.FILTER_FIELDS` name/description/audit, `TaskService.FILTER_FIELDS` title/status/priority/audit; PermissionRepository `JpaSpecificationExecutor` oldu, `q` desteği permissions'ta geldi); **belgeli List istisnaları:** app properties/views + session listeleri (Redis read model). (2) `/auth/me` KALDIRILDI — tek `/me` = `GET /users/me`; `MeResponse` yeniden tasarlandı (tam profil + claims authorities); frontend `authStore`/`AppShell`/`ProfilePage` tek endpoint'e taşındı (`useMe` hook'u kaldırıldı). (3) unlock `POST /users/{id}/unlock` → 204 (eski: `DELETE /{id}/lock` 200+body). (4) controller rename — `SessionController`→`UserSessionController` (`/api/v1/users/**` session path'leri), `AllSessionsController`→`SessionController` (`/api/v1/sessions`); ad = path namespace, wire değişmedi. (5) `AuditController` class-level `@RequestMapping("/api/v1")`. (6) `registerCompany` zaten `CompanyRegisterResponse` döndürüyordu (envanter bulgusu eski kalmış) — kural AGENTS.md'ye işlendi. Doğrulama: 469 H2 testi + 9 gated PG IT yeşil.
-- **Etki:** Wire değişiklikleri: permissions/tasks listeleri `data[]+meta` şekline, unlock POST/204'ye, `/auth/me` 404'a döner — frontend göçü aynı sette tamamlandı (`normalizePage` + `size: 1000` tek büyük sayfa; PermissionsPage/TaskBoard yerel filtreleme/gruplama UX'i korunarak). `backend/AGENTS.md` endpoint kataloğu + sayfalama kuralı güncellendi. Bu karar standartlaştırıldı: "API konvansiyon tekrar tartışılmaz" (FULL_ANALYSIS §11 / madde 22).
+**API/wire Tutarlılık Geçişi**
+- **Bağlam:** 85 endpoint'te biriken konvansiyon sapmaları: bölünmüş sayfalama, çift `/me`, DELETE 200+body, session endpoint'lerinin 4 controller'a dağılması, `Map` dönüş.
+- **Karar:** Tek seferlik geçiş (K-36 penceresi, deprecasyon yükü yok): `PageResponse` standart (belgeli `List` istisnaları: app properties/views + session listeleri), tek `/me` (`/users/me`), DELETE→204, controller adı = path namespace, class-level `@RequestMapping`, DTO record kuralı (MapStruct kökten iptal). Springdoc bu geçiştEN SONRA (K-41).
+- **Durum:** UYGULANDI (2026-08-22).
 
 ### K-38
-**Ölü/speculative kod kaldırma politikası (2026-08-22 kararı)**
-- **Bağlam:** Planlama session'ı keşfi (grep-kanıtlı) sıfır-referans kümeler tespit etti: `OrganizationDomain` entity + repo + `t_organization_domains` tablosu (backend main'de hiç referans yok — Epic 2.9 self-register ertelenmiş); `OwnershipGuard` + `Ownable` (main'de kullanım yok, implement eden entity yok — Notes/Warehouse/Logistics için template); `Company.dbRole` (hiç populate edilmiyor — gerçekleşmemiş DB-role-per-tenant izolasyonunun vestijı); `User` entity'de 4 kullanımsız token kolonu (`emailVerificationToken`/`passwordResetToken` + expiry'ler — akış ertelenmiş); frontend'de backend'i olmayan `resendVerification` hook'u. Envanter + geri-getirme koşulları: [`ANALYSIS_ADDENDUM.md`](ANALYSIS_ADDENDUM.md) §1.
-- **Karar:** **"İleride lazım olur" düşüncesiyle kod taşınmaz; planlar DECISIONS.md'de yaşar.** Listelenenlerin tamamı pre-1.0 penceresinde (K-36 varsayımı: deploy edilmiş DB yok) kaldırılır; hangi akış gelirse yeniden eklenir (git history referans). `t_sessions_log` planı da resmen **İPTAL** (K-28'de not edildi). Enum değeri düzeyindeki speculative kalemler (`ProjectType.NOTES`, `PropertyType.FORMULA`, tek-değerli `ModuleStatus`/`SubscriptionStatus`) **kalır** — kod/kolon taşımazlar ve sahiplikleri roadmap'te net.
-- **Durum:** UYGULANDI (2026-08-22, Session 1). Kaldırılanlar: `OrganizationDomain` entity + `OrganizationDomainRepository` + `t_organization_domains` (public `V1` baseline'dan çıkarıldı) · `Company.dbRole` (kolon + baseline'dan) · `User` token kolonları ×4 (tenant `V1` baseline'dan) · `OwnershipGuard` + `Ownable` + test'i · frontend `resendVerification` hook'u + RowMenu item + i18n key'leri. Doğrulama: 462 H2 testi + 9 gated PG IT (CrossTenantIsolation/ModuleActivation/AppBuilder) yeşil.
-- **Etki:** Baseline `V1` checksum'ları değişti → local DB'ler yine sıfırlanmalı (`docker compose down && rm -rf infra/data/postgres && docker compose up -d`, README troubleshooting). `emailVerified` KALDI (UserDirectoryView + provisioning kullanıyor). Bu karar standartlaştırıldı: "speculative kod eklenmez/eklenen kaldırılır" (madde 21).
+**Ölü/Speculative Kod Politikası**
+- **Karar:** "İleride lazım olur" düşüncesiyle kod taşınmaz; planlar bu dosyada yaşar. Kaldırılanlar: `OrganizationDomain` + `t_organization_domains`, `OwnershipGuard`/`Ownable`, `Company.dbRole`, `User` token kolonları ×4, frontend `resendVerification`. Enum-değer düzeyi speculative'ler (`ProjectType.NOTES`, `PropertyType.FORMULA`) kalır.
+- **Durum:** UYGULANDI (2026-08-22; baseline V1 checksum değişti → local DB reset).
 
 ### K-39
-**Frontend kalite gate'leri — strict TS + test altyapısı + liste-scaffold abstraction (2026-08-22 kararı)**
-- **Bağlam:** `tsconfig.app.json`'de `strict: true` YOK (yalnızca `noUnused*`/`verbatimModuleSyntax` vb. — `: any` sıfır olduğu için eksiklik maskeleniyor); test altyapısı sıfır (Vitest/RTL "planlı" olarak duruyor, CI'de yalnızca lint+build); liste-sayfa scaffold'ı (state + debounce + sort + page-reset, ~40 satır) 7 sayfada kopya (Users/Roles/Groups/Permissions/Projects/AuditLogs/LoginHistory — rule-of-three çoktan aşılmış). Envanter: [`ANALYSIS_ADDENDUM.md`](ANALYSIS_ADDENDUM.md) §5.
-- **Karar:** (1) `strict: true` açılır, `tsc -b` hatasız geçmeli; (2) Vitest + React Testing Library kurulur — ilk testler: `lib/api.ts` refresh akışı + Login page + kritik primitive'ler (DataTable sort/pagination, Modal focus trap); CI'e `npm test` adımı eklenir; (3) 7× kopya için `useListPageState` hook (tek abstraction, gerçek tekrar); (4) `lib/i18n/messages.ts` (864 satır dictionary) kalır — data'dır, kod değil. Bundan sonra **yeni frontend feature'ı testsiz merge edilmez**.
-- **Durum:** UYGULANDI (2026-08-22, Session 4). (1) `tsconfig.app.json` `strict: true` — mevcut kod **0 hata** ile geçti (`: any` sıfırlığı sayesinde; düzeltme gereksinimi olmadı). (2) Test altyapısı: vitest 4.1.11 + jsdom 29.0.1 + RTL 16.3.2 (+dom 10.x) + jest-dom 6.9.1 + user-event 14.6.6 — **Node 20 pin'i belirleyici oldu**: jest-dom 7 ve jsdom 30 Node ≥22 istiyor (engine-strict reddi), son uyumlu sürümler seçildi. Ayrı `vitest.config.ts` (build'e test sızdırmaz), `globals: false` (explicit `vitest` import'ları — tsconfig `types` temiz), `src/test/setup.ts` (jest-dom + RTL cleanup — globals kapalıyken auto-cleanup çalışmıyor). İlk test seti `src/test/` altında: `api` (single-flight refresh: eşzamanlı 401'ler tek `/auth/refresh`'te birleşir / refresh fail → `sessionExpiredHandler` + `ApiError` / auth endpoint'lerde refresh denenmez — fetch `vi.stubGlobal` ile mock), `LoginPage` (alanlar + tenant persist + submit + yönlendirme), `DataTable` (aria-sort + sortKey raporu + pager sınırları + page-size segmentleri), `Modal` (dialog semantiği + focus trap Tab/Shift+Tab + Escape + opener'a focus dönüşü), `useListPageState` (toggle/reset sözleşmeleri + debounce fake-timer ile) — 20 test. CI frontend job'ına `npm test` adımı eklendi (lint + test + build). (3) `lib/useListPageState` — 6 server-side sayfa (Users/Roles/Groups/Projects/AuditLogs/LoginHistory) tam göç (~20 satır/sayfa kalktı); Permissions client-side pagination'ı yüzünden **kısmi göç** (yalnız `sort`/`toggleSort` — sayfa/arama state'i lokal ve anlık, hook'taki karşılıkları inert). (4) messages.ts dokunulmadı. `npm run lint && npm test && npm run build` yeşil.
-- **Etki:** `frontend/AGENTS.md` test bölümü yazıldı ("none yet" kalktı — konum, konvansiyonlar, mock stratejisi, "yeni feature testsiz merge edilmez" kuralı); README npm komutlarına `npm test` + PR kuralına eklendi; CI'de test adımı. FULL_ANALYSIS §8'deki CRITICAL eksik (frontend testing) kapandı.
+**Frontend Kalite Gate'leri**
+- **Karar:** `tsconfig.app.json` `strict: true`; Vitest + RTL (yeni frontend feature'ı **testsiz merge edilmez**); 7× kopya liste-scaffold → `useListPageState` hook; i18n dictionary kalır (data'dır).
+- **Durum:** UYGULANDI (2026-08-22). Node 20 pin'i test dep sürümlerini belirler (jest-dom 6 / jsdom 29 — Node ≥22 isteyen sürümler reddedilir).
 
 ### K-40
-**Backend temizlik fazı — startup projection + tek kaynak çözümlemeler (2026-08-22 kararı)**
-- **Bağlam:** (a) Startup runner'ları full-entity `companyRepository.findAll()` yüklüyor (`TenantMigrationRunner.java:26`, `ModuleSyncRunner.java:61`, `RbacSeeder.java:64`) — maliyet tenant sayısıyla doğrusal büyür; (b) plan çözümleme zinciri iki kez implement edilmiş (`PlanLimitService.activePlan` ≡ `ModuleActivationService.activePlanRank` — aynı TenantContext→Company→ACTIVE Subscription→plan bakış zinciri); (c) cookie build/expire kodu `AuthController` ↔ `SessionController`'da birebir kopya + `SessionController` cookie adını hardcoded (`"sf_refresh_token"`, `JwtCookieProperties` bypass — config rename'i kırar). Envanter: [`ANALYSIS_ADDENDUM.md`](ANALYSIS_ADDENDUM.md) §3-4.
-- **Karar:** Tek temizlik fazı: (1) runner'lar projection query (id + schemaName + status) kullanır — entity yüklemesi yok; (2) plan çözümlemesi tek kaynakta (`PlanLimitService`) — ModuleActivationService delege eder; (3) cookie helper tek noktaya alınır, cookie adı `JwtCookieProperties`'tan okunur. InMemory/Redis rate-limiter refill matematiği çifti **bilinçli kalır** (Docker'sız test stratejisi, parity test ile korunur).
-- **Durum:** UYGULANDI (2026-08-22, Session 3). (1) `CompanyRepository.findAllTenantSchemas()` — nested interface projection `TenantSchemaView` (id+schemaName+status; entity yüklemesi yok, `@SQLRestriction` soft-delete filtresi entity sorgusu olduğu için aynen geçerli); üç runner (`TenantMigrationRunner`/`RbacSeeder`/`ModuleSyncRunner`) bu yoldan geçiyor — `ModuleSyncRunner.syncCompany` tx içinde yine `findById` ile full entity çekiyor (davranış korunur). (2) `PlanLimitService.tryActivePlan(Company)` — Subscription → plan key → registry zincirinin tek implementasyonu; `activePlan()` ona delege (degraded-state mesajları tek mesajda birleşti, `ErrorCode`'lar aynı), `ModuleActivationService.activePlanRank` → `tryActivePlan().map(rank)` (rank artık DB `t_plans` yerine registry'den — `PlanSyncRunner` aynı değerleri upsert ediyor; `SubscriptionRepository` bağımlılığı kalktı). (3) Cookie build/expire/read `JwtCookieProperties` üzerinde (`buildAccessTokenCookie`/`buildRefreshTokenCookie`/`expireCookie`/`readRefreshCookie`); `AuthController` + `UserSessionController`'daki private kopyalar ve hardcoded `REFRESH_COOKIE` sabiti kaldırıldı — `@CookieValue` compile-time constant istediği için `readRefreshCookie(request)` manuel çözümlemesi aldı (config rename artık kodu break etmez). Korunan quirk: expire her iki cookie'de de access-cookie `Secure` bayrağını kullanıyor (mevcut davranış). Davranış/wire değişikliği yok; 462 H2 test + 9 gated PG IT (CrossTenantIsolation/ModuleActivation/AppBuilder) yeşil.
-- **Etki:** Davranış değişikliği yok (refactor). RISK-36'daki bilinen açık P2'ler (InMemory store zincir paritesi, Redis fail-closed davranışı) bu kararın kapsamı DIŞINDA — ayrı değerlendirilir. Bu karar standartlaştırıldı: "startup runner'ları projection yükler; paylaşılan çözümleme zincirleri tek kaynakta yaşar" (madde 24).
+**Startup Projection + Tek Kaynak Çözümlemeler**
+- **Karar:** Startup runner'ları entity değil projection yükler (`findAllTenantSchemas` — id+schemaName+status). Paylaşılan çözümleme zincirleri tek kaynakta: plan zinciri `PlanLimitService.tryActivePlan`, cookie helper `JwtCookieProperties`. InMemory/Redis rate-limiter refill çifti **bilinçli kalır** (Docker'sız test stratejisi; parity test ile korunur).
+- **Durum:** UYGULANDI (2026-08-22; davranış değişikliği yok).
 
 ### K-41
-**springdoc-openapi adopt — dev'de açık, prod'da kapalı (2026-08-22 kararı, D-6 onayı)**
-- **Bağlam:** K-37 API tutarlılık geçişi tamamlandığında springdoc bilinçli olarak şemanın stabilizesinin arkasına alınmıştı ("springdoc-openapi bu geçişten SONRA eklenir"). Wire artık stabil; D-6 dependency onayı 2026-08-22 planlama session'ında verildi. Tek risk noktası: Spring Boot 4.1 + Jackson 3 (`tools.jackson.*`) ile uyumlu springdoc major'u — springdoc 2.x Jackson 2/SB3 hattıdır.
-- **Karar:** **springdoc-openapi 3.1.0** (`springdoc-openapi-starter-webmvc-ui`) — v3 hattı SB4/Jackson 3 için yazıldı (springdoc.org compatibility: v3=SB4, v2.9=SB3, v1=SB2). Sürüm root pom `<springdoc.version>` property + `dependencyManagement`'ta; backend pom versionsuz. **Profil gating:** dev/test default açık; `application-prod.yaml` `springdoc.api-docs.enabled=false` + `springdoc.swagger-ui.enabled=false` (endpoint'ler unregister olur — API surface ifşası yok). **Security:** `/v3/api-docs/**`, `/swagger-ui/**`, `/swagger-ui.html` koşulsuz `permitAll` — prod'da springdoc kapalı olduğundan mapping yok, permitAll no-op (404 döner). **Auth dokümantasyonu:** `OpenApiConfig` global `cookieAuth` security scheme (apiKey/cookie, `sf_access_token` = `JwtCookieProperties.DEFAULT_COOKIE_NAME`) — httpOnly cookie tarayıcı tarafından otomatik taşınır; Authorize butonu bilgilendirme amaçlı (httpOnly cookie yapıştırılamaz), aynı origin'de önce `/auth/login` çağrısı yeterli.
-- **Durum:** UYGULANDI (2026-08-22, Session 5). Jackson 3 uyumu dependency tree ile doğrulandı (`tools.jackson 3.1.4` dünya; `jackson-annotations 2.x` yalnız annotation paketi — SB4'ün kendisi de böyle). Doğrulama: 466 H2 test yeşil (4 yeni: `SpringdocEndpointsTest` — spec açık + cookieAuth + login/users path'leri + UI 200; `SpringdocDisabledTest` — prod property'leriyle 404) + dev profilinde gerçek PG runtime kontrolü (`/v3/api-docs` OpenAPI 3.1.0 / 54 path, `/swagger-ui.html` 302→200; CSP bloğu yok — asset'ler same-origin, mevcut `script-src 'self'` policy yeterli). Side-fix: `GlobalExceptionHandler`'a `NoResourceFoundException` → 404 `resource_not_found` handler'ı eklendi — Spring 6.1+ static-resource chain'i mapping'siz path'lerde bu exception'ı fırlatıyor ve catch-all 500'e düşüyordu; springdoc kapalıyken doğru semantik (404) bu handler'la geldi (var olmayan tüm path'ler için genel iyileştirme). `TenantFilter` doküman path'lerini etkilemiyor: `localhost` host'unda subdomain çözümlenmez, context set edilmeden istek geçer.
-- **Etki:** Dev'de `http://localhost:8080/swagger-ui.html`; prod'da tamamen kapalı. Endpoint değişikliği yok — springdoc kendi path'lerini (`/v3/api-docs*`, `/swagger-ui*`) ekler. README'ye Swagger URL'leri eklendi; `backend/AGENTS.md` Configuration bölümü güncellendi. Sonraki adım roadmap'e dönüş: Faz 4.2 App Builder UI.
+**springdoc-openapi**
+- **Karar:** springdoc **3.1.0** (SB4/Jackson 3 hattı — 2.x Jackson 2/SB3). Dev/test açık (`/swagger-ui.html`, `/v3/api-docs`), prod kapalı (`springdoc.api-docs.enabled=false` + `swagger-ui.enabled=false` → endpoint'ler unregister). `OpenApiConfig` global `cookieAuth` scheme (apiKey/cookie).
+- **Durum:** UYGULANDI (2026-08-22).
 
 ### K-42
-**Custom App Builder UI ship — Faz 4.2 kapanışı (2026-08-23)**
-- **Bağlam:** K-15 backend'i (Epic 3.0.B) hazır; UI Faz 4.2 olarak 3 session'da ship edildi (1/3 `9a8004d` temel, 2/3 `73e68c2` view renderer'lar + view CRUD + filtre UI + picker'lar, 3/3 edit modalı + plan limit exposure + kapanış). Bu karar 3/3'ün ve epic'in bütünlük kaydıdır.
-- **Karar:**
-  - **Plan limit exposure:** `GET /api/v1/apps/plan-limits` (`apps:app:read`) → `AppPlanLimitsResponse(planKey, planName, maxApps, maxRecordsPerApp)`. Sayılar backend `PlanDefinition` registry'sinden (`PlanLimitService.activePlan()` — tek çözümleme zinciri, K-40); frontend'e plan sabiti ASLA kopyalanmaz; `-1` = sınırsız wire'da da böyle taşınır. Endpoint `AppController`'da yaşar (App Builder UI'nin izin setiyle birebir; `GET /modules` `iam:module:read` isterdi — App Builder kullanıcısında bulunmayabilir). Literal segment `/{id}` UUID mapping'ini önceler. Gösterim: AppsPage head'de "x / y uygulama" progress'i (unfiltered total = tek-satırlık probe `size=1`), detayda "x / y kayıt" sayacı; sorgu fail olursa gösterge sessizce gizlenir.
-  - **Record edit:** tek `RecordFormModal` (create + edit dual-mode). Edit prefill'i stored value'lardan; submit `buildRecordPatch` saf diff'i ile PATCH partial-merge sözleşmesine uyar — yalnız DEĞİŞEN key'ler, boşaltılan hücre `null`, dokunulmayan absent, boş diff → istek yok. Required clear client-side satır-içi bloklanır (`apps.cannotClearRequired` — backend `BusinessException` `fields[]` boş döndürdüğünden field-level eşleme istemcide). Giriş noktaları: TABLE satır menüsü + BOARD kart kalem butonu + LIST/GALLERY menüleri (hepsi `apps:record:write`); CALENDAR'da aksiyon bilinçli yok (chip yüzeyi dar — başka view'dan düzenlenir).
-  - **Bilinçli sadeleştirmeler:** drag-drop YOK (BOARD taşıma TaskBoard emsalindeki select/move mover — PATCH; kütüphanesiz), expression editor YOK (satır bazlı structured DSL — `AppQueryValidator`'ın 9 op'u, injection yüzeyi yok), CALENDAR minimal grid (kütüphanesiz, Mon-first, ay/hafta toggle), ikon = emoji shortlist (~20, Lucide değil — app ikonu veri, UI ikonu değil).
-  - **Filter/sort veri yolu:** `GET /records` tek sayfa (cap 1000 = backend `max-page-size` + FREE plan limiti) + client-side `applyViewQuery` (executor semantik paritesi) — `records/search` PG-only olduğundan H2/dev'de de çalışır; 1000+ kayıt "ilk N" notuyla belirtilir.
-- **Durum:** UYGULANDI (2026-08-23, Epic 4.2 kapandı — ROADMAP maddeleri DONE işaretli). Doğrulama: backend 21 yeni/option test ile `AppControllerTest` (plan-limits happy + 403; literal-over-variable eşleşme), `mvn clean install` H2 + gated PG IT'ler yeşil; frontend 116 Vitest (yeni: `buildRecordPatch` diff matrisi, `RecordFormModal` prefill/partial-PATCH/required-clear/no-op, board/table edit giriş noktaları, ikon payload'ı, plan göstergesi) + lint + build.
-- **Etki:** App Builder UI kullanılabilir uçtan uca (tasarım → veri → görünüm). Plan limit sayıları artık expose — Faz 6 (billing) plan değişimi getirdiğinde endpoint aynı kalır (registry tek kaynak). Kalan bilinçli boşluklar: drag-drop ve expression editor (yukarıda gerekçeli), CALENDAR kayıt aksiyonu, FORMULA tipi (K-15'ten erteli).
-
----
+**App Builder UI**
+- **Karar:** Plan limit sayıları backend registry'sinden (`GET /apps/plan-limits`) — frontend'e sabit kopya YOK. Record edit PATCH partial-merge diff'iyle (yalnız değişen key'ler; required-clear bloklu). Bilinçli sadeleştirmeler: drag-drop YOK (select/move mover), expression editor YOK (structured DSL), CALENDAR'da kayıt aksiyonu YOK. Filter/sort client-side (`GET /records` tek sayfa, cap 1000 — `records/search` PG-only).
+- **Durum:** UYGULANDI (2026-08-23).
 
 ### K-43
-**Metrics Expose (Micrometer + Prometheus) — Faz 5 Observability (2026-08-23)**
-- **Bağlam:** K-15/K-42 App Builder backend + UI ship'lendi; operasyonel görünürlük eksik (actuator yalnız health/info). CI'de lint+test+build var; monitoring stack (Prometheus/Grafana/Alertmanager) ayrı iş (K-33 gateway).
-- **Karar:**
-  - **Micrometer + Prometheus registry:** `io.micrometer:micrometer-registry-prometheus` (BOM-managed, versiyon pinleme YOK — spring-boot-dependencies BOM'dan gelir).
-  - **Exposure matrisi:** base/dev/test → `health,info,metrics,prometheus`; prod → `health,info,prometheus` (dar — `/actuator/metrics` debugging endpoint'i kapalı; scrape `/actuator/prometheus` taşır).
-  - **Management portu:** prod → ayrı port 8081 (`management.server.port=8081`, application-prod.yaml); dev/test → aynı port (8080, same-port). **Gerekçe:** prod'da ayrı port → management child context'inde Spring Security filter chain uygulanmaz (child context) → scrape auth'suz; expose-only (ports: yok, expose: 8081) + internal `forgesys-net` → scrape internal-only. Dev/test → same-port (8080); SecurityConfig'te `/actuator/prometheus` permitAll (dev/test scrape auth'suz). Prod'da ayrı portta SecurityFilterChain management child context'e uygulanmaz → permitAll no-op.
-  - **SecurityConfig:** `/actuator/prometheus` permitAll (dev/test same-port scrape; prod'da child context'inde security zinciri uygulanmaz → no-op). `/actuator/metrics` permitAll YOK — debugging endpoint'i auth'suz erişilemez (dev'de cookie'li tarayıcıda erişilebilir; prod'da expose edilmez).
-  - **Custom gauge:** `forgesys.tenants.active` (MeterBinder, `CompanyRepository.findAllTenantSchemas()` ACTIVE count; scrape thread'inde tenant context yok → public schema; tenant-içi gauge'lar bilinçli yok — scrape thread'inde tenant context yok).
-  - **Docker/Prod deploy:** compose app service `expose: "8081"` (ports YOK — internal network only) + healthcheck 8081; Dockerfile `EXPOSE 8081` + HEALTHCHECK 8081.
-  - **Testler:** `ActuatorPrometheusTest` (dev/test same-port: prometheus 200 + `jvm_memory_used_bytes` + `forgesys_tenants_active`; metrics 401 — permitAll sadece health/info/prometheus). `ActuatorPrometheusProdExposureTest` (prod değerleri property setiyle: prometheus 200, metrics 401 — security zinciri önce reddeder; gerçek prod 8081'de chain yok → 404 olur, her halde erişilemez).
-- **Durum:** UYGULANDI (2026-08-23). Doğrulama: `mvn clean install` H2 483 test yeşil; gated PG IT (`-Dforgesys.pg.it=true`) 483 test yeşil (0 skip); frontend lint+test+build yeşil; dev stack ayağa kaldırıp `curl /actuator/prometheus` → `jvm_memory_used_bytes` + `forgesys_tenants_active` gövde assert.
-- **Etki:** Operasyonel görünürlük uçtan uca; plan limitleri zaten expose (K-42). K-33 gateway ile Prometheus scrape konfigü işi ayrı. OTel tracing erteli (K-33 gateway + OpenTelemetry collector ile birlikte değerlendirilecek).
-
----
+**Metrics Expose (Micrometer + Prometheus)**
+- **Karar:** `micrometer-registry-prometheus` (BOM-managed). Exposure: dev/test `health,info,metrics,prometheus` same-port (scrape auth'suz); prod `health,info,prometheus` + **ayrı management portu 8081** expose-only (management child context'te security chain uygulanmaz → internal ağdan auth'suz scrape). Custom gauge: `forgesys.tenants.active`. OTel tracing erteli (K-33 ile birlikte değerlendirilecek).
+- **Durum:** UYGULANDI (2026-08-23).
 
 ### K-44
-**Notes Modülü (standalone, markdown) — Faz 3.2 (2026-08-23)**
-- **Bağlam:** ROADMAP Epic 3.2 — built-in Notes modülü. Açık kararlar: standalone vs proje-scoped, görünürlük (ABAC?), editör tipi (rich-text?), default aktivasyon.
-- **Karar:**
-  - **Standalone:** `/api/v1/notes` + `/api/v1/note-categories` — projelerden bağımsız. `ProjectType.NOTES` placeholder'ı VE coming-soon dalı bilinçli DOKUNULMADI (proje-scoped notlar ayrı bir ihtiyaç olursa ayrı değerlendirilir; standalone notlar proje kavramına bağlı değil).
-  - **Tenant-shared görünürlük:** `notes:note:read` olan herkes tüm tenant notlarını görür (pm deseni). ABAC/personal notlar ERTENDİ — `Ownable`/`OwnershipGuard` şablonu ilk gerçek ownership ihtiyacıyla (Warehouse/Logistics olabilir) geri döner.
-  - **Markdown editör, raw HTML YOK:** `react-markdown@10` + `remark-gfm@4` (yeni frontend dep'leri — kullanıcı onaylı). Edit textarea + preview toggle; `rehype-raw` BİLİNÇLİ eklenmedi → raw HTML render edilmez, XSS yüzeyi yapısal olarak kapalı (test'le doğrulandı). WYSIWYG (TipTap vb.) erteli.
-  - **Modül yapısı (APPS emsali):** `ModuleDefinition.NOTES` (`ownMigrations=true`, minPlan FREE, plan limiti yok — pm deseni) → `db/migration/module/notes/V1__notes.sql` + bağımsız `flyway_schema_history_mod_notes`. Tablolar: `t_notes` (title/content TEXT/category_id FK `ON DELETE SET NULL`/pinned; title'da unique YOK — tekrar meşru) + `t_note_categories` (name + color token; partial unique). Default aktif: `default-keys: pm,apps,notes` (test fallback `pm` kalır — H2'de modül migration örtük koşmaz).
-  - **Permission'lar:** `notes:note:read/write/delete` + `notes:category:read/write` (kategori delete `category:write` altında — kategori paylaşmış taksonomi, veri değil). Aktivasyonda seed, Admin implicit (all_permissions).
-  - **API:** `GET /notes` (`?q=` title+content OR-CONTAINS + `?categoryId=` + `?pinned=` AND-birleşik; `updatedAt` default sort desc) + CRUD; `GET /note-categories` (`?q=` name) + CRUD. `NoteResponse.categoryName` server-side çözülür (chip için ikinci round-trip yok). `@AuditLog` AOP (K-27 deseni); `ErrorCode.NOTE_CATEGORY_NAME_TAKEN` + constraint-map `note_categories_name`.
-  - **Yan bulgu — H2 Türkçe-locale `lower()` bug'ı:** `q=API` araması Türkçe JVM'de boş dönüyordu (H2 `lower('I')`→`'ı'`, Java needle `Locale.ROOT`→`'i'`). Çözüm: surefire `argLine=-Duser.language=en -Duser.country=US` — test JVM'i deterministik (CI + en-locale PG ile uyumlu). `FilterSpecifications.likeIgnoreCase` javadoc'u varsayımı belgeler. Prod PG DB locale'i İngilizce olmalı (Docker default) — Türkçe-locale PG'de ASCII case-insensitive arama için ayrıca `lower()` collation ayarı gerekir (bilinçli varsayım).
-- **Bilinçli yapılmayanlar (tekrar tartışılmaz):** ABAC görünürlük, WYSIWYG editör, raw HTML render, full-text search (PG tsvector — arama şimdilik `q` LIKE), not başına unique başlık, kategori rengi sunucu-tarafı validasyon (UI token'ı, yorumlanmaz).
-- **Durum:** UYGULANDI (2026-08-23). Doğrulama: backend 527 H2 test yeşil (22 yeni: 13 NoteController + 9 NoteCategoryController — 401/403/q+filter/create-default/unknown-404/update-partial/delete/category-SET-NULL); frontend 123 Vitest yeşil (7 yeni: NotesPage satır/chip/pin/sort-regression/filtre parametreleri + NoteEditorPage load+PUT/preview-raw-HTML-kapalı/new-note POST) + lint + build. Modül aktivasyon + migration mekanizması `ModuleActivationIT` kapsamında (yeni IT gerekmedi).
-- **Etki:** Üçüncü modül (`pm`, `apps`, `notes`) — modül sistemi deseni (registry + ownMigrations + permission seed) tekrar doğrulandı. `default-keys` değişimi mevcut tenant'lara `ModuleSyncRunner` backfill'i ile yayılır.
+**Notes Modülü**
+- **Karar:** Standalone (`/api/v1/notes` + `/note-categories`) + tenant-shared görünürlük (pm deseni; ABAC erteli). Markdown editör: `react-markdown` + `remark-gfm`, `rehype-raw` BİLİNÇLİ yok → raw HTML render edilmez (XSS yüzeyi kapalı). Modül yapısı APPS deseni (`module/notes/V1__notes.sql` + bağımsız history). Default-aktif (`pm,apps,notes`; test fallback `pm` — H2'de modül migration örtük koşmaz). Bilinçli yapılmayanlar: WYSIWYG, full-text search (tsvector), not-başına unique başlık.
+- **Durum:** UYGULANDI (2026-08-23).
 
 ---
 
@@ -358,202 +213,134 @@ Her kayıt:
 
 ### RISK-3
 **AuditorAware hardcoded "system"**
-- **Bağlam:** JPA auditing için `AuditorAware` şu an her zaman `"system"` döndürüyor. Kimliği doğrulanmış kullanıcı yok.
-- **Karar:** Auth kurulunca SecurityContext'ten gerçek userId alınacak. **Ancak** tenant signup endpoint'leri her zaman `"system"` ile audit edilir (tenant signup context'inde kimliği doğrulanmış kullanıcı yok) — bu beklenen durum.
-- **Durum:** ÇÖZÜLDÜ (2026-07-24, [RISK-33](#risk-33) ile). `AuditorAware` artık SecurityContext'ten authenticated user'ın `userId`'sini okuyor; signup/provisioning/startup (kimliği doğrulanmış kullanıcı yok) hâlâ `"system"` fallback'ine düşüyor — bu beklenen durum.
+- **Durum:** ÇÖZÜLDÜ (RISK-33 ile). SecurityContext userId; signup/provisioning/startup `"system"` fallback (beklenen durum).
 
 ### RISK-10
-**@Async thread'lerde TenantContext taşınmaz**
-- **Bağlam:** `TenantContext` ThreadLocal. Spring `@Async` yeni thread pool'da çalışır -> context kaybolur.
-- **Karar:** `TaskDecorator` ile TenantContext + SecurityContext propagation. Audit/email async işler için gerekli.
-- **Durum:** Planlandı (Faz 2.0.B).
+**`@Async` thread'lerde TenantContext taşınmaz — AÇIK**
+- **Bağlam:** `TenantContext` ThreadLocal; `@Async` yeni thread'de kaybolur.
+- **Karar:** `TaskDecorator` (TenantContext + SecurityContext propagation) ilk async tüketici (audit/email) ortaya çıktığında eklenir. Şu an `@Async`/`@EnableAsync` yok.
 
 ### RISK-13
-**BCrypt strength (ÇÖZÜLDÜ)**
-- **Bağlam:** Mevcut `BCryptPasswordEncoder()` default strength 10. Güvenlik standardı 12.
-- **Karar:** Faz 2.3'te `BCryptPasswordEncoder(12)`'ye geçilecek. Migration stratejisi (mevcut hash'ler) önce spike ile netleştirilecek.
-- **Durum:** ÇÖZÜLDÜ (Epic 2.3). Spike sonucu: BCrypt self-describing (cost factor hash'e gömülü) olduğu için mevcut strength-10 hash'ler hâlâ `matches()` ile validate olur; yenileri 12'de encode edilir → lazy migration (sonraki şifre değişiminde).
+**BCrypt strength**
+- **Durum:** ÇÖZÜLDÜ. BCrypt(12); legacy strength-10 hash'ler self-describing olduğundan geçerli, lazy migrate.
 
 ### RISK-14
-**oauth2-resource-server jwt filter aktif edilmez (UYGULANDI)**
-- **Bağlam:** `spring-boot-starter-oauth2-resource-server` (Nimbus) RSA asimetrik imzalama (RS256) için seçildi (jjwt yerine). Ama auto-config filter `tokenInvalidBefore` check yapamaz.
-- **Karar:** `.oauth2ResourceServer().jwt()` auto-config filter **AKTİF EDİLMEZ**. Custom `JwtAuthenticationFilter` yazılır (cookie->decode->SecurityContext).
-- **Durum:** UYGULANDI (Epic 2.4). **NOT:** İlk-çalışan-login diliminde filter sadece imza+expiry doğrular; Redis blacklist + DB `tokenInvalidBefore` revoke kontrolü logout/refresh ile 2.5/2.6'da gelir.
+**oauth2-resource-server auto-config filter**
+- **Durum:** ÇÖZÜLDÜ. Auto-config jwt filter AKTİF EDİLMEZ (`.oauth2ResourceServer()` çağrılmaz); custom `JwtAuthenticationFilter` (revoke kontrolleri için gerekli).
 
 ### RISK-15
-**DateTimeProvider bug (ÇÖZÜLDÜ)**
-- **Bağlam:** `@CreatedDate` OffsetDateTime populate edilmiyordu — Hibernate varsayılan DateTimeProvider UTC timezone'u doğru set etmiyordu.
-- **Karar:** Özel `DateTimeProvider` bean (UTC) tanımlandı, `MultiTenancyJpaConfig`'te.
-- **Durum:** ÇÖZÜLDÜ.
+**DateTimeProvider**
+- **Durum:** ÇÖZÜLDÜ. Custom UTC `DateTimeProvider` (`MultiTenancyJpaConfig`).
 
 ### RISK-16
-**Yeni tenant migration mevcut tenant'larda çalışmaz (ÇÖZÜLDÜ)**
-- **Bağlam:** Programmatik tenant Flyway migration sadece yeni provision edilen tenant'larda çalışır. Mevcut tenant'lar V1'de takılır; yeni V2 tenant migration'ı onlara uygulanmaz.
-- **Karar:** `TenantMigrationRunner` (`ApplicationRunner`, `@Profile("!test")`) — startup'ta tüm `t_companies` şemalarını `TenantMigrationSupport` üzerinden Flyway migrate eder. Yeni tenant migration'ından ÖNCE gelmeli.
-- **Durum:** ÇÖZÜLDÜ (Epic 2.0.B). `TenantMigrationSupport` bean'i ortak Flyway mantığını taşır (hem runner hem `TenantProvisioningService` kullanır). Tek tenant hatası diğerlerini durdurmaz (per-tenant try/catch + log). Test profilinde kapalı (`@Profile("!test")` — H2 + flyway kapalı).
+**Yeni tenant migration mevcut tenantlara uygulanmaz**
+- **Durum:** ÇÖZÜLDÜ. `TenantMigrationRunner` startup'ta tüm şemalara migrate (per-tenant try/catch). Yeni tenant migration'ları `V2+` olarak düşer, runner otomatik uygular.
 
 ### RISK-17
-**Soft-delete + UNIQUE çakışması (ÇÖZÜLDÜ)**
-- **Bağlam:** DB seviyesi UNIQUE constraint soft-delete ile çakışır (silinmiş satır kalır, aynı isimde yenisi insert edilemez).
-- **Karar:** Partial index: `CREATE UNIQUE INDEX ... WHERE is_deleted = false`. Sadece `SoftDeleteAuditEntity` subclass'ları için. `GeneratedIdAuditEntity` subclass'ları (soft-delete'siz) normal UNIQUE kullanır.
-- **Durum:** ÇÖZÜLDÜ (Epic 2.0.B). `public/V2` + `tenant/V2` ile 9 partial index: public `t_companies` (name/subdomain/email_domain/schema_name) + tenant `t_users`(username,email)/`t_roles`/`t_permissions`/`t_groups`(name). K-22 domain-handoff senaryosunu destekler. Join tabloları ve `t_refresh_tokens.token` normal UNIQUE kaldı. Gerçek DB doğrulaması Epic 3.X Testcontainers'da (H2 test profilinde Flyway kapalı).
+**Soft-delete + UNIQUE çakışması**
+- **Durum:** ÇÖZÜLDÜ. Pattern: `CREATE UNIQUE INDEX ... WHERE is_deleted = false` tüm soft-delete entity'lerde (baseline `V1.x` içinde). Join tabloları + `GeneratedIdAuditEntity` normal UNIQUE.
 
 ### RISK-18
-**`platform:*` permission'ları tüm tenant'lara seed ediliyor**
-- **Bağlam:** K-25 platform admin namespace'ini getirdi ama `RbacSeeder.ensureAdminRole` her tenant'ta Admin rolüne `PermissionCatalog.ALL`'ı veriyor — `ALL` listesi `platform:company:read/write` içeriyor. Yani teorik olarak herhangi bir tenant'ın Admin rolü platform endpoint'lerine sahip. Pratikte `TenantFilter` + `executeWithoutTenantContext` cross-tenant erişimi system admin'e yönlendiriyor olsa da, bu defense-in-depth açığıdır.
-- **Karar:** `RbacSeeder` `platform:*` permission'larını yalnızca **system tenant**'a (subdomain `system` veya ayrı bir konfig ile işaretlenen tenant) seed edecek şekilde daraltılacak. `PermissionCatalog.ALL` ikiye bölünecek: `IAM_PERMISSIONS` (her tenant) + `PLATFORM_PERMISSIONS` (sadece system tenant).
-- **Durum:** Açık. K-21 sonrası veya ayrı bir hardening epic'inde çözülür.
-- **Etki:** Çözülene kadar her tenant Admin'i teorik olarak platform yetkilerine sahip; praktikte TenantFilter public şema erişimini yönetir.
+**`platform:*` permission'ları tüm tenantlara seed ediliyor — AÇIK**
+- **Bağlam:** `RbacSeeder` Admin'e tüm katalogu verir; liste `platform:company:*` içerir → her tenant Admin'i teorik olarak platform endpoint'lerine yetkili (pratikte TenantFilter + public şema erişimi sınırlandırır — defense-in-depth açığı).
+- **Karar:** `platform:*` yalnızca system tenant'a seed edilecek şekilde daraltılacak (`IAM_PERMISSIONS` + `PLATFORM_PERMISSIONS` split).
+- **Durum:** Açık — hardening epic'inde.
 
 ### RISK-19
-**JWT tenant claim doğrulanmıyor — cross-tenant privilege escalation (P0)**
-- **Bağlam:** `JwtAuthenticationFilter` JWT'den `tenant` claim + `authorities`'i doğrudan principal'a yazıyor ama `TenantFilter`'ın çözdüğü request tenant (subdomain) ile JWT `tenant` claim karşılaştırılmıyor. RBAC yetkileri (JWT) ile data scoping (`TenantContext`) ayrışık → Tenant-A admin token'ı Tenant-B'de geçerli. Koleksiyon endpoint'leri (`/users`, `/roles`) tamamen istismar edilebilir: saldırgan `a.forgesys.app`'ten aldığı admin token'ını `b.forgesys.app/api/v1/users`'a replay eder → Tenant-B user'larını okur/yazar/siler.
-- **Karar:** `JwtAuthenticationFilter.doFilterInternal`'da decode sonrası `TenantContext.getCurrentTenant()` ile JWT `tenant` claim eşleşmezse `SecurityContextHolder.clearContext()` + chain devam (→ 401). Principal `tenantSchema`'sını claim'den değil `TenantContext`'ten al.
-- **Durum:** ÇÖZÜLDÜ (2026-07-24). Refactor Faz A. `JwtAuthenticationFilter.authenticateIfTenantMatches` JWT `tenant` claim'ini `TenantContext` ile karşılaştırır (boş context → `"public"` normalizasyonu, `TenantIdentifierResolver` ile aynı); mismatch → `clearContext` (→ 401). Principal `tenantSchema`'sını claim'den değil context'ten alır. `BearerTokenAuthTest.crossTenantBearerTokenIsRejected` doğrular; platform cross-tenant yolu için `PlatformCompanyControllerTest` token-context eşleşecek şekilde güncellendi. Gerçek çapraz-tenant izolasyon testi RISK-20 (Testcontainers) ile. [AGENTS.md Refactor Roadmap](../AGENTS.md#refactor-roadmap-2026-07-24-review).
+**JWT tenant claim doğrulanmıyor (P0, cross-tenant escalation)**
+- **Durum:** ÇÖZÜLDÜ. `JwtAuthenticationFilter` token `tenant` claim'i ile `TenantContext` eşleşmezse context temizler (→401); principal şemayı claim'den değil context'ten alır. Gerçek çapraz-tenant doğrulaması: `CrossTenantIsolationTest` (gated PG).
 
 ### RISK-20
 **Cross-tenant isolation testi yok (P0)**
-- **Bağlam:** Tüm test suite'i tek H2 `public` şemasında, `TenantContext` unset → resolver hep `"public"` döner → `SET search_path` mekanizması (izolasyonun omurgası) **hiç test edilmemiş**. RISK-19 dahil tüm tenant-scoped yolların izolasyonu doğrulanmamış. AGENTS.md "tenant verisi sızdırma en kritik bug sınıfı" diyor ama test yok.
-- **Karar:** Testcontainers + PostgreSQL ile iki gerçek tenant şeması yaratan isolation test altyapısı (ROADMAP Faz 3.X'ten öne çekilir). Seed user tenant-A'da, `TenantContext` tenant-B'ye set, `GET /users/{id}` → 404 assert.
-- **Durum:** ÇÖZÜLDÜ (2026-07-24). Refactor Faz B. `CrossTenantIsolationTest` (`postgres:16-alpine`, `@ServiceConnection`) iki tenant şeması provision edip (tenant_a `provisionSystemTenant` ile — RISK-26 da doğrulandı; tenant_b manuel CREATE SCHEMA+migrate) çapraz-tenant `SET search_path` izolasyonunu kanıtlar: tenant_a verisi tenant_b'de görünmez, tersi de. `-Dforgesys.pg.it=true` gate'i → varsayılan `mvn clean install` Docker'SIZ yeşil; IT gerçek PG 16.11'de geçti. Testcontainers deps (BOM-managed, `testcontainers-postgresql` 2.x + `spring-boot-testcontainers`) backend test scope'a eklendi.
+- **Durum:** ÇÖZÜLDÜ. Gated Testcontainers IT'ler (gerçek PG + Redis): `CrossTenantIsolationTest`, `ModuleActivationIT`, `AppBuilderIT`, `RedisRefreshTokenIT` — varsayılan build Docker'sız, CI'da integration job'unda açık.
 
 ### RISK-21
 **`tokenInvalidBefore` kontrol edilmiyor (P1)**
-- **Bağlam:** `UserAccount.tokenInvalidBefore` alanı var ama **hiçbir filter/service kontrol etmiyor** (grep doğruladı — sadece entity/Javadoc/docs). Logout sadece cookie expire, JWT geçerli kalır (15 dk). `changePassword`/`resetPassword` token invalidate etmiyor → çalınan token, şifre değiştirilse bile çalışmaya devam eder.
-- **Karar:** `JwtAuthenticationFilter`'a `tokenInvalidBefore` kontrolü (issue sonrası Redis cache; ilk dilimde DB lookup) + `changePassword`/`resetPassword`/`logout`'ta `tokenInvalidBefore = now()` set. Epic 2.5/2.6 (Redis blacklist) ile tamamlanır.
-- **Durum:** ÇÖZÜLDÜ (2026-07-24). Refactor Faz A. `UserRepository.findTokenInvalidBefore(userId)` tek-kolon JPQL projection (UserAccount `@MapsId` shared-PK — JOIN/lazy-proxy yok); `JwtAuthenticationFilter.isRevokedByTokenInvalidBefore` her authenticated request'te bunu çağırır, `iat < tokenInvalidBefore` (her ikisi saniyeye floor) → `clearContext` (→ 401). **Set noktaları:** `UserService.changePassword` + `resetPassword` + `revokeTokens(userId)` (yeni) → `account.setTokenInvalidBefore(OffsetDateTime.now())`; `AuthController.logout` principal'dan userId alıp `userService.revokeTokens` çağırır. **Tradeoff:** Redis cache (Epic 2.6) yok → her authenticated request ekstra 1 küçük indexed sorgu (tolere edilebilir; user_account küçük + index'li). Saniyeye floor: JWT `iat` NumericDate saniye çözünürlükte, naive nano compare → aynı saniyede mint+revoke token'ı reject ederdi; floor ile "aynı saniyede mint, revoke kararı belirsiz → accept" garantisi (hızlı re-login korunur). **Kapsam:** user-scoped revoke (kullanıcının tüm outstanding token'ı); granular per-session (tek token) revoke Epic 2.6 (Redis access-token blacklist). **RISK-22 kapatılması:** brute-force lockout (`AuthService.login`'de `lockedUntil` set) `tokenInvalidBefore` set ETMEZ — kilitlenen hesabın elindeki token'ı TTL süreince hâlâ geçerli; lockout anında da revoke etmek istenirse `AuthService.login`'e `invalidateTokens` çağrısı eklenebilir (kasıtlı olarak eklenmedi — her failed attempt'ta DB yazısı + RISK-22 scope'undan dışarı). Test: `BearerTokenAuthTest.tokenInvalidBeforeRevokesPreviouslyIssuedToken` / `tokenInvalidBeforeDoesNotAffectNewerToken` (filter-side); `UserProfileControllerTest.changePasswordRevokesPreviouslyIssuedAccessToken` (e2e changePassword → eski cookie reject); `changePasswordSucceedsAndInvalidatesOldPassword` (post-change fresh login → old password reject).
-- **Etki:**
-  - Çalınan token, kullanıcı şifre değiştirince / logout yapınca / admin reset edince anında geçersiz (TTL bekleme yok).
-  - Çok-cihazlı logout yan etkisi: tek cihazdan logout → tüm cihazlardan logout (user-scoped). Granular çözüm Epic 2.6.
-  - Filter artık DB-bağımlı — önceki DB'siz stateless principal reconstruction pattern'dan sapma; performans maliyeti Redis ile azaltılacak.
-  - Frontend tarafında changePassword/resetPassword/logout sonrası otomatik re-login akışı (401 → login redirect) doğru çalışmalı.
+- **Durum:** ÇÖZÜLDÜ. Filter her authenticated request'te tek-kolon projection lookup; `iat < tokenInvalidBefore` → 401 (saniyeye floor — hızlı re-login korunur). Set noktaları: password change/reset, privilege-change revoke (Faz IAM 1), lockout, disable/delete.
 
 ### RISK-22
-**Brute-force / lockout koruması yok (P1)**
-- **Bağlam:** `failedLoginAttempts`/`lockedUntil` entity'de var ama **referans yok** (sadece comment'ler). Public `/auth/login`'de rate-limit/lockout yok. BCrypt(12) + pepper her tahmini yavaşlatsa da paralel credential stuffing'e karşı korumasız. RISK-21 ile birleşince → çalınan token 15 dk revoke edilemiyor.
-- **Karar:** `AuthService.login`'de attempt counting + `lockedUntil` backoff + rate-limit (IP/tenant/email bazlı, Bucket4j veya Redis). Yeni `auth_account_locked` ErrorCode (kalan deneme sayısını sızdırmadan).
-- **Durum:** ÇÖZÜLDÜ (2026-07-24). Refactor Faz A. `AuthService.login` (artık `User` entity'yi tek sefer yükler, authority resolution + lazy pepper rehash aynı transaction'da) `failedLoginAttempts`/`lockedUntil` kullanır: 5 yanlış → 15dk lock, yeni `ErrorCode.AUTH_ACCOUNT_LOCKED` (423). Lock-expiry'de counter sıfırlanır (yeni deneme hakkı). `@Transactional(noRollbackFor=AuthException.class)` — attempt artışı `bad_credentials` throw'u ile rollback olmaz. **Kapsam:** login-scoped (filter DB lookup RISK-21 ile). IP/email rate-limit Redis (Epic 2.6) sonrası. Kilitlenen hesabın eldeki token'ı (≤ TTL) RISK-21 gelene kadar geçerli. `AuthControllerLoginTest` lockout + unlock test'leri doğrular.
+**Brute-force koruması yok (P1)**
+- **Durum:** ÇÖZÜLDÜ. Login-scoped lockout (5 deneme/15dk, 423) + lock anında `tokenInvalidBefore`; kilitli hesap refresh de basamaz. Ek katman: app-level rate limiting (Redis token-bucket, `/auth/login` + `/auth/company/verify` + `/auth/refresh`); edge `limit_req` K-33.
 
 ### RISK-23
-**Prod'da RSA key eksikse sessizce ephemeral (P1)**
-- **Bağlam:** `RsaKeys.resolve` key yoksa `log.warn` + 2048-bit ephemeral üretiyor. Prod'da key unutulursa: (a) app yeşil başlar (warning log JSON/ECS log'larında gözden kaçar), (b) token restart'ta survive etmez, (c) **çok-instance dağıtımda her instance farklı key** → instance A'nın token'ı instance B'de fail (rastgele 401) veya "geçerli issuer" kümesi sessiz genişler.
-- **Karar:** Prod profilinde key yoksa fail-fast (`IllegalStateException("jwt.rsa.* must be configured in prod")`).
-- **Durum:** ÇÖZÜLDÜ (2026-07-24). Refactor Faz A. `RsaKeys.resolve(properties, failIfUnconfigured)` — prod profilinde (`JwtConfig` `Environment.acceptsProfiles(Profiles.of("prod"))`) key yoksa `IllegalStateException`. Dev/test ephemeral korunur. `RsaKeysTest` doğrular.
+**Prod RSA key sessiz ephemeral (P1)**
+- **Durum:** ÇÖZÜLDÜ. Prod profilinde key yoksa fail-fast (`IllegalStateException`).
 
 ### RISK-24
-**Access token cookie `Secure` değil (P1)**
-- **Bağlam:** `jwt.cookie-secure` default `false`, hiçbir YAML'da override yok → prod'da access token cookie `Secure` attribute'suz. HTTP düşürme/redirect/mixed content/internal network yollarında cookie cleartext gider. `SameSite=Lax` bunu engellemez.
-- **Karar:** `application-prod.yaml`'a `jwt.cookie-secure: true`. (Ek: `@Value` yerine `@ConfigurationProperties` daha temiz.)
-- **Durum:** ÇÖZÜLDÜ (2026-07-24). Refactor Faz A. `application-prod.yaml`'a `jwt.cookie-secure: true` (dev/test default `false`). `@Value` → `@ConfigurationProperties` taşınması Faz F'de.
+**Access cookie `Secure` değil (P1)**
+- **Durum:** ÇÖZÜLDÜ. `application-prod.yaml` `jwt.cookie-secure: true`.
 
 ### RISK-25
-**Token consumption race condition (P1)**
-- **Bağlam:** `TenantProvisioningService.verifyAndProvision` token'ı read-modify-write; iki eşzamanlı istek aynı token'la → ikisi de `isUsed()` kontrolünden geçer. `TenantVerificationToken` `GeneratedIdAuditEntity`'den → `@Version`/optimistic lock yok, pessimistic lock yok. Biri admin user insert'te unique constraint patlar ama `CREATE SCHEMA` + Flyway zaten implicit commit oldu → PROVISIONING Company yarım kalır.
-- **Karar:** Repository'ye `@Lock(LockModeType.PESSIMISTIC_WRITE) Optional<TenantVerificationToken> findByTokenForUpdate(String)` veya conditional UPDATE (`UPDATE ... SET used_at=now() WHERE token=? AND used_at IS NULL`, etkilenen satır 0 → `TENANT_TOKEN_ALREADY_USED`).
-- **Durum:** ÇÖZÜLDÜ (2026-07-24). Refactor Faz C. Conditional UPDATE seçildi (`PESSIMISTIC_WRITE` yerine — H2 + PG portable, lock-timeout tuning yok, single-column write read-modify-write window barındırmaz). `TenantVerificationTokenRepository.claimToken(token, now)` `@Modifying @Query("UPDATE ... SET usedAt = :now WHERE token = :token AND usedAt IS NULL")` → `int` row count. `verifyAndProvision` akışı: SELECT validate (exists/expired/company-status) → `claimToken` → 0 row → `TENANT_TOKEN_ALREADY_USED` (geçerli kodların — `INVALID`/`EXPIRED` — korunması için claim öncesi SELECT şart). In-memory entity sync için `verification.setUsedAt(claimedAt)`; eski `tokenRepository.save(verification)` kaldırıldı (claim zaten DB'ye yazdı). **Test:** `TenantProvisioningServiceTest.verifyAndProvision_concurrentClaimLost_throwsAlreadyUsed` (claimToken 0 döner → ALREADY_USED, hiç provisioning adımı çalışmaz); mevcut `validToken`/`usedToken`/`expiredToken`/`provisionSystemTenant` test'leri claimToken stub'ı ile uyumlandı. **Doğrulama kapsamı:** unit (Mockito) — gerçek concurrent race davranışı Testcontainers (RISK-20 altyapısı) ile ayrı doğrulanabilir; şimdilik atomic UPDATE'in DB-semantiği (single-row conditional write) invariant'ı yeterli.
+**Token consumption race (P1)**
+- **Durum:** ÇÖZÜLDÜ. `claimToken` conditional UPDATE (`SET usedAt WHERE token AND usedAt IS NULL`, 0 row → `TENANT_TOKEN_ALREADY_USED`) — H2+PG portable, PESSIMISTIC_WRITE tercih edildi.
 
 ### RISK-26
-**Mid-transaction TenantContext switch (ÇÖZÜLDÜ)**
-- **Bağlam:** `TenantProvisioningService.createAdminUser` `verifyAndProvision` transaction içinde tenant context switch ediyor (`setCurrentTenant(schemaName)`). Transaction başında `public` şeması connection'ı edinir (DELAYED_ACQUISITION_AND_HOLD), sonra User insert tenant şemasına beklenir ama Hibernate connection'ı tutuyorsa yanlış `search_path`'e yazma riski → `public.t_users` yok → "relation does not exist". **H2 tek-şema olduğu için test yakalamıyor** (RISK-20 ile ilişkili).
-- **Karar:** İki adımlı düzeltme uygulandı:
-  1. `createAdminUser` `@Transactional(propagation = Propagation.REQUIRES_NEW)` + self-proxy (`ObjectProvider<TenantProvisioningService> self`) ile ayrı transaction'da çalışır. RbacSeeder pattern'i (ObjectProvider self).
-  2. **Kritik:** `setCurrentTenant` `verifyAndProvision`'da `self.getObject().createAdminUser(...)` çağrısından **ÖNCE** yapılır. `CurrentTenantIdentifierResolver` Hibernate session açıldığında (transaction başında) tenant identifier'ı çözer — session açıldığında context set değilse "public" cache'lenir, gövdedeki `setCurrentTown` çok geç kalır.
-- **Durum:** ÇÖZÜLDÜ (2026-07-24). Gerçek PostgreSQL + Docker ile doğrulandı: `SystemAdminBootstrapRunner` başarılı, system tenant ACTIVE, 12 tablo migrate edildi, admin user + RBAC seed tamam. 112 test yeşil.
-- **Etki:** `createAdminUser` artık her zaman doğru tenant schema'sında çalışır. RISK-20 (gerçek PG test altyapısı) çözülünce daha geniş çaplı doğrulama yapılacak; ama bu spesifik bug kapandı.
+**Mid-tx TenantContext switch (P1)**
+- **Durum:** ÇÖZÜLDÜ. `createAdminUser` `REQUIRES_NEW` + self-proxy; `setCurrentTenant` çağrıdan ÖNCE (resolver session açılışında okur). Gerçek PG'de doğrulandı.
 
 ### RISK-27
-**N+1 — `findAll` userProfile/userAccount (P1)**
-- **Bağlam:** `UserRepository.findAll` `@EntityGraph({"roles","groups"})` — `userProfile`/`userAccount` eksik. `UserService.toResponse` ikisine de erişir (`profile.getFirstName()`, `user.getUserAccount().isEnabled()`). Inverse `@OneToOne` LAZY bilinen sorunlu alan + sayfa başına N user → 2N ekstra SELECT. Multi-tenant'ta her sorgu tenant schema geçişi → maliyet katlanır.
-- **Karar:** EntityGraph'a `userProfile`, `userAccount` ekle.
-- **Durum:** ÇÖZÜLDÜ (2026-07-24). Refactor Faz D. `UserRepository.findAll(Pageable)` `@EntityGraph`'ı `{"roles","groups","userProfile","userAccount"}` oldu (roles/groups `Set` → multiple-bag yok). N+1 (sayfa başına 2N ekstra SELECT) tek sorguda join'e indi. `UserControllerTest.listReturnsUsersWithRolesAndGroups` artık firstName/lastName/enabled da assert ediyor (profile+account fetch).
+**N+1 (`findAll` profile/account) (P1)**
+- **Durum:** ÇÖZÜLDÜ. EntityGraph setleri (liste + `findById`'lar) — user listesi artık `UserDirectoryView` read model üzerinden (N+1 yapısal olarak yok).
 
 ### RISK-28
 **TOCTOU uniqueness → 500 (P2)**
-- **Bağlam:** `UserService.create`, `RoleService.create/update`, `GroupService.create/update`, `TenantProvisioningService.validateUnique` — hepsi check-then-save pattern'ı. Concurrent duplicate → DB unique constraint → `DataIntegrityViolationException` → 500 `internal_error` (temiz `*_TAKEN` 400 değil).
-- **Karar:** `GlobalExceptionHandler`'a `DataIntegrityViolationException` handler + constraint name → `ErrorCode` map; veya her create try/catch + `BusinessException`.
-- **Durum:** ÇÖZÜLDÜ (2026-07-24). Refactor Faz D. `GlobalExceptionHandler.handleDataIntegrity` Hibernate `ConstraintViolationException.getConstraintName()`'i çıkarıp substring haritasıyla `*_TAKEN` koduna map'ler (`users_email`→USER_EMAIL_TAKEN vb.); bilinmeyen → `business_error`. **Ana kazanç 500→400 garantisi.** Service `existsBy*` check'leri korundu (defense-in-depth; handler concurrent race'i kapatır). Taşınabilir substring eşleştirme (PG index adları + H2 farkı tolere). `GlobalExceptionHandlerTest` (unit, DB'siz) doğrular.
+- **Durum:** ÇÖZÜLDÜ. `DataIntegrityViolationException` handler + constraint-name substring map → 400 `*_TAKEN`; bilinmeyen → `business_error`. Service `existsBy*` check'leri defense-in-depth olarak kalır.
 
 ### RISK-29
-**`MethodArgumentTypeMismatchException` → 500 (P1)**
-- **Bağlam:** `GET /api/v1/users/not-a-uuid` (malformed UUID) `GlobalExceptionHandler` catch-all'a düşer → 500 `internal_error`. Client hatası, 400 olmalı. `GlobalExceptionHandler`'da handler yok. Ayrıca `ConstraintViolationException` ve `MissingServletRequestParameterException` da eksik.
-- **Karar:** `GlobalExceptionHandler`'a bu üç handler'ı ekle (→ 400 `validation_error`).
-- **Durum:** ÇÖZÜLDÜ (2026-07-24). Refactor Faz D. `handleTypeMismatch` (MethodArgumentTypeMismatchException — malformed UUID), `handleMissingParam` (MissingServletRequestParameterException), `handleConstraintViolation` (jakarta ConstraintViolationException — defansif, şu an `@Validated` yok) eklendi; hepsi → 400 `validation_error`. ConstraintViolation invalid-value'ları maskeli. `GlobalExceptionHandlerTest` + `UserControllerTest.getMalformedUuidReturns400Not500` doğrular.
+**Malformed param → 500 (P1)**
+- **Durum:** ÇÖZÜLDÜ. `MethodArgumentTypeMismatchException` / `MissingServletRequestParameterException` / `ConstraintViolationException` → 400 `validation_error`.
 
 ### RISK-30
-**Verification token plain-text + stale retention (P2)**
-- **Bağlam:** `TenantVerificationToken.token` plain-text DB'de (`UUID.randomUUID()`), `LogVerificationSender` log'da. DB sızıntısında unused token replay edilebilir. Expired/used token'lar için purge job yok → `adminPasswordHash` (pepper'lı ama yine de) kalıcı.
-- **Karar:** Token hash-at-rest (DB'ye `SHA-256(token)`, lookup hash'le) + scheduled purge job (expired + used) + `adminPasswordHash` consume sonrası null.
-- **Durum:** Açık. Refactor Faz E.
+**Verification token plain-text + stale retention (P2) — AÇIK**
+- **Bağlam:** `TenantVerificationToken.token` plain-text DB'de; unused token DB leak'inde replay edilebilir; expired/used token purge yok; `adminPasswordHash` consume sonrası kalıyor.
+- **Karar:** Token hash-at-rest (SHA-256) + scheduled purge job + `adminPasswordHash` null'lama.
+- **Durum:** Açık — provisioning akışına ve migration'a dokunuyor; SMTP/user-lifecycle fazıyla birlikte değerlendirilmeli (ROADMAP).
 
 ### RISK-31
-**K-21 + DELETE endpoint test coverage (P1)**
-- **Bağlam:** `/api/v1/auth/company/register` (202), `/verify`, `/suggest-subdomain` için HTTP-level test yok — sadece `TenantProvisioningServiceTest` (pure Mockito). `@Pattern`, response contract, 202/200 distinction doğrulanmamış. DELETE endpoint'leri dahil çoğu `{id}/PUT` için 401/403 test eksik (sadece `deleteReturns204` happy path var).
-- **Karar:** Controller integration testleri (Faz B test altyapısıyla birlikte).
-- **Durum:** ÇÖZÜLDÜ (2026-07-24). Refactor Faz B. `AuthCompanyControllerTest`: `POST /company/register` (202 + contract + `@Pattern` subdomain validation), `POST /company/suggest-subdomain` (200 + Türkçe fold). DELETE 401 testleri (user/role/group controllers). `verify` mutlu-yolu gerçek PG gerektirdiğinden `CrossTenantIsolationTest` ile; token-error kodları `TenantProvisioningServiceTest` ile kapsanır.
+**K-21 HTTP test coverage (P1)**
+- **Durum:** ÇÖZÜLDÜ. `AuthCompanyControllerTest` (register 202/contract/pattern, suggest-subdomain) + DELETE 401 testleri.
 
 ### RISK-32
-**`PlatformCompanyService.updateStatus` state-machine'siz (P2)**
-- **Bağlam:** Her `CompanyStatus` → her `CompanyStatus` geçişi mümkün (TERMINATED→ACTIVE yeniden canlandırma, ACTIVE→PROVISIONING geri alma, PROVISIONING→ACTIVE schema/admin olmadan — login kırılır).
-- **Karar:** `CompanyStatus.canTransitionTo()` veya `EnumSet` allowed-transitions; `updateStatus` doğrula, geçersizse `BUSINESS_ERROR`.
-- **Durum:** ÇÖZÜLDÜ (2026-07-24). Refactor Faz E. `CompanyStatus.canTransitionTo` `EnumSet` tablosuyla: ACTIVE→{SUSPENDED,TERMINATED}, SUSPENDED→{ACTIVE,TERMINATED}; PROVISIONING/TERMINATED terminal (PROVISIONING sadece verify akışıyla biter). `PlatformCompanyService.updateStatus` geçersiz geçişi `business_error` (400) ile reddeder. `PlatformCompanyControllerTest.illegalStatusTransitionReturns400` doğrular.
+**`updateStatus` state-machine'siz (P2)**
+- **Durum:** ÇÖZÜLDÜ. `CompanyStatus.canTransitionTo` (ACTIVE→{SUSPENDED,TERMINATED}, SUSPENDED→{ACTIVE,TERMINATED}; PROVISIONING/TERMINATED terminal); geçersiz geçiş 400.
 
 ### RISK-33
-**AuditorAware hardcoded "system" authenticated yazımlarda (P2)**
-- **Bağlam:** RISK-3 aynı sorun, ama authenticated admin işlemlerinde (`UserService`, `RoleService`, `GroupService`, `changePassword`) gerçek `userId` kullanılmıyor. Signup/provisioning için beklenir ama admin CRUD için değil.
-- **Karar:** `AuditorAware` `SecurityContextHolder.getContext().getAuthentication().getPrincipal()` → `CustomUserDetails.getUserId()`, fallback `"system"` (signup background). RISK-3'ü kapatır.
-- **Durum:** ÇÖZÜLDÜ (2026-07-24). Refactor Faz E. `MultiTenancyJpaConfig.auditorAwareProvider` SecurityContext → `CustomUserDetails.getUserId()` okur; principal yoksa `"system"` fallback (signup/provisioning/startup). `AuditingTest` her iki yolu da doğrular. [RISK-3](#risk-3)'ü kapatır.
+**AuditorAware authenticated yazımlarda (P2)**
+- **Durum:** ÇÖZÜLDÜ. SecurityContext userId + `"system"` fallback; RISK-3'ü kapatır.
 
 ### RISK-34
-**Spring Boot 4 deprecated starter POM'ları (P2)**
-- **Bağlam:** SB4 modularizasyonu ile bazı starter'lar deprecated ("will be removed in a future release" — resmi migration guide): `spring-boot-starter-oauth2-resource-server` → `spring-boot-starter-security-oauth2-resource-server`, `spring-boot-starter-web` → `spring-boot-starter-webmvc`. Flyway için sadece `org.flywaydb:flyway-core` yerine `spring-boot-starter-flyway` öneriliyor. Ayrıca `HttpMessageConverters` deprecated (SB4), `@JsonComponent`→`@JacksonComponent` (Jackson 3).
-- **Karar:** Deprecated starter'ları yenileriyle değiştir; custom `HttpMessageConverters` bean varsa `ServerHttpMessageConvertersCustomizer`'a geçir.
-- **Durum:** Açık. Refactor Faz E.
+**SB4 deprecated starter POM'ları (P2) — AÇIK**
+- **Bağlam:** SB4 modularizasyonu ile deprecated: `oauth2-resource-server`→`security-oauth2-resource-server`, `web`→`webmvc`, flyway için `spring-boot-starter-flyway`; ayrıca `HttpMessageConverters` deprecated (SB4).
+- **Durum:** Açık — build-risk; ayrı değerlendirilir (bilinçli erteli).
 
 ### RISK-35
-**Last-admin lockout — hiçbir write path'te self-delete / son-admin koruması yok (P0)**
-- **Bağlam:** Bir tenant admin'i kendisini soft-delete etti → tenant'ta sıfır admin-capable user kaldı; yönetecek kimse yok (gerçek olay, DB reset gerektirdi). `UserService.delete/update/setRoles/setGroups`, `RoleService.delete/setPermissions/setParents`, `GroupService.update/delete/setRoles/setMembers` — 11 path'in hiçbirinde aktör-vs-hedef veya son-admin kontrolü yoktu. Yan bulgular: (1) `AuthService.login` `enabled` kontrolü yapmıyordu — disabled user doğru şifreyle token alabiliyordu; (2) `UserService.update(enabled=false)` ve `delete` session revoke etmiyordu — silinen/engellenen kullanıcının access token'ı TTL'ine kadar yaşıyordu.
-- **Karar:**
-  - **Admin-capable tanımı:** effective role closure'ı (direct + active-group + parent inheritance) içinde `all_permissions=true` rolü bulunan user. Rol adı "Admin" değil (seed konvansiyonu), spesifik permission da değil. Disabled (`enabled=false`) user'lar invariant'a sayılmaz → son AKTİF admin disable edilemez.
-  - **Self-delete koşulsuz yasak:** aktör userId == hedef userId → 409 (`self_delete_forbidden`), başka admin olsa bile.
-  - Platform-level kurtarma endpoint'i kapsam dışı (ayrı gelecek çalışma).
-  - `LastAdminGuard` (`backend/security/`): `assertNotSelf` (SecurityContext aktörü) + `assertActiveAdminExists` (post-mutation; JPQL auto-flush pending değişiklikleri görür). Admin-closure: flag rolleri + `t_role_parents` üzerinden AŞAĞI BFS (`findChildRoleIds` — admin rolünden inherit eden rol de admin-capable) + tek exists sorgusu (`existsEnabledByRoleIds`: enabled + direct/active-group; `@SQLRestriction` soft-deleted eler). Logic-only, migration YOK (RISK-16 tetiklenmedi).
-  - **Side-fix 1:** login doğru şifre SONRASI `enabled` kontrolü (enumeration önleme — `auth_account_disabled` 401).
-  - **Side-fix 2:** `update(enabled=false)` ve `delete` artık `SessionRevocationService.revokeUser` çağırıyor (token'lar anında düşer).
-  - Ordering: guard revoke'dan ÖNCE → reddedilen işlem Redis tarafında refresh-token hasarı bırakmaz; role/group delete'te holder id'leri soft-delete ÖNCESİ çözülür.
-  - Bonus (latent bug surfaced): role/group soft-delete, kendisine hâlâ referans veren managed `User.roles`/`User.groups` koleksiyonları nedeniyle flush'ta `TransientPropertyValueException` (500) atabiliyordu. Delete artık önce join satırlarını koleksiyon mutasyonuyla temizliyor (`findUsersByRole`/`findGroupsByRole`/`findGroupMembers`), orphan join satırları da kalmıyor.
-  - Frontend: aktörün kendi satırında/sayfasında Delete butonu gizli (`UsersPage`/`UserDetailPage`, `user.id !== currentUserId`); 409 mesajları mevcut global toast ile gelir.
-- **Durum:** ÇÖZÜLDÜ (2026-08-15). 324 test yeşil (H2). Yeni `ErrorCode`'lar: `last_admin_required` (409), `self_delete_forbidden` (409), `auth_account_disabled` (401). Controller testleri: son admin delete/disable/role-boşaltma/group-üyelik-çekme → 409; ikinci admin varken → 204; self-delete (başka admin olsa bile) → 409; disabled admin invariant'a sayılmaz; disabled login → 401. Dosya:ref — `security/LastAdminGuard.java`, `UserRepository.existsEnabledByRoleIds`, `RoleRepository.findChildRoleIds`, `UserService.java` (delete/update/setRoles/setGroups), `RoleService.delete`, `GroupService.delete`.
+**Last-admin lockout (P0)**
+- **Karar:** `LastAdminGuard` — self-delete koşulsuz 409 (`self_delete_forbidden`); post-mutation ≥1 enabled admin-capable user (admin-closure = `all_permissions` flag rolleri + `t_role_parents` aşağı-BFS). 11 write path'e wired; guard revoke'dan önce (reddedilen işlem Redis hasarı bırakmaz). Side-fix'ler: login `enabled` kontrolü (401 `auth_account_disabled`), disable/delete anında token revoke.
+- **Durum:** ÇÖZÜLDÜ (2026-08-15).
 
 ### RISK-36
 **RbacSeeder startup privilege escalation (P0)**
-- **Bağlam:** `RbacSeeder` her restart'ta `findByRolesEmpty` ile rol'süz tüm kullanıcıları bulup `all_permissions` bayraklı `Admin` rolüne atıyordu (provisioning admin'ini garanti altına alma niyetiyle). Kasıtlı olarak yetkisiz bırakılmış bir kullanıcı, uygulamanın her restart'ında sessizce tam admin yetkisine yükseliyordu. `SystemAdminBootstrapRunner`'daki system admin ataması da bu örtük yola bağımlıydı.
-- **Karar:** Seeder startup'ta ASLA kullanıcı rol ataması yapmaz; Admin yalnızca `TenantProvisioningService.createAdminUser` içinden explicit `RbacSeeder.assignAdminTo(user)` çağrısıyla, tenant provisioning'i sırasında verilir. `findByRolesEmpty` repository metodu kaldırıldı (dangling reference yok).
-- **Durum:** ÇÖZÜLDÜ (2026-08-16). `RbacSeederTest` regresyonu: seed sonrası rol'süz kullanıcı rol'süz kalır; provisioning yeni admin'e Admin atar. Yan düzeltmeler aynı sette: (1) aktif `lockedUntil` penceresi artık refresh'te de bloklu (`CustomUserDetails.isEffectivelyNonLocked` — önceden kilitli hesap 15 dk boyunca refresh ile yeni access token basabiliyordu); (2) `RedisRefreshTokenStore.revoke` rotasyon zincirini (`rotatedTo`) takip ediyor — rotate edilmiş token ile logout, halef token'ı da öldürüyor (logout↔silent-refresh yarışı).
-- **P2'ler ÇÖZÜLDÜ (2026-08-23, "deliberate Redis outage behavior" seti):** (1) `InMemoryRefreshTokenStore.revoke` artık `rotatedTo` zincirini takip ediyor (Redis paritesi — visited-set guard); (2) Redis kesintisi davranışı bilinçli hale geldi: rate-limit + blacklist **fail-open** (connection exception artık yakalanıyor — önceden exception 500'e düşüyordu), `RedisRefreshTokenStore`'da `rotate` → temiz 401 `Unknown`, session list/revoke → boş/false best-effort; yalnızca `issue` fail-closed kalır ve `GlobalExceptionHandler` `DataAccessException` → **503 `service_unavailable`** (yeni ErrorCode) ile mapler. Kalan (bilinçli, kabul): revoke zincir yürüyüşü Redis'te de atomik değil (Lua değil) — çoklu-instance yarış penceresi var, zarar scenaryosu sınırlı (çift logout). 505 test yeşil (H2). Dosya:ref — `security/ratelimit/RedisRateLimiter.java`, `security/RedisTokenBlacklistService.java`, `security/refresh/RedisRefreshTokenStore.java`, `security/refresh/InMemoryRefreshTokenStore.java`, `exception/GlobalExceptionHandler.java` (`handleDataAccess`), `exception/ErrorCode.java` (`SERVICE_UNAVAILABLE`).
+- **Karar:** Seeder startup'ta ASLA kullanıcı rol ataması yapmaz; Admin yalnızca provisioning sırasında explicit `assignAdminTo(user)` ile verilir. Yan düzeltmeler aynı sette: kilitli hesap refresh'te de bloklu (`isEffectivelyNonLocked`); `revoke` rotasyon zincirini (`rotatedTo`) takip ediyor (Redis + InMemory parite).
+- **Durum:** ÇÖZÜLDÜ (2026-08-16 + 2026-08-23 Redis-outage seti). Redis kesinti davranışı bilinçli: rate-limit + blacklist fail-open; `rotate`→temiz 401; session list/revoke→boş/false; yalnız `issue` fail-closed → 503 `service_unavailable`. Bilinçli kalan: revoke zincir yürüyüşü Redis'te atomik değil (çoklu-instance çift-logout yarışı, sınırlı zarar).
 
 ---
 
 ## Teknik Borç (DEBT-XX)
 
 ### DEBT-7
-**hashCode() bug (ÇÖZÜLDÜ)**
-- **Bağlam:** `BaseEntity` ve `GeneratedIdAuditEntity` `Objects.hash(getClass())` kullanıyor -> aynı tipteki tüm entity'lere aynı hash -> `Set<Role>` gibi koleksiyonlarda çakışma.
-- **Karar:** `hashCode()` ID baz alınacak şekilde düzeltilecek (her iki base sınıfta).
-- **Durum:** ÇÖZÜLDÜ (Epic 2.0.B). Uygulama: `id == null ? System.identityHashCode(this) : id.hashCode()`. Persist öncesi (id null) identity hash, persist sonrası ID-bazlı. RBAC'dan önce düzeltildi.
-- **Konvansiyon:** ID persist sırasında `null→UUID` değiştiği için yeni (transient) entity'yi persist **öncesinde** `HashSet`/`HashMap` anahtarı olarak kullanıp persist sonrası lookup yapmak güvenli değildir. Pratik kullanımda (DB'den yüklenen entity'ler) sorun yok.
+**`hashCode()` bug**
+- **Durum:** ÇÖZÜLDÜ. ID-bazlı (`id == null ? identityHashCode : id.hashCode()`). **Konvansyon:** transient (pre-persist) entity'yi `HashSet`/`HashMap` anahtarı yapıp persist sonrası lookup güvenli değil (ID `null→UUID` flip).
 
 ### DEBT-10
-**provisionTenant transaction'suz (KISMEN ÇÖZÜLDÜ)**
-- **Bağlam:** `TenantProvisioningService.provisionTenant()` ve `createAdminUser()` `@Transactional` değil. Kısmi write riski (DDL başarılı, JPA write fail -> yarım tenant).
-- **Karar:** Yazma işleri `@Transactional` (method-level) olacak; lookup'larda `readOnly=true`. K-21 ile birlikte çözüldü (`createPendingCompany` + `verifyAndProvision` her ikisi transactional).
-- **Durum:** KISMEN ÇÖZÜLDÜ (K-21 ile). `createPendingCompany` tam transactional (yalnız DB write). `verifyAndProvision` `@Transactional` işaretli ama `CREATE SCHEMA` PostgreSQL implicit commit nedeniyle transaction dışına kaçar — kısmi-write recovery idempotency ile sağlanır (`CREATE SCHEMA IF NOT EXISTS`, token `usedAt` guard). Tam transactional DDL PostgreSQL'de mümkün değil.
+**Provisioning transaction boundary**
+- **Durum:** KISMEN ÇÖZÜLDÜ. `createPendingCompany` tam transactional; `verifyAndProvision`'da `CREATE SCHEMA` PostgreSQL implicit commit → DDL tx dışına kaçar. Recovery idempotency ile (`IF NOT EXISTS`, token `usedAt` guard). Tam transactional DDL PostgreSQL'de mümkün değil.
 
 ---
 
 ## ID Şeması
 
-- **K-XX:** Mimari karar (Architecture decision). Stratejik yön.
-- **RISK-XX:** Tanımlanmış risk — azaltıcı eylem gerekli (mitigation).
-- **DEBT-XX:** Teknik borç — bilinen eksiklik, refactor bekliyor.
+- **K-XX:** Mimari karar — stratejik yön.
+- **RISK-XX:** Tanımlanmış risk — azaltıcı eylem gerekli.
+- **DEBT-XX:** Teknik borç — bilinen eksiklik.
 
-Yeni keşfedilen işler sonraki boş ID'yi alır. ID'ler değişmez. İptal edilen karar durumu "İptal" olarak güncellenir, silinmez (geçmiş iz için).
+Yeni işler sonraki boş ID'yi alır. ID'ler değişmez. İptal edilen karar durumu "İptal" olarak güncellenir, silinmez.

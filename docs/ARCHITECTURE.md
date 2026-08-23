@@ -1,6 +1,6 @@
 # Mimari
 
-ForgeSys — modüler çok-kiracılı (multi-tenant) SaaS platformu. Schema-per-tenant izolasyonu, UUID PK, soft-delete + optimistic locking, Spring Data auditing. Hibrit ürün modeli: built-in modüller (pm: Projects & Tasks bugün; Notes/Warehouse/Logistics planlı) + tenant custom app'leri (Notion-style App Builder, `apps` modülü). Bu doküman **mevcut sistemi** belgeler: auth (K-34), RBAC (K-26), audit (K-19), plan/modül sistemi (K-16) ve app builder (K-15) uygulanmış durumdadır; kalan epikler [`ROADMAP.md`](ROADMAP.md)'de.
+ForgeSys — modüler çok-kiracılı (multi-tenant) SaaS platformu. Schema-per-tenant izolasyonu, UUID PK, soft-delete + optimistic locking, Spring Data auditing. Hibrit ürün modeli: built-in modüller (pm: Projects & Tasks, apps: App Builder, notes — üçü aktif; Warehouse/Logistics planlı) + tenant custom app'leri (Notion-style App Builder, `apps` modülü). Bu doküman **mevcut sistemi** belgeler: auth (K-34), RBAC (K-26), audit/login/request log (K-19/K-27), plan/modül sistemi (K-16), app builder (K-15/K-42) ve metrics expose (K-43) uygulanmış durumdadır; kalan işler [`ROADMAP.md`](ROADMAP.md)'de.
 
 ## Sistem Bileşenleri
 
@@ -30,7 +30,7 @@ flowchart LR
     SB --> Redis
 ```
 
-**Dev:** Browser → Vite (`:3000`) → backend (`:8080`). **Prod:** Nginx gateway planlandı (Faz 1.5 — erteli), şu an Docker compose içinde tek app container.
+**Dev:** Browser → Vite (`:3000`) → backend (`:8080`). **Prod:** Nginx gateway planlandı (K-33 — erteli), şu an Docker compose içinde tek app container. CI (GitHub Actions) develop/main push'unda GHCR imajı basar (`:latest`/`:edge`); sunucuya deploy manuel. Prod'da management endpoint'leri ayrı portta (8081, internal-only — [K-43](DECISIONS.md#k-43)).
 
 ## HTTP Request Yaşam Döngüsü
 
@@ -98,8 +98,9 @@ flowchart TB
             TG1[t_groups]
             TJoin1[t_user_roles<br/>t_user_groups<br/>t_role_permissions<br/>t_group_roles<br/>t_role_parents]
             TAcc1[t_user_accounts<br/>t_user_profiles]
-            TMod1[t_projects<br/>t_tasks<br/>t_audit_logs<br/>t_login_history]
+            TMod1[t_projects<br/>t_tasks<br/>t_audit_logs<br/>t_login_history<br/>t_request_logs]
             TApps1[t_apps . t_app_properties<br/>t_app_records . t_app_record_values<br/>t_app_views]
+            TNotes1[t_notes<br/>t_note_categories]
         end
         subgraph T2[tenant_stark]
             TU2[t_users]
@@ -108,8 +109,9 @@ flowchart TB
             TG2[t_groups]
             TJoin2[t_user_roles<br/>t_user_groups<br/>t_role_permissions<br/>t_group_roles<br/>t_role_parents]
             TAcc2[t_user_accounts<br/>t_user_profiles]
-            TMod2[t_projects<br/>t_tasks<br/>t_audit_logs<br/>t_login_history]
+            TMod2[t_projects<br/>t_tasks<br/>t_audit_logs<br/>t_login_history<br/>t_request_logs]
             TApps2[t_apps . t_app_properties<br/>t_app_records . t_app_record_values<br/>t_app_views]
+            TNotes2[t_notes<br/>t_note_categories]
         end
     end
 ```
@@ -144,7 +146,9 @@ flowchart TB
 | `tenant_<sub>`   | `t_tasks`           | Task modülü (project-scoped)         | `tenant/V1.3__pm_projects_tasks.sql` |
 | `tenant_<sub>`   | `t_audit_logs`      | Audit trail (append-only, K-19)      | `tenant/V1.2__audit.sql` |
 | `tenant_<sub>`   | `t_login_history`   | Login denemeleri (append-only, K-19) | `tenant/V1.2__audit.sql` |
+| `tenant_<sub>`   | `t_request_logs`    | Request/trace log + high-risk maskeli body (K-19 katman 3 + K-27) | `tenant/V2__request_logs.sql` |
 | `tenant_<sub>`   | `t_apps` + 4        | App builder ailesi: `t_app_properties(config jsonb)`, `t_app_records`, `t_app_record_values(value jsonb, GIN)`, `t_app_views(config jsonb)` — `apps` modülü aktivasyonda düşer | `module/apps/V1__app_builder.sql` (per-module history `flyway_schema_history_mod_apps`, [K-15](DECISIONS.md#k-15)) |
+| `tenant_<sub>`   | `t_notes`, `t_note_categories` | Notes modülü (markdown; kategori FK `ON DELETE SET NULL`) — `notes` modülü aktivasyonda düşer | `module/notes/V1__notes.sql` (per-module history `flyway_schema_history_mod_notes`, [K-44](DECISIONS.md#k-44)) |
 
 > Refresh token'lar tabloda DEĞİL — Redis-first (K-34, [DECISIONS](DECISIONS.md#k-34)); eski `t_refresh_tokens` ölü tablosu K-36 temizliğinde kaldırıldı. Migration'ların tamamı pre-1.0.0 squash'ı ile alan-bazlı `V1.x` baseline ailesine indirildi ([K-36](DECISIONS.md#k-36)) — yeni migration'lar `V2`'den devam eder.
 
@@ -242,11 +246,14 @@ classDiagram
     class Task
     class AuditLog
     class LoginHistory
+    class RequestLog
     class App
     class AppProperty
     class AppRecord
     class AppRecordValue
     class AppView
+    class Note
+    class NoteCategory
 
     BaseEntity <|-- Company
     BaseEntity <|-- User
@@ -259,12 +266,15 @@ classDiagram
     BaseEntity <|-- AppProperty
     BaseEntity <|-- AppRecord
     BaseEntity <|-- AppView
+    BaseEntity <|-- Note
+    BaseEntity <|-- NoteCategory
     SoftDeleteAuditEntity <|-- UserAccount
     SoftDeleteAuditEntity <|-- UserProfile
     GeneratedIdAuditEntity <|-- TenantVerificationToken
     GeneratedIdAuditEntity <|-- Plan
     GeneratedIdAuditEntity <|-- AuditLog
     GeneratedIdAuditEntity <|-- LoginHistory
+    GeneratedIdAuditEntity <|-- RequestLog
     GeneratedIdAuditEntity <|-- AppRecordValue
 ```
 
@@ -273,7 +283,7 @@ classDiagram
 - `@SQLDelete` her concrete entity'de ayrı (table-specific `UPDATE ... SET is_deleted = true, version = version + 1`).
 - `UserAccount`/`UserProfile` `@MapsId` ile `User`'a shared PK (gereksiz FK yok).
 - Tüm ID'ler UUID (`GenerationType.UUID`). Tablo adları `t_` prefix'li. Constraint'ler `idx_*`, `uk_*`, `fk_*`.
-- `Subscription`/`TenantModule` (public şema) `BaseEntity`; `UserDirectoryView` read model'i (`@Immutable @Subselect`) hiyerarşi dışıdır. `AppRecordValue` soft-delete'siz (`GeneratedIdAuditEntity`) — clear = satır silinir (K-15).
+- `Subscription`/`TenantModule` (public şema) `BaseEntity`; `UserDirectoryView` read model'i (`@Immutable @Subselect`) hiyerarşi dışıdır. `AppRecordValue` ve `RequestLog` soft-delete'siz (`GeneratedIdAuditEntity`) — value clear = satır silinir (K-15); request log append-only (K-27).
 
 > Detaylar: [`persistence/AGENTS.md`](../persistence/AGENTS.md)
 
@@ -291,6 +301,7 @@ Profile-based config. Aktif profil `SPRING_PROFILES_ACTIVE` (default: `dev`).
 - **Test profili istisnası:** `ddl-auto=create-drop` + `flyway.enabled=false`. Spring Boot 4.1 + Flyway 12'de `FlywayAutoConfiguration` H2 dialect algılamıyor (`flyway-database-h2` BOM'da yok), Flyway bean oluşturulmuyor. Test'ler Hibernate'in entity metadata'dan şema üretmesine güveniyor. Gerçek Flyway test'i [`ROADMAP.md`](ROADMAP.md) Testcontainers kapsamında (Faz 3.X).
 - H2 `MODE=PostgreSQL`'de çalışır → build Docker gerektirmez.
 - H2 sınırları: `JSONB`, partial index, `SET search_path` desteklenmez → multi-tenancy akışı H2'de test edilemez, sadece context yükü doğrulanır.
+- **Actuator/metrics ([K-43](DECISIONS.md#k-43)):** dev/test — same-port, `health,info,metrics,prometheus` (scrape auth'suz). Prod — ayrı management portu **8081** (compose'da `expose`-only, host'a publish edilmez; management child context'inde security zinciri uygulanmaz → internal ağdan auth'suz scrape) + daraltılmış exposure (`health,info,prometheus`). Custom gauge: `forgesys.tenants.active`.
 
 ## İlgili Dokümanlar
 

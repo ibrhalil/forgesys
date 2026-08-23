@@ -98,7 +98,8 @@ src/
                            # useClientPagination, useDebouncedValue
   store/                   # zustand: authStore (session + authorities), tenantStore (X-Tenant-ID),
                            # localeStore (sf_locale, TR/EN)
-  test/                    # Vitest suite (K-39): setup.ts + api/LoginPage/DataTable/Modal/useListPageState tests
+  test/                    # Vitest suite (K-39): setup.ts + feature/primitive tests (api refresh, LoginPage,
+                            # DataTable, Modal, useListPageState, apps/notes feature pages — see src/test/)
   types/index.ts           # shared-only types: RBAC summaries, ApiErrorResponse, pagination
 ```
 
