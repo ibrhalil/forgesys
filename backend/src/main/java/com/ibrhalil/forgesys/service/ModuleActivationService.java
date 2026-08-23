@@ -220,8 +220,7 @@ public class ModuleActivationService {
         if (!projectRepository.findDefaultIdsByType(type).isEmpty()) {
             return;
         }
-        Project project = projectRepository.findByName(DEFAULT_PROJECT_NAME)
-                .filter(candidate -> candidate.getType() == type)
+        Project project = projectRepository.findFirstByNameAndTypeOrderByName(DEFAULT_PROJECT_NAME, type)
                 .orElseGet(Project::new);
         if (project.getId() == null) {
             project.setName(DEFAULT_PROJECT_NAME);

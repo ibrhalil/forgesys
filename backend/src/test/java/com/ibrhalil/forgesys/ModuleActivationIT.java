@@ -180,6 +180,27 @@ class ModuleActivationIT {
     }
 
     /**
+     * K-45 step 5 on real PostgreSQL: activating the apps module runs
+     * {@code module/apps/V1+V2} — t_apps gains its {@code project_id} (NOT NULL) and
+     * the tenant's default APPS container ("Genel") exists.
+     */
+    @Test
+    void appsActivationScopesAppsAndEnsuresDefaultProject() throws Exception {
+        moduleActivationService.activateForCompany(company, ModuleDefinition.APPS);
+
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement();
+             ResultSet rs = statement.executeQuery(
+                     "SELECT count(*) FROM " + schemaName + ".t_projects"
+                             + " WHERE project_type = 'APPS' AND is_default = true AND is_deleted = false")) {
+            assertThat(rs.next()).isTrue();
+            assertThat(rs.getInt(1)).as("exactly one default APPS container").isEqualTo(1);
+        }
+        assertThat(columnNullable("t_apps", "project_id")).as("t_apps.project_id NOT NULL").isEqualTo("NO");
+        assertThat(tenantModuleRepository.findByCompanyIdAndModuleKey(company.getId(), "apps")).isPresent();
+    }
+
+    /**
      * A module with its own Flyway location migrates against a module-scoped history
      * table ({@code flyway_schema_history_mod_demo}) — isolated from the core tenant
      * history, versions never collide. Uses a Mockito-mocked {@link ModuleDefinition}

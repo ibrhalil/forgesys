@@ -111,7 +111,7 @@ public class ProjectService {
     @Transactional
     @AuditLog(action = "project_created", entityType = "Project", entityId = "#result.id", entityName = "#result.name")
     public ProjectResponse create(ProjectRequest request) {
-        if (projectRepository.existsByName(request.name())) {
+        if (projectRepository.existsByNameAndType(request.name(), request.type())) {
             throw new BusinessException(ErrorCode.PROJECT_NAME_TAKEN, "Project name already exists: " + request.name());
         }
         assertParentAcceptable(request.parentProjectId(), null);
@@ -129,7 +129,8 @@ public class ProjectService {
     @AuditLog(action = "project_updated", entityType = "Project", entityId = "#result.id", entityName = "#result.name")
     public ProjectResponse update(UUID id, ProjectRequest request) {
         Project project = getProjectOrThrow(id);
-        if (!project.getName().equals(request.name()) && projectRepository.existsByName(request.name())) {
+        if (!project.getName().equals(request.name())
+                && projectRepository.existsByNameAndTypeAndIdNot(request.name(), request.type(), id)) {
             throw new BusinessException(ErrorCode.PROJECT_NAME_TAKEN, "Project name already exists: " + request.name());
         }
         boolean typeChange = request.type() != project.getType();

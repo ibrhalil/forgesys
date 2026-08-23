@@ -9,11 +9,14 @@ import com.ibrhalil.forgesys.dto.AppResponse;
 import com.ibrhalil.forgesys.dto.AppViewConfigDto;
 import com.ibrhalil.forgesys.dto.AppViewRequest;
 import com.ibrhalil.forgesys.dto.AppViewResponse;
+import com.ibrhalil.forgesys.dto.FilterCriteria;
 import com.ibrhalil.forgesys.entity.App;
 import com.ibrhalil.forgesys.entity.AppProperty;
 import com.ibrhalil.forgesys.entity.AppView;
 import com.ibrhalil.forgesys.entity.AuditEntity_;
 import com.ibrhalil.forgesys.entity.App_;
+import com.ibrhalil.forgesys.entity.Project;
+import com.ibrhalil.forgesys.entity.ProjectType;
 import com.ibrhalil.forgesys.entity.PropertyType;
 import com.ibrhalil.forgesys.exception.BusinessException;
 import com.ibrhalil.forgesys.exception.ErrorCode;
@@ -21,9 +24,11 @@ import com.ibrhalil.forgesys.exception.ResourceNotFoundException;
 import com.ibrhalil.forgesys.persistence.repository.AppPropertyRepository;
 import com.ibrhalil.forgesys.persistence.repository.AppRepository;
 import com.ibrhalil.forgesys.persistence.repository.AppViewRepository;
+import com.ibrhalil.forgesys.persistence.repository.ProjectRepository;
 import com.ibrhalil.forgesys.audit.AuditLog;
 import com.ibrhalil.forgesys.web.filter.FilterFieldSet;
 import com.ibrhalil.forgesys.web.filter.FilterFieldType;
+import com.ibrhalil.forgesys.web.filter.FilterOperator;
 import com.ibrhalil.forgesys.web.filter.FilterSpecifications;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -34,16 +39,20 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 /**
- * Custom app definition CRUD (K-15 / Epic 3.0.B): apps, their properties (columns) and
- * their views. Record (row) CRUD lives in {@link AppRecordService}. Plan limits are
- * soft-blocked on app creation ({@link PlanLimitService}); property/view counts are not
- * limited. Same TOCTOU posture as the other services: {@code existsBy*} pre-check +
+ * Custom app definition CRUD (K-15 / Epic 3.0.B, re-scoped by K-45): apps living in
+ * APPS-type project containers, their properties (columns) and their views. Record
+ * (row) CRUD lives in {@link AppRecordService}. Plan limits are soft-blocked on app
+ * creation ({@link PlanLimitService}) and stay TENANT-level (not per container); the
+ * flat list is the cross-container view ({@code ?projectId=} narrows it), writes
+ * without an explicit {@code projectId} land in the default APPS container. Same
+ * TOCTOU posture as the other services: {@code existsBy*} pre-check +
  * {@code DataIntegrityViolationException} constraint-map fallback (RISK-28).
  */
 @Service
@@ -57,6 +66,7 @@ public class AppBuilderService {
     public static final FilterFieldSet FILTER_FIELDS = FilterFieldSet.builder()
             .field(App_.NAME, FilterFieldType.STRING, true)
             .field(App_.DESCRIPTION, FilterFieldType.STRING, false)
+            .field(App_.PROJECT_ID, FilterFieldType.UUID, false)
             .field(AuditEntity_.CREATED_DATE, FilterFieldType.TEMPORAL, false)
             .field(AuditEntity_.UPDATED_AT, FilterFieldType.TEMPORAL, false)
             .build();
@@ -66,16 +76,29 @@ public class AppBuilderService {
     private final AppViewRepository viewRepository;
     private final AppViewConfigValidator viewConfigValidator;
     private final PlanLimitService planLimitService;
+    private final ProjectContainerSupport projectContainerSupport;
+    private final ProjectRepository projectRepository;
     private final AuditService auditService;
     private final ObjectMapper objectMapper;
 
     // ── apps ─────────────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
-    public Page<AppResponse> search(String q, Pageable pageable) {
+    public Page<AppResponse> search(String q, UUID projectId, Pageable pageable) {
+        List<FilterCriteria> filters = projectId == null ? List.of()
+                : List.of(new FilterCriteria(App_.PROJECT_ID, FilterOperator.EQ, List.of(projectId.toString())));
         Specification<App> spec = FilterSpecifications.from(FILTER_FIELDS,
-                StringUtils.hasText(q) ? q.trim() : null, List.of());
-        return appRepository.findAll(spec, pageable).map(this::toResponse);
+                StringUtils.hasText(q) ? q.trim() : null, filters);
+        Page<App> page = appRepository.findAll(spec, pageable);
+        Map<UUID, String> projectNames = resolveProjectNames(page.stream().map(App::getProjectId).toList());
+        return page.map(app -> toResponse(app, projectNames.get(app.getProjectId())));
+    }
+
+    /** Cross-container list narrowed to one APPS container (nested endpoint, K-45). */
+    @Transactional(readOnly = true)
+    public Page<AppResponse> searchInProject(UUID projectId, String q, Pageable pageable) {
+        projectContainerSupport.assertProject(ProjectType.APPS, projectId);
+        return search(q, projectId, pageable);
     }
 
     @Transactional(readOnly = true)
@@ -85,13 +108,27 @@ public class AppBuilderService {
                 .findAllByAppIdOrderByPositionAscNameAsc(id).stream().map(this::toResponse).toList();
         List<AppViewResponse> views = viewRepository
                 .findAllByAppIdOrderByPositionAscNameAsc(id).stream().map(this::toResponse).toList();
+        String projectName = resolveProjectNames(List.of(app.getProjectId())).get(app.getProjectId());
         return new AppDetailResponse(app.getId(), app.getName(), app.getDescription(), app.getIcon(),
-                properties, views);
+                app.getProjectId(), projectName, properties, views);
     }
 
     @Transactional
     @AuditLog(action = "app_created", entityType = "App", entityId = "#result.id", entityName = "#result.name")
     public AppResponse create(AppRequest request) {
+        Project target = projectContainerSupport.resolveTarget(ProjectType.APPS, request.projectId());
+        return createIn(target, request);
+    }
+
+    /** Nested create (K-45): the project must be an APPS container (404/409 otherwise). */
+    @Transactional
+    @AuditLog(action = "app_created", entityType = "App", entityId = "#result.id", entityName = "#result.name")
+    public AppResponse createInProject(UUID projectId, AppRequest request) {
+        Project target = projectContainerSupport.assertProject(ProjectType.APPS, projectId);
+        return createIn(target, request);
+    }
+
+    private AppResponse createIn(Project target, AppRequest request) {
         if (appRepository.existsByName(request.name())) {
             throw new BusinessException(ErrorCode.APP_NAME_TAKEN, "App name already exists: " + request.name());
         }
@@ -100,8 +137,9 @@ public class AppBuilderService {
         app.setName(request.name());
         app.setDescription(request.description());
         app.setIcon(request.icon());
+        app.setProjectId(target.getId());
         App saved = appRepository.save(app);
-        return toResponse(saved);
+        return toResponse(saved, target.getName());
     }
 
     @Transactional
@@ -111,11 +149,15 @@ public class AppBuilderService {
         if (!app.getName().equals(request.name()) && appRepository.existsByName(request.name())) {
             throw new BusinessException(ErrorCode.APP_NAME_TAKEN, "App name already exists: " + request.name());
         }
+        if (request.projectId() != null && !request.projectId().equals(app.getProjectId())) {
+            app.setProjectId(projectContainerSupport.assertProject(ProjectType.APPS, request.projectId()).getId());
+        }
         app.setName(request.name());
         app.setDescription(request.description());
         app.setIcon(request.icon());
         App saved = appRepository.save(app);
-        return toResponse(saved);
+        String projectName = resolveProjectNames(List.of(saved.getProjectId())).get(saved.getProjectId());
+        return toResponse(saved, projectName);
     }
 
     @Transactional
@@ -341,9 +383,26 @@ public class AppBuilderService {
                 .orElseThrow(() -> new ResourceNotFoundException("View not found: " + viewId));
     }
 
-    private AppResponse toResponse(App app) {
+    private AppResponse toResponse(App app, String projectName) {
         return new AppResponse(app.getId(), app.getName(), app.getDescription(), app.getIcon(),
-                app.getCreatedDate(), app.getUpdatedAt());
+                app.getProjectId(), projectName, app.getCreatedDate(), app.getUpdatedAt());
+    }
+
+    /** Batched project-name resolution for a page of apps (one query per page, no per-row lookups). */
+    private Map<UUID, String> resolveProjectNames(List<UUID> projectIds) {
+        LinkedHashMap<UUID, String> names = new LinkedHashMap<>();
+        for (UUID id : projectIds) {
+            if (id != null) {
+                names.put(id, null);
+            }
+        }
+        if (names.isEmpty()) {
+            return Map.of();
+        }
+        for (Project project : projectRepository.findAllById(names.keySet())) {
+            names.put(project.getId(), project.getName());
+        }
+        return names;
     }
 
     private AppPropertyResponse toResponse(AppProperty property) {

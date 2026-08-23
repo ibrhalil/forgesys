@@ -174,7 +174,8 @@ class ModuleActivationServiceTest {
     void ensureDefaultProject_createsForContentCollectionType() {
         when(projectRepository.findDefaultIdsByType(com.ibrhalil.forgesys.entity.ProjectType.NOTES))
                 .thenReturn(List.of());
-        when(projectRepository.findByName("Genel")).thenReturn(Optional.empty());
+        when(projectRepository.findFirstByNameAndTypeOrderByName("Genel",
+                com.ibrhalil.forgesys.entity.ProjectType.NOTES)).thenReturn(Optional.empty());
         when(projectRepository.save(any(com.ibrhalil.forgesys.entity.Project.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
 
@@ -207,7 +208,8 @@ class ModuleActivationServiceTest {
         existing.setType(com.ibrhalil.forgesys.entity.ProjectType.NOTES);
         when(projectRepository.findDefaultIdsByType(com.ibrhalil.forgesys.entity.ProjectType.NOTES))
                 .thenReturn(List.of());
-        when(projectRepository.findByName("Genel")).thenReturn(Optional.of(existing));
+        when(projectRepository.findFirstByNameAndTypeOrderByName("Genel",
+                com.ibrhalil.forgesys.entity.ProjectType.NOTES)).thenReturn(Optional.of(existing));
         when(projectRepository.save(any(com.ibrhalil.forgesys.entity.Project.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
 

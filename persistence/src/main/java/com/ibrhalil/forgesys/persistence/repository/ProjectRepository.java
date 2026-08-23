@@ -15,10 +15,14 @@ import java.util.UUID;
 @Repository
 public interface ProjectRepository extends JpaRepository<Project, UUID>, JpaSpecificationExecutor<Project> {
 
-    boolean existsByName(String name);
+    /** Per-type name check (K-45: each project type is its own naming namespace). */
+    boolean existsByNameAndType(String name, ProjectType type);
 
-    /** By exact live name — the default-container adoption lookup (K-45). */
-    Optional<Project> findByName(String name);
+    /** Per-type name check excluding the row being renamed. */
+    boolean existsByNameAndTypeAndIdNot(String name, ProjectType type, UUID id);
+
+    /** Default-container adoption lookup: a live same-named project of the type (K-45). */
+    Optional<Project> findFirstByNameAndTypeOrderByName(String name, ProjectType type);
 
     /**
      * Id of the per-type default container ("Genel", K-45) — at most one live row per

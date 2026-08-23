@@ -7,6 +7,8 @@ import com.ibrhalil.forgesys.entity.AppView;
 import com.ibrhalil.forgesys.entity.Company;
 import com.ibrhalil.forgesys.entity.CompanyStatus;
 import com.ibrhalil.forgesys.entity.Plan;
+import com.ibrhalil.forgesys.entity.Project;
+import com.ibrhalil.forgesys.entity.ProjectType;
 import com.ibrhalil.forgesys.entity.PropertyType;
 import com.ibrhalil.forgesys.entity.Subscription;
 import com.ibrhalil.forgesys.entity.SubscriptionStatus;
@@ -54,6 +56,8 @@ class AppControllerTest extends AbstractRbacWebTest {
     @Autowired CompanyRepository companyRepository;
     @Autowired SubscriptionRepository subscriptionRepository;
 
+    private Project defaultAppsProject;
+
     @BeforeEach
     void seedFreeSubscription() {
         Plan free = planRepository.findByKey("free").orElseGet(() -> {
@@ -77,6 +81,14 @@ class AppControllerTest extends AbstractRbacWebTest {
         subscription.setStatus(SubscriptionStatus.ACTIVE);
         subscription.setStartedAt(OffsetDateTime.now());
         subscriptionRepository.save(subscription);
+
+        // K-45: flat writes without an explicit projectId land in the default APPS container.
+        defaultAppsProject = new Project();
+        defaultAppsProject.setName("Genel-" + UUID.randomUUID());
+        defaultAppsProject.setType(ProjectType.APPS);
+        defaultAppsProject.setDefault(true);
+        entityManager.persist(defaultAppsProject);
+        entityManager.flush();
     }
 
     /** Performs the request as a tenant-context-bound user with the given authorities. */
@@ -148,7 +160,9 @@ class AppControllerTest extends AbstractRbacWebTest {
                         "apps:app:write")
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.name").value("CRM"))
-                .andExpect(jsonPath("$.icon").value("📊"));
+                .andExpect(jsonPath("$.icon").value("📊"))
+                .andExpect(jsonPath("$.projectId").value(defaultAppsProject.getId().toString()))
+                .andExpect(jsonPath("$.projectName").value(defaultAppsProject.getName()));
     }
 
     @Test
@@ -310,6 +324,7 @@ class AppControllerTest extends AbstractRbacWebTest {
     private App seedApp(String name) {
         App app = new App();
         app.setName(name);
+        app.setProjectId(defaultAppsProject.getId());
         entityManager.persist(app);
         entityManager.flush();
         return app;

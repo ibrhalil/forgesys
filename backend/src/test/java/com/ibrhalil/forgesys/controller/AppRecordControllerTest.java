@@ -8,6 +8,8 @@ import com.ibrhalil.forgesys.entity.AppRecordValue;
 import com.ibrhalil.forgesys.entity.Company;
 import com.ibrhalil.forgesys.entity.CompanyStatus;
 import com.ibrhalil.forgesys.entity.Plan;
+import com.ibrhalil.forgesys.entity.Project;
+import com.ibrhalil.forgesys.entity.ProjectType;
 import com.ibrhalil.forgesys.entity.PropertyType;
 import com.ibrhalil.forgesys.entity.Subscription;
 import com.ibrhalil.forgesys.entity.SubscriptionStatus;
@@ -56,6 +58,7 @@ class AppRecordControllerTest extends AbstractRbacWebTest {
     private AppProperty name;
     private AppProperty amount;
     private AppProperty stage;
+    private Project defaultAppsProject;
 
     @BeforeEach
     void seedFixtures() {
@@ -80,6 +83,13 @@ class AppRecordControllerTest extends AbstractRbacWebTest {
         subscription.setStatus(SubscriptionStatus.ACTIVE);
         subscription.setStartedAt(OffsetDateTime.now());
         subscriptionRepository.save(subscription);
+
+        // K-45: apps live in an APPS container; record tests don't care which one.
+        defaultAppsProject = new Project();
+        defaultAppsProject.setName("Apps " + UUID.randomUUID());
+        defaultAppsProject.setType(ProjectType.APPS);
+        entityManager.persist(defaultAppsProject);
+        entityManager.flush();
 
         app = seedApp("CRM");
         name = seedProperty(app.getId(), "Name", PropertyType.TEXT, null, true, 0);
@@ -252,6 +262,7 @@ class AppRecordControllerTest extends AbstractRbacWebTest {
     private App seedApp(String appName) {
         App seeded = new App();
         seeded.setName(appName + "-" + UUID.randomUUID());
+        seeded.setProjectId(defaultAppsProject.getId());
         entityManager.persist(seeded);
         entityManager.flush();
         return seeded;

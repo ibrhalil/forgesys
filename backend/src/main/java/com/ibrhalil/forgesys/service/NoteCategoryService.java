@@ -7,6 +7,7 @@ import com.ibrhalil.forgesys.dto.NoteCategoryResponse;
 import com.ibrhalil.forgesys.entity.NoteCategory;
 import com.ibrhalil.forgesys.entity.NoteCategory_;
 import com.ibrhalil.forgesys.entity.Project;
+import com.ibrhalil.forgesys.entity.ProjectType;
 import com.ibrhalil.forgesys.exception.BusinessException;
 import com.ibrhalil.forgesys.exception.ErrorCode;
 import com.ibrhalil.forgesys.exception.ResourceNotFoundException;
@@ -47,7 +48,7 @@ public class NoteCategoryService {
             .build();
 
     private final NoteCategoryRepository noteCategoryRepository;
-    private final NotesProjectSupport notesProjectSupport;
+    private final ProjectContainerSupport projectContainerSupport;
 
     @Transactional(readOnly = true)
     public Page<NoteCategoryResponse> search(String q, UUID projectId, Pageable pageable) {
@@ -61,7 +62,7 @@ public class NoteCategoryService {
     /** Container-scoped list (nested endpoint, K-45). */
     @Transactional(readOnly = true)
     public Page<NoteCategoryResponse> searchInProject(UUID projectId, String q, Pageable pageable) {
-        notesProjectSupport.assertNotesProject(projectId);
+        projectContainerSupport.assertProject(ProjectType.NOTES, projectId);
         return search(q, projectId, pageable);
     }
 
@@ -73,7 +74,7 @@ public class NoteCategoryService {
     @Transactional
     @AuditLog(action = "note_category_created", entityType = "NoteCategory", entityId = "#result.id", entityName = "#result.name")
     public NoteCategoryResponse create(NoteCategoryRequest request) {
-        Project target = notesProjectSupport.resolveTargetProject(request.projectId());
+        Project target = projectContainerSupport.resolveTarget(ProjectType.NOTES, request.projectId());
         return createIn(target, request);
     }
 
@@ -81,7 +82,7 @@ public class NoteCategoryService {
     @Transactional
     @AuditLog(action = "note_category_created", entityType = "NoteCategory", entityId = "#result.id", entityName = "#result.name")
     public NoteCategoryResponse createInProject(UUID projectId, NoteCategoryRequest request) {
-        Project target = notesProjectSupport.assertNotesProject(projectId);
+        Project target = projectContainerSupport.assertProject(ProjectType.NOTES, projectId);
         return createIn(target, request);
     }
 

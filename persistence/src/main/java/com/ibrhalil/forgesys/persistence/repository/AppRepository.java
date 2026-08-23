@@ -13,4 +13,7 @@ public interface AppRepository extends JpaRepository<App, UUID>, JpaSpecificatio
     boolean existsByName(String name);
 
     boolean existsByNameAndIdNot(String name, UUID id);
+
+    /** Whether the project holds any app — locks the project type while content exists (K-45). */
+    boolean existsByProjectId(UUID projectId);
 }

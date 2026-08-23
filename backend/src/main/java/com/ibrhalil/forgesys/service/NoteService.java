@@ -9,6 +9,7 @@ import com.ibrhalil.forgesys.entity.Note;
 import com.ibrhalil.forgesys.entity.NoteCategory;
 import com.ibrhalil.forgesys.entity.Note_;
 import com.ibrhalil.forgesys.entity.Project;
+import com.ibrhalil.forgesys.entity.ProjectType;
 import com.ibrhalil.forgesys.exception.BusinessException;
 import com.ibrhalil.forgesys.exception.ErrorCode;
 import com.ibrhalil.forgesys.exception.ResourceNotFoundException;
@@ -39,7 +40,7 @@ import java.util.stream.Collectors;
  * Note CRUD anchored to NOTES-type project containers (K-44, re-scoped by K-45).
  * The flat list is the cross-container view ({@code ?projectId=} narrows it); notes
  * are created through the nested project endpoints or the flat path defaulting to
- * the tenant's "Genel" container ({@link NotesProjectSupport}). Visibility stays
+ * the tenant's "Genel" container ({@link ProjectContainerSupport}). Visibility stays
  * tenant-wide ({@code notes:note:read} sees all tenant notes); personal/ABAC notes
  * remain deferred. Category/project names are resolved server-side, batched per
  * page (no per-row lookups).
@@ -62,7 +63,7 @@ public class NoteService {
     private final NoteRepository noteRepository;
     private final NoteCategoryRepository noteCategoryRepository;
     private final ProjectRepository projectRepository;
-    private final NotesProjectSupport notesProjectSupport;
+    private final ProjectContainerSupport projectContainerSupport;
 
     @Transactional(readOnly = true)
     public Page<NoteResponse> search(String q, UUID categoryId, Boolean pinned, UUID projectId, Pageable pageable) {
@@ -93,7 +94,7 @@ public class NoteService {
     @Transactional(readOnly = true)
     public Page<NoteResponse> searchInProject(UUID projectId, String q, UUID categoryId, Boolean pinned,
             Pageable pageable) {
-        notesProjectSupport.assertNotesProject(projectId);
+        projectContainerSupport.assertProject(ProjectType.NOTES, projectId);
         return search(q, categoryId, pinned, projectId, pageable);
     }
 
@@ -106,7 +107,7 @@ public class NoteService {
     @Transactional
     @AuditLog(action = "note_created", entityType = "Note", entityId = "#result.id", entityName = "#result.title")
     public NoteResponse create(NoteRequest request) {
-        Project target = notesProjectSupport.resolveTargetProject(request.projectId());
+        Project target = projectContainerSupport.resolveTarget(ProjectType.NOTES, request.projectId());
         return createIn(target, request);
     }
 
@@ -114,7 +115,7 @@ public class NoteService {
     @Transactional
     @AuditLog(action = "note_created", entityType = "Note", entityId = "#result.id", entityName = "#result.title")
     public NoteResponse createInProject(UUID projectId, NoteRequest request) {
-        Project target = notesProjectSupport.assertNotesProject(projectId);
+        Project target = projectContainerSupport.assertProject(ProjectType.NOTES, projectId);
         return createIn(target, request);
     }
 
@@ -124,7 +125,7 @@ public class NoteService {
         Note note = getNoteOrThrow(id);
         UUID targetProjectId = note.getProjectId();
         if (request.projectId() != null && !request.projectId().equals(targetProjectId)) {
-            targetProjectId = notesProjectSupport.assertNotesProject(request.projectId()).getId();
+            targetProjectId = projectContainerSupport.assertProject(ProjectType.NOTES, request.projectId()).getId();
         }
         validateCategory(request.categoryId(), targetProjectId);
         note.setTitle(request.title());
