@@ -38,6 +38,34 @@ jobs:
       - name: Build & Test
         run: ./mvnw --no-transfer-progress clean install -pl backend -am
 
+  integration:
+    name: Integration (Testcontainers — real PG + Redis)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      # Gerçek PG (tenant izolasyonu + modül aktivasyonu + JSONB search) ve
+      # gerçek Redis (refresh rotation/reuse state machine) doğrulaması.
+      # Gate'ler (-Dforgesys.pg.it / -Dforgesys.redis.it) bu job'da açık;
+      # H2 suite'i "backend" job'ında zaten koştuğu için yalnız 4 IT sınıfı
+      # seçilir (README'deki yerleşik komut pattern'i ile aynı).
+      - name: Gated ITs (real PG + Redis)
+        run: >-
+          ./mvnw --no-transfer-progress -pl backend -am test
+          -Dtest=CrossTenantIsolationTest,ModuleActivationIT,AppBuilderIT,RedisRefreshTokenIT
+          -Dforgesys.pg.it=true
+          -Dforgesys.redis.it=true
+          -Dsurefire.failIfNoSpecifiedTests=false
+
   frontend:
     name: Frontend (lint + test + build)
     runs-on: ubuntu-latest
@@ -70,3 +98,50 @@ jobs:
 
       - name: Build (tsc -b && vite build)
         run: npm run build
+
+  docker:
+    name: Docker (build + GHCR publish)
+    needs: [backend, frontend, integration]
+    # CD: yalnız develop/main push'unda imaj basılır (PR'da koşmaz).
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # GHCR — GITHUB_TOKEN yeterli (ek secret yok). İlk push'ta paket repo
+      # görünürlüğünü miras alır; org kısıtlaması varsa tek seferlik onay gerekir.
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker meta (tags)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          # main -> :latest, develop -> :edge; her ikisi de :sha-<short> taşır.
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=edge,enable=${{ github.ref == 'refs/heads/develop' }}
+            type=sha,prefix=sha-
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          # dependency:go-offline katmanı cache'lenir (GHA cache backend).
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
