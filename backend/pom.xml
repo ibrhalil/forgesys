@@ -45,6 +45,14 @@
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
+        <!-- Prometheus metrics registry (K-43 / Faz 5 observability): exposes
+             /actuator/prometheus in the text exposition format. Version comes from
+             the spring-boot-dependencies BOM — no pin. -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-crypto</artifactId>

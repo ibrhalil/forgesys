@@ -75,6 +75,15 @@ public class ModuleSyncRunner implements ApplicationRunner {
         }
         ensureFreeSubscription(company);
         moduleActivationService.activateDefaultModules(company);
+        
+        // Ensure the system tenant gets the 'apps' module activated (for request logs, K-27)
+        if ("tenant_system".equals(company.getSchemaName())) {
+            ModuleDefinition appsModule = ModuleDefinition.fromKey("apps").orElse(null);
+            if (appsModule != null) {
+                moduleActivationService.resyncForCompany(company, appsModule);
+            }
+        }
+        
         for (TenantModule tenantModule : tenantModuleRepository.findByCompanyId(company.getId())) {
             if (tenantModule.getStatus() != ModuleStatus.ACTIVE) {
                 continue;

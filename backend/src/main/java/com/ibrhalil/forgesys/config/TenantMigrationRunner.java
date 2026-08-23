@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Profile;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -15,6 +16,7 @@ import java.util.List;
 @Component
 @Profile("!test")
 @RequiredArgsConstructor
+@Order(2)
 public class TenantMigrationRunner implements ApplicationRunner {
 
     private final CompanyRepository companyRepository;

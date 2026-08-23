@@ -62,6 +62,14 @@ public class SecurityConfig {
                         // don't exist -> 404); dev/test keep them open for developers.
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers("/actuator/health/**", "/actuator/info").permitAll()
+                        // K-43: Prometheus scrape endpoint. Accepted unauthenticated in the
+                        // dev/test same-port layout — it carries only numerical system
+                        // metrics (JVM/HTTP/tenant count), no PII or secrets. In prod the
+                        // management endpoints move to their own port (management.server.port,
+                        // application-prod.yaml) which runs WITHOUT this filter chain (child
+                        // context) and is never published off-host (compose exposes it on the
+                        // internal network only), so this matcher is a no-op there.
+                        .requestMatchers("/actuator/prometheus").permitAll()
                         .anyRequest().authenticated())
                 .headers(headers -> headers
                         .frameOptions(frame -> frame.deny())

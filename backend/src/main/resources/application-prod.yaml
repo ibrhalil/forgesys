@@ -39,10 +39,22 @@ jwt:
   refresh-cookie-secure: true
 
 management:
+  # K-43: management moves to its own port in prod. The main port (8080, the only
+  # published one) then serves ONLY application traffic — the unauthenticated
+  # /actuator/prometheus scrape endpoint is unreachable from outside the internal
+  # Docker network (compose exposes 8081, never publishes it). A separate port
+  # also means the main SecurityFilterChain does not apply to actuator requests
+  # (child context), so the /actuator/prometheus permitAll in SecurityConfig is a
+  # no-op here and exists for the dev/test same-port layout only.
+  server:
+    port: 8081
   endpoints:
     web:
       exposure:
-        include: health,info
+        # Narrower than dev: the per-metric /actuator/metrics endpoint is a
+        # debugging tool — the Prometheus scrape (/actuator/prometheus) carries
+        # the same series and is what monitoring consumes.
+        include: health,info,prometheus
   endpoint:
     health:
       show-details: never
