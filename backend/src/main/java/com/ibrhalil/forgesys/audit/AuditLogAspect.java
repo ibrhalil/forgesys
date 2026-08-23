@@ -76,7 +76,10 @@ public class AuditLogAspect {
                         parseUuid(entityId), entityName);
             }
 
-            String requestBody = AuditRequestContext.getAndClearRequestBody();
+            // Peek (not get-and-clear): RequestLogFilter's finally is the single clear
+            // point for AuditRequestContext — consuming here would leave the request-log
+            // row without its body, and the value must survive until that finally runs.
+            String requestBody = AuditRequestContext.getRequestBody().orElse(null);
 
             // Notify test hook if registered (for unit tests without Spring context)
             Consumer<AuditCapture> hook = testHook;

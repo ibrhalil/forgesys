@@ -11,8 +11,6 @@ import jakarta.servlet.http.HttpServletRequestWrapper;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.Ordered;
-import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.util.AntPathMatcher;
 import org.springframework.util.StringUtils;
@@ -29,10 +27,17 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * Wraps mutating requests on high-risk paths with a cached body and publishes the
+ * masked body to {@link AuditRequestContext} BEFORE delegating down the chain, so
+ * both {@code AuditLogAspect} (during the request) and {@link RequestLogFilter}
+ * (in its finally, the single clear point) can consume it. Registered inside
+ * {@link RequestLogFilter} (order -94, see
+ * {@code SecurityConfig#requestBodyCaptureFilterRegistration}).
+ */
 @Slf4j
 @Component
-@Order(Ordered.HIGHEST_PRECEDENCE + 10) // After RequestMetadataFilter (-102), before TenantFilter (-101)
-public class RequestBodyCaptureFilter extends org.springframework.web.filter.OncePerRequestFilter {
+public class RequestBodyCaptureFilter extends OncePerRequestFilter {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final AntPathMatcher pathMatcher = new AntPathMatcher();
@@ -69,19 +74,19 @@ public class RequestBodyCaptureFilter extends org.springframework.web.filter.Onc
 
         // Wrap request to capture body
         CachedBodyHttpServletRequest wrappedRequest = new CachedBodyHttpServletRequest(request);
-        try {
-            chain.doFilter(wrappedRequest, response);
-        } finally {
-            String body = wrappedRequest.getBody();
-            if (StringUtils.hasText(body)) {
-                try {
-                    String maskedBody = maskSensitiveFields(body);
-                    com.ibrhalil.forgesys.web.AuditRequestContext.setRequestBody(maskedBody);
-                } catch (Exception ex) {
-                    log.debug("Failed to parse/mask request body for {} {}: {}", method, path, ex.toString());
-                }
+        // Publish the masked body BEFORE delegating: downstream consumers
+        // (AuditLogAspect during the request, RequestLogFilter in its finally)
+        // read it from AuditRequestContext. The cached body is fully read at wrap
+        // time, so masking here needs no response data.
+        String body = wrappedRequest.getBody();
+        if (StringUtils.hasText(body)) {
+            try {
+                AuditRequestContext.setRequestBody(maskSensitiveFields(body));
+            } catch (Exception ex) {
+                log.debug("Failed to parse/mask request body for {} {}: {}", method, path, ex.toString());
             }
         }
+        chain.doFilter(wrappedRequest, response);
     }
 
     private boolean isMutatingMethod(String method) {

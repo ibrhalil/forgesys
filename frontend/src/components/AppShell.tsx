@@ -170,7 +170,7 @@ export function AppShell() {
           </div>
         </aside>
 
-        <main className="flex min-h-0 flex-col">
+        <main className="flex min-h-0 min-w-0 flex-col">
           {/* Fixed breadcrumb topbar (Page portals its breadcrumb here). It lives
               OUTSIDE the scroll container so it never scrolls away — and future
               sticky elements like table headers can use plain `top-0` inside the
