@@ -276,6 +276,18 @@ class ProjectControllerTest extends AbstractRbacWebTest {
     }
 
     @Test
+    void listByTypeFilters() throws Exception {
+        seedProject("Board", ProjectType.TASKS);
+        seedProject("Journal", ProjectType.NOTES);
+
+        mockMvc.perform(get("/api/v1/projects").param("type", "NOTES")
+                        .cookie(auth("reader@tenant.test", "pm:project:read")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[*].name").value(hasItem("Journal")))
+                .andExpect(jsonPath("$.data[*].name").value(not(hasItem("Board"))));
+    }
+
+    @Test
     void createWithParentReturns201() throws Exception {
         Project parent = seedProject("Parent", ProjectType.TASKS);
 

@@ -4,6 +4,7 @@ import com.ibrhalil.forgesys.dto.PageResponse;
 import com.ibrhalil.forgesys.dto.ProjectRequest;
 import com.ibrhalil.forgesys.dto.ProjectResponse;
 import com.ibrhalil.forgesys.dto.ProjectTypeResponse;
+import com.ibrhalil.forgesys.entity.ProjectType;
 import com.ibrhalil.forgesys.service.ProjectService;
 import com.ibrhalil.forgesys.web.SortGuard;
 import jakarta.validation.Valid;
@@ -38,9 +39,10 @@ public class ProjectController {
     public ResponseEntity<PageResponse<ProjectResponse>> list(
             @PageableDefault(sort = "name") Pageable pageable,
             @RequestParam(required = false) String q,
-            @RequestParam(required = false) UUID parentProjectId) {
+            @RequestParam(required = false) UUID parentProjectId,
+            @RequestParam(required = false) ProjectType type) {
         SortGuard.require(pageable, ProjectService.FILTER_FIELDS);
-        return ResponseEntity.ok(PageResponse.of(projectService.search(q, parentProjectId, pageable)));
+        return ResponseEntity.ok(PageResponse.of(projectService.search(q, parentProjectId, type, pageable)));
     }
 
     /**

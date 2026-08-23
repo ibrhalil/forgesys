@@ -61,6 +61,8 @@ export interface App {
   name: string;
   description: string | null;
   icon: string | null;
+  projectId: string;
+  projectName: string | null;
   createdDate: string;
   updatedAt: string;
 }
@@ -152,10 +154,13 @@ export interface AppViewRequest {
 
 /**
  * App create/update payload. Full PUT: `icon: null` clears it (the backend sets
- * the field unconditionally); omit only on create when empty.
+ * the field unconditionally); omit only on create when empty. `projectId`: absent
+ * on create → the default APPS container; on update a value moves the app between
+ * APPS containers (null = unchanged).
  */
 export interface AppRequest {
   name: string;
   description?: string;
   icon?: string | null;
+  projectId?: string | null;
 }

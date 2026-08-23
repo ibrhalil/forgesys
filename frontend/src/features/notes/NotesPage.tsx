@@ -67,6 +67,12 @@ export function NotesPage() {
       render: (n) => (n.categoryName ? <Badge tone="blue">{n.categoryName}</Badge> : <span className="text-muted">—</span>),
     },
     {
+      key: 'project',
+      header: t('projects.project'),
+      render: (n) =>
+        n.projectName ? <Badge tone="muted">{n.projectName}</Badge> : <span className="text-muted">—</span>,
+    },
+    {
       key: 'updatedAt',
       header: t('notes.updatedCol'),
       sortKey: 'updatedAt',

@@ -2,7 +2,7 @@ import { PERMISSIONS } from '../../lib/permissions';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { Project, ProjectType } from './types';
-import { useProjects, useCreateProject, useDeleteProject } from './hooks';
+import { useProjects, useProjectTypes, useProjectTypeLabels, useCreateProject, useDeleteProject } from './hooks';
 import { notify, extractFieldErrors } from '../../lib/notify';
 import { LuFolderOpen, LuTrash2 } from 'react-icons/lu';
 import { DataTable, type Column } from '../../components/ui/DataTable';
@@ -21,12 +21,17 @@ import { useT } from '../../lib/i18n';
 import { useListPageState } from '../../lib/useListPageState';
 import { useAuthStore } from '../../store/authStore';
 
+/**
+ * Type options derive from the ACTIVE-module catalog (GET /projects/types, K-45) —
+ * a disabled module's type never shows up as creatable. While the catalog loads the
+ * list is empty (create waits for it — the backend enforces the gate regardless).
+ */
 function useTypeOptions() {
-  const { t } = useT();
-  return [
-    { value: 'TASKS' as ProjectType, label: t('projects.typeTasks') },
-    { value: 'NOTES' as ProjectType, label: t('projects.typeNotes') },
-  ];
+  const typeLabels = useProjectTypeLabels();
+  const { data: catalog } = useProjectTypes();
+  return (catalog ?? [])
+    .filter((c) => typeLabels[c.type])
+    .map((c) => ({ value: c.type, label: typeLabels[c.type] }));
 }
 export function ProjectsPage() {
   const { t } = useT();
@@ -58,7 +63,8 @@ export function ProjectsPage() {
       sortKey: 'type',
       render: (p) => {
         const label = typeOptions.find((o) => o.value === p.type)?.label ?? p.type;
-        return <Badge tone={p.type === 'TASKS' ? 'accent' : 'blue'}>{label}</Badge>;
+        const tone = p.type === 'TASKS' ? 'accent' : p.type === 'NOTES' ? 'blue' : 'green';
+        return <Badge tone={tone}>{label}</Badge>;
       },
     },
     {
@@ -136,11 +142,14 @@ function CreateProjectModal({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [type, setType] = useState<ProjectType>('TASKS');
+  // No hardcoded default — the first catalog entry wins once the ACTIVE-module
+  // catalog resolves (pm is always active in practice).
+  const [type, setType] = useState<ProjectType | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const submit = async () => {
     setFieldErrors({});
+    if (!type) return;
     try {
       const created = await create.mutateAsync({ name, description: description || undefined, type });
       notify.success(t('projects.created'));
@@ -159,7 +168,7 @@ function CreateProjectModal({ onClose }: { onClose: () => void }) {
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
-          <Button variant="primary" loading={create.isPending} onClick={submit}>{t('common.create')}</Button>
+          <Button variant="primary" loading={create.isPending} disabled={!type} onClick={submit}>{t('common.create')}</Button>
         </>
       }
     >
@@ -167,9 +176,10 @@ function CreateProjectModal({ onClose }: { onClose: () => void }) {
         <TextField label={t('common.name')} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('projects.namePh')} error={fieldErrors.name ?? null} required />
         <SelectInput
           label={t('projects.type')}
+          placeholder={t('projects.typePlaceholder')}
           options={typeOptions}
           value={typeOptions.find((o) => o.value === type) ?? null}
-          onChange={(next) => setType((next as { value: ProjectType } | null)?.value ?? 'TASKS')}
+          onChange={(next) => setType((next as { value: ProjectType } | null)?.value ?? null)}
         />
         <TextAreaField label={t('common.descriptionOptional')} value={description} onChange={(e) => setDescription(e.target.value)} error={fieldErrors.description ?? null} />
       </div>

@@ -8,6 +8,8 @@ import { useLocaleStore } from '../store/localeStore';
 
 const APP: App = {
   id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+  projectId: 'proj-1',
+  projectName: 'Genel',
   name: 'Order Tracking',
   description: 'desc',
   icon: '📦',
