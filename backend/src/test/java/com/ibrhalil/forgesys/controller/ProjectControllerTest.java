@@ -1,6 +1,5 @@
 package com.ibrhalil.forgesys.controller;
 
-import com.ibrhalil.forgesys.common.tenant.TenantContext;
 import com.ibrhalil.forgesys.entity.Company;
 import com.ibrhalil.forgesys.entity.CompanyStatus;
 import com.ibrhalil.forgesys.entity.ModuleStatus;
@@ -10,6 +9,7 @@ import com.ibrhalil.forgesys.entity.Task;
 import com.ibrhalil.forgesys.entity.TaskPriority;
 import com.ibrhalil.forgesys.entity.TaskStatus;
 import com.ibrhalil.forgesys.entity.TenantModule;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
@@ -40,6 +40,20 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class ProjectControllerTest extends AbstractRbacWebTest {
 
     private static final MediaType JSON = MediaType.APPLICATION_JSON;
+
+    private Company baselineCompany;
+
+    /**
+     * K-45 activation gate resolves the current company by schema name; with the test
+     * context unset the resolver returns "public", so a company owning that schema is
+     * the baseline "tenant" every test writes through. {@code pm} is ACTIVE — TASKS
+     * stays creatable everywhere; tests needing NOTES/APPS seed their own module rows.
+     */
+    @BeforeEach
+    void seedTenantBaseline() {
+        baselineCompany = seedPublicCompany();
+        seedModuleRow(baselineCompany, "pm");
+    }
 
     @Test
     void listRequiresAuthentication() throws Exception {
@@ -189,17 +203,8 @@ class ProjectControllerTest extends AbstractRbacWebTest {
     }
 
     @Test
-    void typesWithoutTenantContextIsRejected() throws Exception {
-        mockMvc.perform(get("/api/v1/projects/types").cookie(auth("reader@tenant.test", "pm:project:read")))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("tenant_not_found"));
-    }
-
-    @Test
     void typesListsActiveModuleTypesWithDefaultProject() throws Exception {
-        Company company = seedPublicCompany();
-        seedModuleRow(company, "pm");
-        seedModuleRow(company, "notes");
+        seedModuleRow(baselineCompany, "notes");
 
         Project defaultNotes = new Project();
         defaultNotes.setName("Genel");
@@ -208,18 +213,51 @@ class ProjectControllerTest extends AbstractRbacWebTest {
         entityManager.persist(defaultNotes);
         entityManager.flush();
 
-        TenantContext.setCurrentTenant("public");
-        try {
-            mockMvc.perform(get("/api/v1/projects/types")
-                            .cookie(authTenant("public", "reader@tenant.test", "pm:project:read")))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$", hasSize(2)))
-                    .andExpect(jsonPath("$[?(@.type=='TASKS')].moduleKey").value("pm"))
-                    .andExpect(jsonPath("$[?(@.type=='NOTES')].moduleKey").value("notes"))
-                    .andExpect(jsonPath("$[?(@.type=='NOTES')].defaultProjectId").value(defaultNotes.getId().toString()));
-        } finally {
-            TenantContext.clear();
-        }
+        mockMvc.perform(get("/api/v1/projects/types").cookie(auth("reader@tenant.test", "pm:project:read")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(2)))
+                .andExpect(jsonPath("$[?(@.type=='TASKS')].moduleKey").value("pm"))
+                .andExpect(jsonPath("$[?(@.type=='NOTES')].moduleKey").value("notes"))
+                .andExpect(jsonPath("$[?(@.type=='NOTES')].defaultProjectId").value(defaultNotes.getId().toString()));
+    }
+
+    /* ── Module activation gate (K-45) ── */
+
+    @Test
+    void createWithTypeOfInactiveModuleReturns409() throws Exception {
+        mockMvc.perform(post("/api/v1/projects")
+                        .contentType(JSON)
+                        .cookie(auth("writer@tenant.test", "pm:project:write"))
+                        .content("""
+                                {"name":"No Notes","type":"NOTES"}"""))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("module_not_active"));
+    }
+
+    @Test
+    void createAfterModuleActivationSucceeds() throws Exception {
+        seedModuleRow(baselineCompany, "notes");
+
+        mockMvc.perform(post("/api/v1/projects")
+                        .contentType(JSON)
+                        .cookie(auth("writer@tenant.test", "pm:project:write"))
+                        .content("""
+                                {"name":"Notes Home","type":"NOTES"}"""))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.type").value("NOTES"));
+    }
+
+    @Test
+    void updateTypeChangeToInactiveModuleReturns409() throws Exception {
+        Project project = seedProject("Switch", ProjectType.TASKS);
+
+        mockMvc.perform(put("/api/v1/projects/" + project.getId())
+                        .contentType(JSON)
+                        .cookie(auth("writer@tenant.test", "pm:project:write"))
+                        .content("""
+                                {"name":"Switch","type":"NOTES"}"""))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("module_not_active"));
     }
 
     /* ── Parent (K-45 nesting) ── */
