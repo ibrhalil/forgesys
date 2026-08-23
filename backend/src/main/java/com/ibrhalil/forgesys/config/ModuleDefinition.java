@@ -1,5 +1,7 @@
 package com.ibrhalil.forgesys.config;
 
+import com.ibrhalil.forgesys.entity.ProjectType;
+
 import java.util.List;
 import java.util.Optional;
 
@@ -20,13 +22,17 @@ import java.util.Optional;
  *       system). NOTE: module locations MUST live OUTSIDE {@code db/migration/tenant} —
  *       Flyway location scanning is recursive and would swallow module versions into the
  *       core tenant history (duplicate-version collisions).</li>
+ *   <li>{@code projectType} — the {@link ProjectType} whose content this module supplies
+ *       inside a typed project container (K-45). The creatable type catalog derives from
+ *       the tenant's ACTIVE modules; a module without a container-facing type carries
+ *       {@code null}.</li>
  *   <li>{@code permissions} — the module's permission definitions, seeded into the tenant's
  *       {@code t_permissions} on activation (and re-synced at startup for activated modules).</li>
  * </ul>
  */
 public enum ModuleDefinition {
 
-    PM("pm", "Projects & Tasks", PlanDefinition.FREE, false, List.of(
+    PM("pm", "Projects & Tasks", PlanDefinition.FREE, false, ProjectType.TASKS, List.of(
             new PermissionCatalog.PermissionDefinition(PermissionCatalog.PM_PROJECT_READ, "Read tenant projects"),
             new PermissionCatalog.PermissionDefinition(PermissionCatalog.PM_PROJECT_WRITE, "Create or update tenant projects"),
             new PermissionCatalog.PermissionDefinition(PermissionCatalog.PM_PROJECT_DELETE, "Delete tenant projects"),
@@ -43,7 +49,7 @@ public enum ModuleDefinition {
      * plans separate by the {@link PlanDefinition} limits (maxApps / maxRecordsPerApp),
      * enforced as a soft-block.
      */
-    APPS("apps", "Custom App Builder", PlanDefinition.FREE, true, List.of(
+    APPS("apps", "Custom App Builder", PlanDefinition.FREE, true, ProjectType.APPS, List.of(
             new PermissionCatalog.PermissionDefinition(PermissionCatalog.APPS_APP_READ, "Read tenant custom apps (definitions, properties, views)"),
             new PermissionCatalog.PermissionDefinition(PermissionCatalog.APPS_APP_WRITE, "Create or update tenant custom apps and their properties/views"),
             new PermissionCatalog.PermissionDefinition(PermissionCatalog.APPS_APP_DELETE, "Delete tenant custom apps"),
@@ -61,7 +67,7 @@ public enum ModuleDefinition {
      * tenant-shared ({@code notes:note:read} sees all tenant notes) — personal/ABAC
      * notes were consciously deferred.
      */
-    NOTES("notes", "Notes", PlanDefinition.FREE, true, List.of(
+    NOTES("notes", "Notes", PlanDefinition.FREE, true, ProjectType.NOTES, List.of(
             new PermissionCatalog.PermissionDefinition(PermissionCatalog.NOTES_NOTE_READ, "Read tenant notes"),
             new PermissionCatalog.PermissionDefinition(PermissionCatalog.NOTES_NOTE_WRITE, "Create or update tenant notes"),
             new PermissionCatalog.PermissionDefinition(PermissionCatalog.NOTES_NOTE_DELETE, "Delete tenant notes"),
@@ -76,14 +82,16 @@ public enum ModuleDefinition {
     private final String displayName;
     private final PlanDefinition minPlan;
     private final boolean ownMigrations;
+    private final ProjectType projectType;
     private final List<PermissionCatalog.PermissionDefinition> permissions;
 
     ModuleDefinition(String key, String displayName, PlanDefinition minPlan, boolean ownMigrations,
-            List<PermissionCatalog.PermissionDefinition> permissions) {
+            ProjectType projectType, List<PermissionCatalog.PermissionDefinition> permissions) {
         this.key = key;
         this.displayName = displayName;
         this.minPlan = minPlan;
         this.ownMigrations = ownMigrations;
+        this.projectType = projectType;
         this.permissions = List.copyOf(permissions);
     }
 
@@ -97,6 +105,11 @@ public enum ModuleDefinition {
 
     public PlanDefinition minPlan() {
         return minPlan;
+    }
+
+    /** The project type whose content this module supplies, or {@code null} (K-45). */
+    public ProjectType projectType() {
+        return projectType;
     }
 
     public List<PermissionCatalog.PermissionDefinition> permissions() {
@@ -114,6 +127,16 @@ public enum ModuleDefinition {
     public static Optional<ModuleDefinition> fromKey(String key) {
         for (ModuleDefinition module : values()) {
             if (module.key.equals(key)) {
+                return Optional.of(module);
+            }
+        }
+        return Optional.empty();
+    }
+
+    /** The module supplying the given project type's content, if any (K-45). */
+    public static Optional<ModuleDefinition> forProjectType(ProjectType projectType) {
+        for (ModuleDefinition module : values()) {
+            if (module.projectType == projectType) {
                 return Optional.of(module);
             }
         }
