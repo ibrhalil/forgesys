@@ -25,7 +25,7 @@ services:
   # db/redis start. Makes a wiped infra/data fully recoverable and removes the
   # manual `sudo chown` first-install step on Linux hosts.
   data-init:
-    image: alpine:3.20
+    image: alpine:3.22
     container_name: forgesys-data-init-prod
     restart: "no"
     volumes:
@@ -42,7 +42,7 @@ services:
       - FOWNER
 
   db:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     container_name: forgesys-db-prod
     init: true
     restart: unless-stopped
@@ -98,7 +98,7 @@ services:
         max-file: "5"
 
   redis:
-    image: redis:7.4-alpine
+    image: redis:8.2-alpine
     container_name: forgesys-redis-prod
     init: true
     restart: unless-stopped

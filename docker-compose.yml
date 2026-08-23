@@ -21,7 +21,7 @@ services:
   # recreated the dir as root, or on Linux-native Docker without user-namespace
   # mapping. Replaces the manual `sudo chown -R 70:70` step.
   data-init:
-    image: alpine:3.20
+    image: alpine:3.22
     container_name: forgesys-data-init
     restart: "no"
     volumes:
@@ -37,7 +37,7 @@ services:
       - FOWNER
 
   db:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     container_name: forgesys-db
     init: true
     restart: unless-stopped
@@ -91,7 +91,7 @@ services:
         max-file: "3"
 
   redis:
-    image: redis:7.4-alpine
+    image: redis:8.2-alpine
     container_name: forgesys-redis
     init: true
     restart: unless-stopped

@@ -20,9 +20,8 @@ npm run preview   # serve the build output locally
 
 Every dependency is pinned to an **exact version** (`.npmrc`: `save-exact=true`).
 
-- **dependencies:** `@tanstack/react-query` 5.80.7, `react`/`react-dom` 19.2.7, `react-icons` 5.7.0, `react-markdown` 10.1.0 + `remark-gfm` 4.0.1 (K-44 notes preview — raw HTML deliberately NOT rendered, `rehype-raw` absent), `react-router-dom` 7.7.0, `react-select` 5.10.2, `react-toastify` 11.1.0, `zustand` 5.0.5
-- **devDependencies:** `@tailwindcss/vite` 4.3.3 + `tailwindcss` 4.3.3, `@types/*`, `@vitejs/plugin-react` 6.0.3, `oxlint` 1.71.0, `typescript` 6.0.2, `vite` 8.1.1, `vitest` 4.1.11 + `jsdom` 29.0.1 + `@testing-library/react` 16.3.2 (+dom 10.x) + `@testing-library/jest-dom` 6.9.1 + `@testing-library/user-event` 14.6.6
-  - Test dep'leri Node 20 pin'ine göre seçildi (jest-dom 7 / jsdom 30 Node >=22 ister).
+- **dependencies:** `@tanstack/react-query` 5.102.1, `react`/`react-dom` 19.2.8, `react-icons` 5.7.0, `react-markdown` 10.1.0 + `remark-gfm` 4.0.1 (K-44 notes preview — raw HTML deliberately NOT rendered, `rehype-raw` absent), `react-router-dom` 7.18.2, `react-select` 5.10.2, `react-toastify` 11.1.0, `zustand` 5.0.15
+- **devDependencies:** `@tailwindcss/vite` 4.3.3 + `tailwindcss` 4.3.3, `@types/*`, `@vitejs/plugin-react` 6.1.0, `oxlint` 1.79.0, `typescript` 6.0.3, `vite` 8.2.2, `vitest` 4.1.11 + `jsdom` 30.0.1 + `@testing-library/react` 16.3.2 (+dom 19.x) + `@testing-library/jest-dom` 7.0.1 + `@testing-library/user-event` 14.6.6
 - **Lint:** oxlint (`.oxlintrc.json` — plugins: `react`/`typescript`/`oxc`; `react/rules-of-hooks`=error, `react/only-export-components`=[warn, `{allowConstantExport: true}`])
 - **Styling:** Tailwind CSS v4 via `@theme` tokens in `src/index.css` (no `tailwind.config`). Font: Outfit + Inter (Google Fonts, `index.html`).
 
@@ -30,7 +29,7 @@ Every dependency is pinned to an **exact version** (`.npmrc`: `save-exact=true`)
 
 - **`package-lock.json` is NOT used and NOT committed.** `.npmrc` sets `package-lock=false`. Maven/Docker use `npm install --include=optional --no-package-lock`.
 - `.npmrc`: `engine-strict=true`, `save-exact=true`, `package-lock=false`.
-- `engines`: node `>=20.18.0 <21.0.0`, npm `>=10 <11`. `.nvmrc`: `20.20.2`.
+- `engines`: node `>=24.0.0 <25.0.0`, npm `>=11 <12`. `.nvmrc`: `24.19.0`.
 
 ## Dev server & proxy
 

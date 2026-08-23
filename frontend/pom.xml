@@ -14,9 +14,9 @@
     <packaging>pom</packaging>
 
     <properties>
-        <frontend-maven-plugin.version>1.15.0</frontend-maven-plugin.version>
-        <node.version>v20.20.2</node.version>
-        <npm.version>10.8.2</npm.version>
+        <frontend-maven-plugin.version>2.0.2</frontend-maven-plugin.version>
+        <node.version>v24.19.0</node.version>
+        <npm.version>11.19.0</npm.version>
     </properties>
 
     <build>
@@ -24,8 +24,8 @@
             <!-- Clean node build output folder -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-clean-plugin</artifactId>
-                <version>3.4.0</version>
+                    <artifactId>maven-clean-plugin</artifactId>
+                    <version>3.5.0</version>
                 <configuration>
                     <filesets>
                         <fileset>
@@ -78,8 +78,8 @@
             <!-- Copy built assets to backend resources folder -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-resources-plugin</artifactId>
-                <version>3.3.1</version>
+                    <artifactId>maven-resources-plugin</artifactId>
+                    <version>3.5.0</version>
                 <executions>
                     <execution>
                         <id>copy-resources</id>

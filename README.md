@@ -59,8 +59,8 @@
 |------|---------------|------------|
 | JDK | 21 | Zorunlu |
 | Maven | 3.9+ (veya bundled `mvnw`) | Zorunlu |
-| Node.js | 20.20.2 (`.nvmrc` ile kilit, `nvm use`/`fnm use` gerekli) | Frontend için |
-| npm | 10.x (Node 20 ile gelir) | Frontend için |
+| Node.js | 24.19.0 (`.nvmrc` ile kilit, `nvm use`/`fnm use` gerekli) | Frontend için |
+| npm | 11.x (Node 24 ile gelir) | Frontend için |
 | Docker | 24+ | Tam stack için |
 | Docker Compose | v2+ | Tam stack için |
 
@@ -80,7 +80,7 @@ docker compose up -d
 
 # 3b. Frontend — Vite dev server http://localhost:3000
 cd frontend
-nvm use                              # Node 20.20.2 (.nvmrc'den) — ilk sefer zorunlu
+nvm use                              # Node 24.19.0 (.nvmrc'den) — ilk sefer zorunlu
 npm install --include=optional       # lock dosyası üretmeden lokal kurulum
 npm run dev                          # /api -> http://localhost:8080 proxy
 ```
