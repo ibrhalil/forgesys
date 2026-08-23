@@ -165,7 +165,7 @@ class AppBuilderIT {
     void recordLifecycleAndJsonbSearch() {
         activateApps(company);
         inTenant(() -> {
-            AppResponse app = appBuilderService.create(new AppRequest("CRM", "IT pipeline", null));
+            AppResponse app = appBuilderService.create(new AppRequest("CRM", "IT pipeline", null, null));
             AppPropertyResponse name = appBuilderService.addProperty(app.id(), new AppPropertyRequest(
                     "Name", PropertyType.TEXT, null, true, 0));
             AppPropertyResponse amount = appBuilderService.addProperty(app.id(), new AppPropertyRequest(
@@ -229,9 +229,9 @@ class AppBuilderIT {
         activateApps(company2);
 
         UUID appInSecond = inTenantOf(company2, () ->
-                appBuilderService.create(new AppRequest("Tenant B App", null, null)).id());
+                appBuilderService.create(new AppRequest("Tenant B App", null, null, null)).id());
         UUID appInFirst = inTenant(schemaName, () ->
-                appBuilderService.create(new AppRequest("Tenant A App", null, null)).id());
+                appBuilderService.create(new AppRequest("Tenant A App", null, null, null)).id());
 
         // Each tenant sees only its own apps — schema-per-tenant isolation.
         inTenant(schemaName, () -> {

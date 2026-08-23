@@ -22,11 +22,13 @@ import java.util.UUID;
  * ever navigates one level); {@code isDefault} marks the per-type "Genel" container
  * ensured by module activation (type and parent frozen on such rows).
  *
- * <p>Soft-deletable, optimistic-locked, tenant-audited — same base as Role/Group. The
- * name uniqueness is a partial index ({@code WHERE is_deleted = false}) in
- * {@code tenant/V1.3}; the entity-side {@code unique = true} only shapes H2 create-drop
- * in tests (Flyway owns the real schema, [RISK-17]). {@code tenant/V3} adds the
- * parent self-FK and the partial unique {@code uk_projects_default_type}.
+ * <p>Soft-deletable, optimistic-locked, tenant-audited — same base as Role/Group.
+ * Name uniqueness is PER-TYPE ({@code uk_projects_type_name ON (project_type, name)
+ * WHERE is_deleted = false} in {@code tenant/V3}) — each type is its own namespace,
+ * so the notes/apps default containers may share the "Genel" name. The entity carries
+ * no {@code unique} (a partial composite index cannot shape H2 create-drop — the
+ * App/NoteCategory convention; the service enforces per-type checks under H2).
+ * {@code tenant/V3} adds the parent self-FK and the per-type default marker too.
  */
 @Entity
 @Getter
@@ -43,7 +45,7 @@ import java.util.UUID;
 @SQLDelete(sql = "UPDATE t_projects SET is_deleted = true, deleted_at = now(), version = version + 1 WHERE id = ? AND version = ?")
 public class Project extends BaseEntity {
 
-    @Column(nullable = false, length = 150, unique = true)
+    @Column(nullable = false, length = 150)
     private String name;
 
     @Column(length = 500)

@@ -29,9 +29,12 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.UUID;
 
 /**
- * Custom app CRUD (K-15 / Epic 3.0.B): the app definitions of the tenant. Properties
- * and views are nested under {@code /apps/{appId}/...} (see {@link AppPropertyController}
- * / {@link AppViewController}); records under {@link AppRecordController}.
+ * Flat custom-app surface (K-15, re-scoped by K-45): the cross-container list —
+ * {@code ?projectId=} narrows it to one APPS container. Writes without an explicit
+ * {@code projectId} land in the tenant's default APPS container. Properties/views are
+ * nested under {@code /apps/{appId}/...} (see {@link AppPropertyController} /
+ * {@link AppViewController}); records under {@link AppRecordController};
+ * container-nested reads/writes on {@link ProjectAppController}.
  */
 @RestController
 @RequestMapping("/api/v1/apps")
@@ -58,9 +61,10 @@ public class AppController {
     @PreAuthorize("hasAuthority('apps:app:read')")
     public ResponseEntity<PageResponse<AppResponse>> list(
             @PageableDefault(sort = "name") Pageable pageable,
-            @RequestParam(required = false) String q) {
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) UUID projectId) {
         SortGuard.require(pageable, AppBuilderService.FILTER_FIELDS);
-        return ResponseEntity.ok(PageResponse.of(appBuilderService.search(q, pageable)));
+        return ResponseEntity.ok(PageResponse.of(appBuilderService.search(q, projectId, pageable)));
     }
 
     @GetMapping("/{id}")
