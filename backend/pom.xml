@@ -134,6 +134,12 @@
                     </execution>
                 </executions>
                 <configuration>
+                    <!-- Anchor spring-boot:run at the repo root: the plugin defaults the
+                         working directory to the module dir (backend/), which breaks the
+                         project-relative logging.file.path=infra/logs and creates a stray
+                         backend/infra/logs. Matches the shared IDE run config
+                         ($ProjectFileDir$) so both launchers resolve infra/ identically. -->
+                    <workingDirectory>${maven.multiModuleProjectDirectory}</workingDirectory>
                     <excludes>
                         <exclude>
                             <groupId>org.projectlombok</groupId>

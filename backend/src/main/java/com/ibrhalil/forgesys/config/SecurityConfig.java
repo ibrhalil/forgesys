@@ -6,6 +6,9 @@ import com.ibrhalil.forgesys.security.RestAuthenticationEntryPoint;
 import com.ibrhalil.forgesys.security.jwt.JwtAuthenticationFilter;
 import com.ibrhalil.forgesys.security.ratelimit.RateLimitFilter;
 import com.ibrhalil.forgesys.tenant.TenantFilter;
+import com.ibrhalil.forgesys.web.AuditRequestContext;
+import com.ibrhalil.forgesys.web.RequestBodyCaptureFilter;
+import com.ibrhalil.forgesys.web.RequestLogFilter;
 import com.ibrhalil.forgesys.web.RequestMetadataFilter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
@@ -130,6 +133,43 @@ public class SecurityConfig {
         return registration;
     }
 
+    /**
+     * Runs {@link RequestLogFilter} INSIDE the security chain (order -95, after the
+     * security DelegatingFilterProxy at -100): the write happens in the filter's
+     * {@code finally}, which unwinds BEFORE the security/tenant/metadata filters
+     * clear their ThreadLocals — so the tenant schema, authentication and request
+     * metadata are still live when the {@code t_request_logs} row is written.
+     * (Registering it outside the chain made the write land after those clears:
+     * public schema, no user/trace — every insert failed and was swallowed.)
+     * Requests rejected inside the security chain itself (401 before reaching -95)
+     * are not logged; failed logins are covered by {@code t_login_history} instead.
+     */
+    @Bean
+    public FilterRegistrationBean<RequestLogFilter> requestLogFilterRegistration(RequestLogFilter requestLogFilter) {
+        FilterRegistrationBean<RequestLogFilter> registration = new FilterRegistrationBean<>(requestLogFilter);
+        registration.setOrder(REQUEST_LOG_FILTER_ORDER);
+        return registration;
+    }
+
+    /**
+     * Runs {@link RequestBodyCaptureFilter} inside {@link RequestLogFilter}
+     * (order -94): it wraps mutating high-risk requests with a cached body and
+     * publishes the masked body to {@link AuditRequestContext} BEFORE delegating,
+     * so both {@code AuditLogAspect} (during the request) and
+     * {@link RequestLogFilter} (in its finally) can consume it.
+     */
+    @Bean
+    public FilterRegistrationBean<RequestBodyCaptureFilter> requestBodyCaptureFilterRegistration(
+            RequestBodyCaptureFilter requestBodyCaptureFilter) {
+        FilterRegistrationBean<RequestBodyCaptureFilter> registration =
+                new FilterRegistrationBean<>(requestBodyCaptureFilter);
+        registration.setOrder(REQUEST_LOG_FILTER_ORDER + 1);
+        return registration;
+    }
+
     /** The Spring Security filter chain (DelegatingFilterProxy) order. */
     private static final int SECURITY_FILTER_ORDER = -100;
+
+    /** {@link RequestLogFilter} — inside the security chain (see its registration). */
+    private static final int REQUEST_LOG_FILTER_ORDER = -95;
 }

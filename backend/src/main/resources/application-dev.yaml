@@ -42,7 +42,9 @@ logging:
   level:
     com.ibrhalil.forgesys: DEBUG
     org.hibernate.SQL: DEBUG
-  # Human-readable logs written to ./infra/logs/spring.log (project-relative).
+  # Human-readable logs written to ./infra/logs/spring.log (project-relative —
+  # resolves from the repo root: the IDE run config uses $ProjectFileDir$ and
+  # spring-boot-maven-plugin pins workingDirectory to the multi-module root).
   # Set LOGGING_FILE_PATH env to override (e.g. when running outside the repo).
   file:
     path: ${LOGGING_FILE_PATH:infra/logs}
