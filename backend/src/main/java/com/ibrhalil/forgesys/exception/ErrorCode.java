@@ -45,6 +45,7 @@ public enum ErrorCode {
     SELF_DELETE_FORBIDDEN(HttpStatus.CONFLICT, "You cannot delete your own account"),
     LAST_ADMIN_REQUIRED(HttpStatus.CONFLICT, "At least one active admin-capable user must remain in the tenant"),
     MODULE_NOT_FOUND(HttpStatus.NOT_FOUND, "Unknown module key"),
+    MODULE_NOT_ACTIVE(HttpStatus.CONFLICT, "The module supplying this project type is not active for the tenant"),
     MODULE_ALREADY_ACTIVE(HttpStatus.CONFLICT, "Module is already activated for this tenant"),
     SUBSCRIPTION_NOT_FOUND(HttpStatus.CONFLICT, "Tenant has no active subscription"),
     MODULE_PLAN_REQUIRED(HttpStatus.FORBIDDEN, "Module requires a higher subscription plan"),

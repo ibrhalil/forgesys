@@ -116,6 +116,7 @@ public class ProjectService {
             throw new BusinessException(ErrorCode.PROJECT_NAME_TAKEN, "Project name already exists: " + request.name());
         }
         assertParentAcceptable(request.parentProjectId(), null);
+        assertTypeActivatable(request.type());
         Project project = new Project();
         project.setName(request.name());
         project.setDescription(request.description());
@@ -141,6 +142,9 @@ public class ProjectService {
         if (typeChange && projectHasContent(id)) {
             throw new BusinessException(ErrorCode.PROJECT_TYPE_CHANGE_FORBIDDEN,
                     "Project holds content of its current type; type change rejected: " + id);
+        }
+        if (typeChange) {
+            assertTypeActivatable(request.type());
         }
         if (parentChange) {
             assertParentAcceptable(request.parentProjectId(), id);
@@ -168,6 +172,26 @@ public class ProjectService {
      */
     private boolean projectHasContent(UUID projectId) {
         return taskRepository.existsByProjectId(projectId);
+    }
+
+    /**
+     * K-45 activation gate: a project type is only creatable while the module that
+     * supplies its content is ACTIVE for the tenant. Applied on create (always) and on
+     * update (only when the type actually changes — a rename of a project whose module
+     * went inactive stays allowed; its content is merely read-only elsewhere).
+     */
+    private void assertTypeActivatable(ProjectType type) {
+        ModuleDefinition module = ModuleDefinition.forProjectType(type)
+                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR,
+                        "No module supplies project type: " + type));
+        Company company = currentCompany();
+        boolean active = tenantModuleRepository.findByCompanyIdAndModuleKey(company.getId(), module.key())
+                .map(row -> row.getStatus() == ModuleStatus.ACTIVE)
+                .orElse(false);
+        if (!active) {
+            throw new BusinessException(ErrorCode.MODULE_NOT_ACTIVE,
+                    "Module '%s' (project type %s) is not active for this tenant".formatted(module.key(), type));
+        }
     }
 
     /**
@@ -204,9 +228,14 @@ public class ProjectService {
         return projectRepository.findDefaultIdsByType(type).stream().findFirst().orElse(null);
     }
 
+    /**
+     * The company owning the current tenant schema. Mirrors the Hibernate resolver's
+     * fallback ({@code public} when the context is unset — the H2 test layout); in
+     * production the filter always sets the context and no company owns "public",
+     * so the lookup degrades to {@link TenantNotFoundException}.
+     */
     private Company currentCompany() {
-        String schemaName = TenantContext.getCurrentTenant()
-                .orElseThrow(() -> new TenantNotFoundException("Tenant context is not set"));
+        String schemaName = TenantContext.getCurrentTenant().orElse("public");
         return companyRepository.findBySchemaName(schemaName)
                 .orElseThrow(() -> new TenantNotFoundException("Unknown tenant schema: " + schemaName));
     }
