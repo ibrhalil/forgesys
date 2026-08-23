@@ -16,6 +16,14 @@ spring:
     console:
       enabled: false
 
+management:
+  health:
+    redis:
+      # Tests must run Docker-free (AGENTS): refresh/blacklist stores are InMemory in
+      # this profile, so a real Redis probe is wrong — it would fail health (503) on
+      # machines without a running compose Redis (RequestLogFilterChainTest regression).
+      enabled: false
+
 forgesys:
   security:
     # Non-secret placeholder pepper for the test profile only. Lets the

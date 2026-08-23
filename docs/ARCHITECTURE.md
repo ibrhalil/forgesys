@@ -142,13 +142,13 @@ flowchart TB
 | `tenant_<sub>`   | `t_role_permissions`| Role↔Permission join                 | `tenant/V1.1__iam_rbac.sql` |
 | `tenant_<sub>`   | `t_group_roles`     | Group↔Role join                      | `tenant/V1.1__iam_rbac.sql` |
 | `tenant_<sub>`   | `t_role_parents`    | Role→parent-role inheritance join    | `tenant/V1.1__iam_rbac.sql` |
-| `tenant_<sub>`   | `t_projects`        | Proje/workspace konteyneri (modüller) | `tenant/V1.3__pm_projects_tasks.sql` |
-| `tenant_<sub>`   | `t_tasks`           | Task modülü (project-scoped)         | `tenant/V1.3__pm_projects_tasks.sql` |
+| `tenant_<sub>`   | `t_projects`        | Tipli proje konteyneri (K-45: `project_type TASKS/NOTES/APPS` + `parent_project_id` + tip-bazlı default; isim benzersizliği tip bazlı) | `tenant/V1.3` + `tenant/V3__project_container.sql` |
+| `tenant_<sub>`   | `t_tasks`           | Task içeriği (project-scoped)        | `tenant/V1.3__pm_projects_tasks.sql` |
 | `tenant_<sub>`   | `t_audit_logs`      | Audit trail (append-only, K-19)      | `tenant/V1.2__audit.sql` |
 | `tenant_<sub>`   | `t_login_history`   | Login denemeleri (append-only, K-19) | `tenant/V1.2__audit.sql` |
 | `tenant_<sub>`   | `t_request_logs`    | Request/trace log + high-risk maskeli body (K-19 katman 3 + K-27) | `tenant/V2__request_logs.sql` |
-| `tenant_<sub>`   | `t_apps` + 4        | App builder ailesi: `t_app_properties(config jsonb)`, `t_app_records`, `t_app_record_values(value jsonb, GIN)`, `t_app_views(config jsonb)` — `apps` modülü aktivasyonda düşer | `module/apps/V1__app_builder.sql` (per-module history `flyway_schema_history_mod_apps`, [K-15](DECISIONS.md#k-15)) |
-| `tenant_<sub>`   | `t_notes`, `t_note_categories` | Notes modülü (markdown; kategori FK `ON DELETE SET NULL`) — `notes` modülü aktivasyonda düşer | `module/notes/V1__notes.sql` (per-module history `flyway_schema_history_mod_notes`, [K-44](DECISIONS.md#k-44)) |
+| `tenant_<sub>`   | `t_apps` + 4        | App builder ailesi: `t_apps`(`project_id` — APPS koleksiyon konteynerine çapalı, K-45) + `t_app_properties(config jsonb)`, `t_app_records`, `t_app_record_values(value jsonb, GIN)`, `t_app_views(config jsonb)` — `apps` modülü aktivasyonda düşer | `module/apps/V1__app_builder.sql` + `module/apps/V2__apps_project_scoping.sql` (per-module history `flyway_schema_history_mod_apps`, [K-15](DECISIONS.md#k-15)) |
+| `tenant_<sub>`   | `t_notes`, `t_note_categories` | Notes modülü (markdown; ikisi de `project_id` ile NOTES konteynerine çapalı — K-45; kategori FK `ON DELETE SET NULL`) — `notes` modülü aktivasyonda düşer | `module/notes/V1__notes.sql` + `module/notes/V2__notes_project_scoping.sql` (per-module history `flyway_schema_history_mod_notes`, [K-44](DECISIONS.md#k-44)) |
 
 > Refresh token'lar tabloda DEĞİL — Redis-first (K-34, [DECISIONS](DECISIONS.md#k-34)); eski `t_refresh_tokens` ölü tablosu K-36 temizliğinde kaldırıldı. Migration'ların tamamı pre-1.0.0 squash'ı ile alan-bazlı `V1.x` baseline ailesine indirildi ([K-36](DECISIONS.md#k-36)) — yeni migration'lar `V2`'den devam eder.
 
@@ -284,6 +284,7 @@ classDiagram
 - `UserAccount`/`UserProfile` `@MapsId` ile `User`'a shared PK (gereksiz FK yok).
 - Tüm ID'ler UUID (`GenerationType.UUID`). Tablo adları `t_` prefix'li. Constraint'ler `idx_*`, `uk_*`, `fk_*`.
 - `Subscription`/`TenantModule` (public şema) `BaseEntity`; `UserDirectoryView` read model'i (`@Immutable @Subselect`) hiyerarşi dışıdır. `AppRecordValue` ve `RequestLog` soft-delete'siz (`GeneratedIdAuditEntity`) — value clear = satır silinir (K-15); request log append-only (K-27).
+- **Tipli proje konteyneri (K-45):** `Project` = typed container (`project_type` NOT NULL: TASKS/NOTES/APPS; katalog aktif modüllerden türer). İçerik çapaları düz UUID kolonlarıdır (`@ManyToOne` yok — Task konvansiyonu): `Task.projectId`, `Note.projectId` + `NoteCategory.projectId` (NOTES), `App.projectId` (APPS koleksiyonu). İlişkisel veri katmanı (t_links) bilinçli erteli — talep-kapılı.
 
 > Detaylar: [`persistence/AGENTS.md`](../persistence/AGENTS.md)
 

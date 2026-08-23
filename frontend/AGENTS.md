@@ -81,25 +81,34 @@ src/
                            #   modals fetch the user detail themselves — list rows are the
                            #   flat UserDirectoryView projection: counts, no role/group arrays)
     roles/  groups/  permissions/
-    projects/              #   Projects pages + TaskBoard (components/), pm module
+    projects/              #   Typed project containers (K-45): ProjectsPage (create modal's type
+                           #   options derive from the ACTIVE-module catalog — useProjectTypes), the
+                           #   three-way ProjectDetailPage switch (TaskBoard / ProjectNotesPanel /
+                           #   ProjectAppsPanel — panels live in their feature folders, cross-feature
+                           #   hook/panel imports), TaskBoard (components/)
     modules/               #   Module catalog + activation page (K-16, iam:module:read)
-    apps/                  #   App Builder UI (Epic 4.2 / K-42): app/property/view/record CRUD,
+    apps/                  #   App Builder UI (Epic 4.2 / K-42, K-45 project-scoped): app (project
+                           #   column + AppFormModal projectId anchor)/property/view/record CRUD,
                            #   RecordFormModal (create+edit), TABLE/BOARD/CALENDAR/LIST/GALLERY
                            #   renderers, row-based filter/sort DSL editor (client-applied),
                            #   User/Relation pickers + id→label resolvers, plan usage indicators
-                           #   (GET /apps/plan-limits — numbers from the backend registry)
+                           #   (GET /apps/plan-limits — numbers from the backend registry) +
+                           #   components/ProjectAppsPanel (the APPS container body)
      audit/                 #   AuditLogs + LoginHistory (iam:audit:read)
      sessions/              #   self/admin/all sessions pages + SessionList component (K-28)
-     notes/                 #   Notes module (K-44): NotesPage (DataTable + category filter + pinned
-                            #   toggle) + NoteEditorPage (markdown textarea + preview via react-markdown;
-                            #   raw HTML never rendered). /notes/new creates via POST then navigates.
+     notes/                 #   Notes module (K-44, K-45 project-scoped): NotesPage (DataTable +
+                            #   category filter + pinned toggle + project column), NoteEditorPage
+                            #   (target-project selector for new notes — ?projectId= or the catalog
+                            #   default; categories follow the chosen container; markdown preview via
+                            #   react-markdown, raw HTML never rendered) and components/ProjectNotesPanel
+                            #   (the NOTES container body inside ProjectDetailPage).
   lib/                     # api (fetch + 401 refresh), i18n (t/useT + messages), notify, format, select, cn,
                            # useListPageState (list-page scaffold: page/sort/search + debounce + page-reset),
                            # useClientPagination, useDebouncedValue
   store/                   # zustand: authStore (session + authorities), tenantStore (X-Tenant-ID),
                            # localeStore (sf_locale, TR/EN)
   test/                    # Vitest suite (K-39): setup.ts + feature/primitive tests (api refresh, LoginPage,
-                            # DataTable, Modal, useListPageState, apps/notes feature pages — see src/test/)
+                            # DataTable, Modal, useListPageState, apps/notes/projects feature pages — see src/test/)
   types/index.ts           # shared-only types: RBAC summaries, ApiErrorResponse, pagination
 ```
 
