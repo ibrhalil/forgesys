@@ -42,6 +42,7 @@ Standart haline gelmiş kararlar. Yeni gereksinim bunlardan biriyle çelişirse 
 | 22 | API konvansiyon: `PageResponse` standart (belgeli pick-list istisnaları), tek `/me`, DELETE→204, controller adı = path namespace, DTO record (`Map` dönüş yok) | K-37 |
 | 23 | Frontend: strict TS + yeni feature'da test zorunlu; liste-sayfa scaffold'u `useListPageState` üzerinden | K-39 |
 | 24 | Startup runner'ları projection yükler; paylaşılan çözümleme zincirleri tek kaynakta yaşar | K-40 |
+| 25 | Proje tipi kataloğu aktif modül registry'sinden türer; içerik varken tip değişimi yasak (409); link katmanı talep-kapılı | K-45 |
 
 ---
 
@@ -53,6 +54,7 @@ Standart haline gelmiş kararlar. Yeni gereksinim bunlardan biriyle çelişirse 
 - **Karar:** JSONB EAV modeli — `t_apps`/`t_app_properties(config jsonb)`/`t_app_records`/`t_app_record_values(value jsonb, GIN)`/`t_app_views(config jsonb)`. Property tipleri TEXT/NUMBER/SELECT/DATE/USER/RELATION (FORMULA erteli — yaratma reddedilir). View config structured JSON DSL (serbest expression dili yok → injection yüzeyi yapısal olarak kapalı). JSONB search native PG (`AppRecordSearchExecutor` — PG-only, H2'de koşmaz). Plan limitleri `PlanDefinition` registry'sinde, soft-block 403.
 - **Durum:** UYGULANDI (backend 2026-08-22; UI K-42, 2026-08-23).
 - **Etki:** Value satırları soft-delete'siz (clear = satır silinir). JSONB mapping düz String + `stringtype=unspecified`. Doğrulama: `AppBuilderIT` (gated gerçek PG).
+- **K-45 amend:** App'ler `APPS`-tipli proje konteynerinde yaşar (`t_apps.project_id`); App ağacı topolojisi (Property/Record/Value/View) ve plan limitlerinin tenant-seviyesi sözleşmesi değişmez.
 
 ### K-16
 **Plan Bazlı Modül Aktivasyonu**
@@ -174,7 +176,7 @@ Standart haline gelmiş kararlar. Yeni gereksinim bunlardan biriyle çelişirse 
 
 ### K-38
 **Ölü/Speculative Kod Politikası**
-- **Karar:** "İleride lazım olur" düşüncesiyle kod taşınmaz; planlar bu dosyada yaşar. Kaldırılanlar: `OrganizationDomain` + `t_organization_domains`, `OwnershipGuard`/`Ownable`, `Company.dbRole`, `User` token kolonları ×4, frontend `resendVerification`. Enum-değer düzeyi speculative'ler (`ProjectType.NOTES`, `PropertyType.FORMULA`) kalır.
+- **Karar:** "İleride lazım olur" düşüncesiyle kod taşınmaz; planlar bu dosyada yaşar. Kaldırılanlar: `OrganizationDomain` + `t_organization_domains`, `OwnershipGuard`/`Ownable`, `Company.dbRole`, `User` token kolonları ×4, frontend `resendVerification`. Enum-değer düzeyi speculative'ler (`ProjectType.NOTES`, `PropertyType.FORMULA`) kalır. (K-45: `NOTES` anlamlı hale geldi, `APPS` eklendi — bu istisna kapandı; `FORMULA` kalır.)
 - **Durum:** UYGULANDI (2026-08-22; baseline V1 checksum değişti → local DB reset).
 
 ### K-39
@@ -206,6 +208,20 @@ Standart haline gelmiş kararlar. Yeni gereksinim bunlardan biriyle çelişirse 
 **Notes Modülü**
 - **Karar:** Standalone (`/api/v1/notes` + `/note-categories`) + tenant-shared görünürlük (pm deseni; ABAC erteli). Markdown editör: `react-markdown` + `remark-gfm`, `rehype-raw` BİLİNÇLİ yok → raw HTML render edilmez (XSS yüzeyi kapalı). Modül yapısı APPS deseni (`module/notes/V1__notes.sql` + bağımsız history). Default-aktif (`pm,apps,notes`; test fallback `pm` — H2'de modül migration örtük koşmaz). Bilinçli yapılmayanlar: WYSIWYG, full-text search (tsvector), not-başına unique başlık.
 - **Durum:** UYGULANDI (2026-08-23).
+- **K-45 revert:** Yerleşim standalone'dan project-scoped'a döndü — notlar `NOTES`-tipli konteynere çapalanır (`module/notes/V2`); flat endpoint'ler cross-container filtre görünümü olarak kalır (`?projectId=`). Tenant-shared görünürlük, markdown ve modül yapısı kararları yerinde.
+
+### K-45
+**Typed Project Container + 5 Katmanlı Sentez**
+- **Bağlam:** pm/apps/notes üç ayrı üst-düzey yüzey olarak duruyordu; oysa ilk tasarım ("type-driven lightweight module system" — `ProjectType.NOTES` placeholder) modülleri proje *tipi* olarak düşünmüştü. Hedef: Jira (tip = davranış şablonu) ve Notion (esnek içerik) sentezi, üzerine kendi genişletilebilirlik eksenimiz. Notion/ClickUp/Jira/Linear/Odoo incelemesi: her ürün mimarinin farklı bir katmanında en iyi → sentez katmanlı kurulur.
+- **Karar:** **5 katmanlı referans mimari** (katman = sorumluluk; taahhüt seviyeleri aşağıda):
+  1. **Konteyner** (Jira + ClickUp): `Project` = abstract typed container; türsüz var edilemez (`project_type NOT NULL` zaten vardı). `TASKS | NOTES | APPS`; dual persona (TASKS → Jira-tarzı iş yönetimi, NOTES/APPS → Notion-tarzı workspace). `parent_project_id` nullable self-FK — hiyerarşi derinliği kullanıcı tercihi, sistem kısıtı değil (ClickUp'ın sabit 5 katman tuzağı yok). Tip yalnızca içerik davranışını belirler; yönetim/config sahipliği anlamı taşımaz (katman 5).
+  2. **İçerik** (Odoo): her içerik tipi installable modülün arkasında; **tip kataloğu aktif modül registry'sinden türer** (`ModuleDefinition.projectType`: PM→TASKS, NOTES→NOTES, APPS→APPS; `GET /api/v1/projects/types`). Modül deaktif → tip seçilemez, o tipteki mevcut projeler read-only. Yeni built-in modül = sıfır model değişikliğiyle yeni proje tipi. Task project-scoped (hazır); **Note konteynere doğrudan çapalanır** (kategori `ON DELETE SET NULL` olduğundan kategori bağı yeterli değil; kategori opsiyonel, verilirse aynı projede olmalı); App `APPS`-koleksiyon konteynerine çapalanır (bir projede N app).
+  3. **Görünüm** (Linear): kayıtlı görünümler konteynere sekme olarak eklenir — AppView'in *DSL konsepti* yeniden kullanılır, *tablo soyutlaması* genelleştirilmez (erken soyutlama = kırılganlık). Sıradaki artış (Faz 2), taahhütsüz.
+  4. **Bağlantı** (Notion): `t_links` polymorphic link katmanı (`source_type/source_id + target_type/target_id`) — **talep-kapılı**: gerçek çapraz-tip bağlama ihtiyacı doğmadan inmez (#21). Dondurulmuş şartları: FK YOK (polymorphic FK = kırılgan), yazım-anı varlık kontrolü, çift yönlü kompozit indeks + çift yönde sayfalama, source purge'u ile aynı transaction'da öksüz temizliği, trigger/async çapraz-modül senkron YASAK.
+  5. **Yönetim ekseni** (Jira team/company-managed): **non-goal** — proje-lokal vs tenant-global yapılandırma sahipliği bu mimaride yer almaz.
+  **Faz 1 taahhüdü (katman 1+2):** `tenant/V3` (`parent_project_id` + `is_default` + tip başına partial unique default); `module/notes/V2` + `module/apps/V2` (`project_id` NOT NULL FK + backfill). Sıkı geçiş: her not/app bir konteynerde yaşar; tip başına tek "Genel" default konteyner (modül aktivasyonunda idempotent ensure). Nested API TaskController deseni (`/projects/{id}/notes`, `/projects/{id}/note-categories`, `/projects/{id}/apps`); flat `/notes` `/apps` cross-container filtre görünümü olarak kalır (`?projectId=` — backward compat). Guard'lar: içerik varken tip değişimi 409 `project_type_change_forbidden`; parent döngüsü 409 (yukarı zincir yürüyüşü, derinlik sınırı); default konteynerin tipi/parent'ı değiştirilemez. Plan limitleri tenant-seviyesinde kalır (proje başına değil). Faz 1'de COUNT/badge/dashboard agregası YOK (şişme kaynağı).
+- **Durum:** PLANLANDI (2026-08-23 onay; Faz 1 adım adım uygulanıyor — tamamlanınca UYGULANDI'ya çeker; Faz 2/3 taahhütsüz yön).
+- **Etki:** Migration sıralama güvencesi: `TenantMigrationRunner` (`@Order(2)`) core'u, `ModuleSyncRunner` modülleri koşturur → `tenant/V3` her zaman `module/*/V2`'den önce iner; module V2 `is_default`'a güvenle başvurabilir. Bağımlılık yönü tek yönlü: içerik repoları konteyneri bilir; görünüm/link katmanları konteyner+içeriği bilir, tersi asla (cyclic dependency yasağı katmanlararasında da geçerli). `ProjectType.NOTES` (K-38 istisnası) anlamlanır; `APPS` eklenir. Üst nav `/notes` `/apps` girdileri cross-container görünüm olarak yaşar (project-first navigasyonla çelişmez).
 
 ---
 
