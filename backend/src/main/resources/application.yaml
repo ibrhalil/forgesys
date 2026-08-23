@@ -43,7 +43,7 @@ forgesys:
     # NOTE: the built-in fallback in ModuleProperties.DEFAULT_KEYS stays 'pm'-only —
     # the test profile has no ModuleProperties bean and must not run module
     # migrations implicitly; ITs activate modules explicitly.
-    default-keys: ${FORGESYS_MODULES_DEFAULT_KEYS:pm,apps}
+    default-keys: ${FORGESYS_MODULES_DEFAULT_KEYS:pm,apps,notes}
   security:
     # Global password pepper (K-23). HMAC-SHA256 pre-hash key combined with BCrypt
     # so a DB leak alone cannot brute-force password hashes. MUST be non-blank —

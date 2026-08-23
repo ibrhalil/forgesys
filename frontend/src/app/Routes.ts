@@ -24,6 +24,8 @@ const UserSessionsPage = lazy(() => import('../features/sessions/UserSessionsPag
 const ModulesPage = lazy(() => import('../features/modules/ModulesPage').then((m) => ({ default: m.ModulesPage })));
 const AppsPage = lazy(() => import('../features/apps/AppsPage').then((m) => ({ default: m.AppsPage })));
 const AppDetailPage = lazy(() => import('../features/apps/AppDetailPage').then((m) => ({ default: m.AppDetailPage })));
+const NotesPage = lazy(() => import('../features/notes/NotesPage').then((m) => ({ default: m.NotesPage })));
+const NoteEditorPage = lazy(() => import('../features/notes/NoteEditorPage').then((m) => ({ default: m.NoteEditorPage })));
 
 export interface AppRoute {
   /** Relative path inside the AppShell layout; omit for the index route. */
@@ -60,4 +62,7 @@ export const SHELL_ROUTES: AppRoute[] = [
   { path: 'modules', Component: ModulesPage, authority: PERMISSIONS.MODULE_READ },
   { path: 'apps', Component: AppsPage, authority: PERMISSIONS.APP_READ },
   { path: 'apps/:appId', Component: AppDetailPage, authority: PERMISSIONS.APP_READ },
+  { path: 'notes', Component: NotesPage, authority: PERMISSIONS.NOTE_READ },
+  { path: 'notes/new', Component: NoteEditorPage, authority: PERMISSIONS.NOTE_WRITE },
+  { path: 'notes/:noteId', Component: NoteEditorPage, authority: PERMISSIONS.NOTE_READ },
 ];

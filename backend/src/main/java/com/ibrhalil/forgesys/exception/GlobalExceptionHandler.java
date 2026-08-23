@@ -266,6 +266,7 @@ public class GlobalExceptionHandler {
         if (lower.contains("groups_name")) return ErrorCode.GROUP_NAME_TAKEN;
         if (lower.contains("permissions_name")) return ErrorCode.PERMISSION_NAME_TAKEN;
         if (lower.contains("projects_name")) return ErrorCode.PROJECT_NAME_TAKEN;
+        if (lower.contains("note_categories_name")) return ErrorCode.NOTE_CATEGORY_NAME_TAKEN;
         if (lower.contains("apps_name")) return ErrorCode.APP_NAME_TAKEN;
         if (lower.contains("app_properties_name")) return ErrorCode.APP_PROPERTY_NAME_TAKEN;
         if (lower.contains("app_views_name")) return ErrorCode.APP_VIEW_NAME_TAKEN;

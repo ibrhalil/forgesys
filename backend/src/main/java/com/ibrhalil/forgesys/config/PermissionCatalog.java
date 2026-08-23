@@ -70,6 +70,16 @@ public final class PermissionCatalog {
     public static final String APPS_RECORD_WRITE = "apps:record:write";
     public static final String APPS_RECORD_DELETE = "apps:record:delete";
 
+    // notes:* — standalone notes module (K-44 / Epic 3.2). Definitions live in
+    // ModuleDefinition.NOTES (module-owned, seeded on activation); the constants stay
+    // here as the single naming source referenced by controllers. Category delete is
+    // covered by notes:category:write (categories are shared taxonomy, not data).
+    public static final String NOTES_NOTE_READ = "notes:note:read";
+    public static final String NOTES_NOTE_WRITE = "notes:note:write";
+    public static final String NOTES_NOTE_DELETE = "notes:note:delete";
+    public static final String NOTES_CATEGORY_READ = "notes:category:read";
+    public static final String NOTES_CATEGORY_WRITE = "notes:category:write";
+
     public record PermissionDefinition(String name, String description) {
     }
 

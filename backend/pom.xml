@@ -112,6 +112,17 @@
     <build>
         <finalName>forgesys-backend</finalName>
         <plugins>
+            <!-- Pin the test JVM to the English locale: H2's LOWER() follows the JVM
+                 default locale, and on a Turkish-locale machine lower('I')='ı' breaks
+                 the Locale.ROOT-folded case-insensitive search (FilterSpecifications).
+                 Deterministic on any dev machine; matches CI and the en-locale PG. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <argLine>-Duser.language=en -Duser.country=US</argLine>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>

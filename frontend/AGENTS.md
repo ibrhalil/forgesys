@@ -20,7 +20,7 @@ npm run preview   # serve the build output locally
 
 Every dependency is pinned to an **exact version** (`.npmrc`: `save-exact=true`).
 
-- **dependencies:** `@tanstack/react-query` 5.80.7, `react`/`react-dom` 19.2.7, `react-icons` 5.7.0, `react-router-dom` 7.7.0, `react-select` 5.10.2, `react-toastify` 11.1.0, `zustand` 5.0.5
+- **dependencies:** `@tanstack/react-query` 5.80.7, `react`/`react-dom` 19.2.7, `react-icons` 5.7.0, `react-markdown` 10.1.0 + `remark-gfm` 4.0.1 (K-44 notes preview — raw HTML deliberately NOT rendered, `rehype-raw` absent), `react-router-dom` 7.7.0, `react-select` 5.10.2, `react-toastify` 11.1.0, `zustand` 5.0.5
 - **devDependencies:** `@tailwindcss/vite` 4.3.3 + `tailwindcss` 4.3.3, `@types/*`, `@vitejs/plugin-react` 6.0.3, `oxlint` 1.71.0, `typescript` 6.0.2, `vite` 8.1.1, `vitest` 4.1.11 + `jsdom` 29.0.1 + `@testing-library/react` 16.3.2 (+dom 10.x) + `@testing-library/jest-dom` 6.9.1 + `@testing-library/user-event` 14.6.6
   - Test dep'leri Node 20 pin'ine göre seçildi (jest-dom 7 / jsdom 30 Node >=22 ister).
 - **Lint:** oxlint (`.oxlintrc.json` — plugins: `react`/`typescript`/`oxc`; `react/rules-of-hooks`=error, `react/only-export-components`=[warn, `{allowConstantExport: true}`])
@@ -88,8 +88,11 @@ src/
                            #   renderers, row-based filter/sort DSL editor (client-applied),
                            #   User/Relation pickers + id→label resolvers, plan usage indicators
                            #   (GET /apps/plan-limits — numbers from the backend registry)
-    audit/                 #   AuditLogs + LoginHistory (iam:audit:read)
-    sessions/              #   self/admin/all sessions pages + SessionList component (K-28)
+     audit/                 #   AuditLogs + LoginHistory (iam:audit:read)
+     sessions/              #   self/admin/all sessions pages + SessionList component (K-28)
+     notes/                 #   Notes module (K-44): NotesPage (DataTable + category filter + pinned
+                            #   toggle) + NoteEditorPage (markdown textarea + preview via react-markdown;
+                            #   raw HTML never rendered). /notes/new creates via POST then navigates.
   lib/                     # api (fetch + 401 refresh), i18n (t/useT + messages), notify, format, select, cn,
                            # useListPageState (list-page scaffold: page/sort/search + debounce + page-reset),
                            # useClientPagination, useDebouncedValue
