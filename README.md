@@ -319,7 +319,7 @@ Kurallar: Subject <72 karakter, küçük harfle başlasın, nokta ile bitmesin, 
 
 ### Code Review
 
-- Build + test + lint geçmek zorunlu: PR öncesi `./mvnw test` + `npm run lint` + `npm test` (CI de aynı üçünü koşar).
+- Build + test + lint geçmek zorunlu: PR öncesi `./mvnw test` + `npm run lint` + `npm test` (CI de aynı üçünü + gated IT'leri koşar — Testcontainers PG/Redis; develop/main push'ta ayrıca Docker build + GHCR publish).
 - Tenant izolasyonu içeren değişikliklerde ekstra dikkat (data leak kontrolü) — tenant verisi sızdıran en kritik bug sınıfıdır.
 - Yeni endpoint'ler için en az bir test eklenmeli.
 

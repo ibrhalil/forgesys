@@ -314,7 +314,7 @@ Tasks UI (liste + Kanban board — DONE, pm modülüyle birlikte). Notes UI (ric
 
 - [ ] **TLS termination:** `nginx.conf` Let's Encrypt (certbot) veya external certs. HTTP -> HTTPS redirect. HSTS header.
 - [x] **Observability (metrics expose — K-43, 2026-08-23):** `micrometer-registry-prometheus` + `/actuator/prometheus` text format expose. Exposure: dev/test `health,info,metrics,prometheus` (same-port, scrape auth'suz — permitAll), prod `health,info,prometheus` + ayrı management portu 8081 (compose'da expose-only internal ağ — asla publish edilmez; scraper bu ağa bağlanır ya da K-33 gateway üzerinden). Business gauge: `forgesys.tenants.active` (tek platform-level gauge; tenant-içi seriler bilinçli yok — scrape thread'inde tenant şeması çözümlenemez). Prometheus/grafana stack'i K-33 gateway ile ayrı iş. OpenTelemetry tracing erteli kalır.
-- [ ] **CI/CD (GitHub Actions):** `.github/workflows/ci.yml` — PR'da `mvn test` + `npm run lint` + `npm run build`. main push -> Docker build + push registry. Secrets: GitHub Actions secret store.
+- [x] **CI/CD (GitHub Actions):** `.github/workflows/ci.yml` — PR'da 3 paralel job: backend (`mvn clean install -pl backend -am`, H2) + frontend (`npm run lint` + `npm test` + `npm run build`) + **integration** (gated IT'ler açık: `CrossTenantIsolationTest`/`ModuleActivationIT`/`AppBuilderIT` gerçek PG + `RedisRefreshTokenIT` gerçek Redis, Testcontainers). CD: develop/main push → tüm job'lar yeşilse root `Dockerfile` build + **GHCR** publish (`GITHUB_TOKEN` — ek secret yok; main → `:latest`, develop → `:edge`, her ikisi `:sha-<short>`; GHA build cache).
 - [ ] **Ertelenen kararlar değerlendir:** OAuth2 sosyal giriş, WebSocket/SSE, S3/MinIO, OpenTelemetry, microservice geçişi.
 
 ---
