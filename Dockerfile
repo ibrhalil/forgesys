@@ -62,15 +62,18 @@ COPY --from=backend-builder /app/extracted/spring-boot-loader/ ./
 COPY --from=backend-builder /app/extracted/snapshot-dependencies/ ./
 COPY --from=backend-builder /app/extracted/application/ ./
 
-# Expose backend server port
-EXPOSE 8080
+# Expose backend server port + management port (K-43: actuator/prometheus —
+# the management port must be attached to an internal network by the orchestrator,
+# never published directly; EXPOSE is documentation-only).
+EXPOSE 8080 8081
 
 # Configure Spring profile and run
 ENV SPRING_PROFILES_ACTIVE=prod
 
-# Health check — verifies app + DB + Redis connectivity via actuator
+# Health check — verifies app + DB + Redis connectivity via actuator on the
+# management port (prod moves all actuator endpoints off the main port, K-43)
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-  CMD wget -qO- http://localhost:8080/actuator/health || exit 1
+  CMD wget -qO- http://localhost:8081/actuator/health || exit 1
 
 # JVM container awareness: MaxRAMPercentage lets the JVM read container memory limits
 ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75.0", "-XX:+UseG1GC", "-jar", "application.jar"]

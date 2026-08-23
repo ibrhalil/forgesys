@@ -338,6 +338,7 @@ Kurallar: Subject <72 karakter, küçük harfle başlasın, nokta ile bitmesin, 
 - **Backend ayağa kalkıyor ama frontend static servis etmiyor** -> `./mvnw clean install` (tüm modülleri yeniden build).
 - **Frontend "Backend DOWN" gösteriyor** -> Backend çalışmıyor; başlat veya mock veriyle devam et (normal davranış).
 - **Vite/Rolldown/Lightning CSS native binding bulunamıyor** -> Node 20.20.2'yi (`nvm use`) kullanıp `node_modules` dizinini temizleyerek `npm install --include=optional` çalıştır.
+- **Metrics/Prometheus erişimi** -> Dev: `curl localhost:8080/actuator/prometheus` (aynı port, auth'suz). Prod: `curl localhost:8081/actuator/prometheus` (management port 8081, internal network — Prometheus scraper aynı Docker network'ünde olmalı). `/actuator/metrics` dev/test'te açık; prod'da kapalı. Dev/test'te `/actuator/metrics` auth gerektirir (cookie'li tarayıcıda çalışır).
 
 ## Dahası
 

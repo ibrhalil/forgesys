@@ -25,7 +25,9 @@ management:
   endpoints:
     web:
       exposure:
-        include: health
+        # K-43: metrics + prometheus scrape endpoint. Prod narrows this
+        # (application-prod.yaml) and moves management to its own port.
+        include: health,info,metrics,prometheus
   endpoint:
     health:
       show-details: never

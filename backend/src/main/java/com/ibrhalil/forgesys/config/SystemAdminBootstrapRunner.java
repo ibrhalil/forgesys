@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.core.annotation.Order;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
@@ -33,6 +34,7 @@ import org.springframework.stereotype.Component;
 @Profile("!test")
 @RequiredArgsConstructor
 @EnableConfigurationProperties(SystemAdminBootstrapProperties.class)
+@Order(1)
 public class SystemAdminBootstrapRunner implements ApplicationRunner {
 
     private final SystemAdminBootstrapProperties properties;

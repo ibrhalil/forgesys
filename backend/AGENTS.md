@@ -52,7 +52,9 @@ Root package `com.ibrhalil.forgesys` (NOT a `.backend` subpackage):
 | `POST` | `/api/v1/auth/company/suggest-subdomain` | K-21 — slug candidates (Turkish-aware) for an org name; up to 3 unique suggestions. |
 | `POST` | `/api/v1/auth/login` | Email+password → RS256 access token + opaque refresh token. Cookies (`sf_access_token`, `sf_refresh_token`) + body. Tenant resolved by subdomain. Unknown/bad-password both → `401 auth_bad_credentials` (no enumeration). |
 | `POST` | `/api/v1/auth/refresh` | Rotates the refresh token (cookie or body) and mints a fresh access token (K-34). Public; tenant from `TenantFilter`; authorities re-resolved from DB. Reuse of a consumed token → `401 auth_refresh_token_reuse` (all sessions revoked). |
-| `GET` | `/actuator/health/**`, `/actuator/info` | Health/info (prod exposes only health). |
+| `GET` | `/actuator/health/**`, `/actuator/info` | Health/info (prod exposes health + info + prometheus). |
+| `GET` | `/actuator/prometheus` | Prometheus text exposition format (dev/test: same-port unauthenticated; prod: separate management port 8081, internal-only). |
+| `GET` | `/actuator/metrics` | Per-metric debugging endpoint (dev/test only; prod unexposed). |
 
 **Authenticated self-service (any logged-in user, no `iam:*` permission):**
 
@@ -84,7 +86,7 @@ Root package `com.ibrhalil.forgesys` (NOT a `.backend` subpackage):
 | `POST` | `/api/v1/modules/{key}/activate` (idempotent) | `iam:module:write` |
 | `GET` | `/api/v1/users/{id}/effective-permissions` · `GET /api/v1/groups/{id}/effective-permissions` | `iam:user:read` / `iam:group:read` |
 | `GET` | `/api/v1/apps` (page; `?q=`) · `GET /{id}` (definition + properties + views) | `apps:app:read` |
-| `GET` | `/api/v1/apps/plan-limits` (plan usage values from the `PlanDefinition` registry — K-42) | `apps:app:read` |
+| `GET` | `/api/v1/apps/plan-limits` (plan usage values from the `PlanDefinition` registry — K-43) | `apps:app:read` |
 | `POST` | `/api/v1/apps` · `PUT /{id}` | `apps:app:write` |
 | `DELETE` | `/api/v1/apps/{id}` | `apps:app:delete` |
 | `GET` | `/api/v1/apps/{appId}/properties` · `/{appId}/views` | `apps:app:read` |
@@ -169,6 +171,14 @@ Config profiles (dev/prod/test) are the single source: [ARCHITECTURE.md - Config
 - `forgesys.security.max-sessions` (Faz 5a) — max concurrent active sessions per user (0 = unlimited); oldest evicted on login.
 - `forgesys.security.rate-limit.*` (Faz 3) — `{enabled,capacity,refill-tokens,refill-period-seconds}` token-bucket on the public auth endpoints (login/verify/refresh), keyed by scope+tenant+IP; Redis Lua (dev/prod, fail-open) + in-memory (test, where it is disabled).
 - `forgesys.modules.default-keys` (K-16 / Faz 3.0.A) — modules activated for every tenant at provisioning + backfilled/re-synced at startup by `ModuleSyncRunner` (default `pm`). Keys must exist in `ModuleDefinition`; unknown keys are logged + skipped.
+- **`forgesys.security.max-sessions` (Faz 5a)** — max concurrent active sessions per user (0 = unlimited); oldest evicted on login.
+- **`forgesys.security.rate-limit.*` (Faz 3)** — `{enabled,capacity,refill-tokens,refill-period-seconds}` token-bucket on the public auth endpoints (login/verify/refresh), keyed by scope+tenant+IP; Redis Lua (dev/prod, fail-open) + in-memory (test, where it is disabled).
+- **`forgesys.modules.default-keys` (K-16 / Faz 3.0.A)** — modules activated for every tenant at provisioning + backfilled/re-synced at startup by `ModuleSyncRunner` (default `pm`). Keys must exist in `ModuleDefinition`; unknown keys are logged + skipped.
+- **`management.endpoints.web.exposure.include` (K-43)** — exposed actuator endpoints (base/dev/test: `health,info,metrics,prometheus`; prod: `health,info,prometheus`).
+- **`management.server.port` (K-43)** — management server port in prod (8081); unset in dev/test (same-port layout).
+- **`management.endpoint.health.show-details`** — never in prod/base; always in dev.
+- **`management.endpoint.health.probes.enabled`** — true in prod; unset in dev/test.
+- **`management.info.env.enabled`** — false in prod; true in dev.
 - **springdoc-openapi (K-41)** — `springdoc-openapi-starter-webmvc-ui` 3.1.0 (the SB4/Jackson 3 line; version property `springdoc.version` in the root pom). Dev/test: spec at `/v3/api-docs`, UI at `/swagger-ui.html` (unconditional `permitAll` in `SecurityConfig` — no-op when disabled). Prod: `application-prod.yaml` sets `springdoc.api-docs.enabled=false` + `springdoc.swagger-ui.enabled=false` — the endpoints unregister (404 via the `NoResourceFoundException` handler). `OpenApiConfig` documents the global `cookieAuth` scheme (apiKey/cookie, `sf_access_token`) — the Authorize button is informational; login via `/auth/login` in the same browser session is the real flow. Gated tests: `SpringdocEndpointsTest` (spec served + scheme + paths) + `SpringdocDisabledTest` (prod flags → 404).
 
 ## Gotchas

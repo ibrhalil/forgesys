@@ -321,6 +321,22 @@ Her kayıt:
 
 ---
 
+### K-43
+**Metrics Expose (Micrometer + Prometheus) — Faz 5 Observability (2026-08-23)**
+- **Bağlam:** K-15/K-42 App Builder backend + UI ship'lendi; operasyonel görünürlük eksik (actuator yalnız health/info). CI'de lint+test+build var; monitoring stack (Prometheus/Grafana/Alertmanager) ayrı iş (K-33 gateway).
+- **Karar:**
+  - **Micrometer + Prometheus registry:** `io.micrometer:micrometer-registry-prometheus` (BOM-managed, versiyon pinleme YOK — spring-boot-dependencies BOM'dan gelir).
+  - **Exposure matrisi:** base/dev/test → `health,info,metrics,prometheus`; prod → `health,info,prometheus` (dar — `/actuator/metrics` debugging endpoint'i kapalı; scrape `/actuator/prometheus` taşır).
+  - **Management portu:** prod → ayrı port 8081 (`management.server.port=8081`, application-prod.yaml); dev/test → aynı port (8080, same-port). **Gerekçe:** prod'da ayrı port → management child context'inde Spring Security filter chain uygulanmaz (child context) → scrape auth'suz; expose-only (ports: yok, expose: 8081) + internal `forgesys-net` → scrape internal-only. Dev/test → same-port (8080); SecurityConfig'te `/actuator/prometheus` permitAll (dev/test scrape auth'suz). Prod'da ayrı portta SecurityFilterChain management child context'e uygulanmaz → permitAll no-op.
+  - **SecurityConfig:** `/actuator/prometheus` permitAll (dev/test same-port scrape; prod'da child context'inde security zinciri uygulanmaz → no-op). `/actuator/metrics` permitAll YOK — debugging endpoint'i auth'suz erişilemez (dev'de cookie'li tarayıcıda erişilebilir; prod'da expose edilmez).
+  - **Custom gauge:** `forgesys.tenants.active` (MeterBinder, `CompanyRepository.findAllTenantSchemas()` ACTIVE count; scrape thread'inde tenant context yok → public schema; tenant-içi gauge'lar bilinçli yok — scrape thread'inde tenant context yok).
+  - **Docker/Prod deploy:** compose app service `expose: "8081"` (ports YOK — internal network only) + healthcheck 8081; Dockerfile `EXPOSE 8081` + HEALTHCHECK 8081.
+  - **Testler:** `ActuatorPrometheusTest` (dev/test same-port: prometheus 200 + `jvm_memory_used_bytes` + `forgesys_tenants_active`; metrics 401 — permitAll sadece health/info/prometheus). `ActuatorPrometheusProdExposureTest` (prod değerleri property setiyle: prometheus 200, metrics 401 — security zinciri önce reddeder; gerçek prod 8081'de chain yok → 404 olur, her halde erişilemez).
+- **Durum:** UYGULANDI (2026-08-23). Doğrulama: `mvn clean install` H2 483 test yeşil; gated PG IT (`-Dforgesys.pg.it=true`) 483 test yeşil (0 skip); frontend lint+test+build yeşil; dev stack ayağa kaldırıp `curl /actuator/prometheus` → `jvm_memory_used_bytes` + `forgesys_tenants_active` gövde assert.
+- **Etki:** Operasyonel görünürlük uçtan uca; plan limitleri zaten expose (K-42). K-33 gateway ile Prometheus scrape konfigü işi ayrı. OTel tracing erteli (K-33 gateway + OpenTelemetry collector ile birlikte değerlendirilecek).
+
+---
+
 ## Risk Kayıtları (RISK-XX)
 
 ### RISK-3
