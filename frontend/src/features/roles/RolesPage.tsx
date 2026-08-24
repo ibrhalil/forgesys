@@ -25,8 +25,19 @@ import { useAuthStore } from '../../store/authStore';
 
 export function RolesPage() {
   const { t } = useT();
-  const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, q } =
-    useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'roles' });
+  const {
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+    sort,
+    toggleSort,
+    search,
+    setSearch,
+    searchFields,
+    setSearchFields,
+    q,
+  } = useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'roles' });
   const { data, isLoading, isFetching } = useRoles({ page, size: pageSize, sorts: [sort], q: q || undefined });
   const delRole = useDeleteRole();
   const canWrite = useAuthStore((s) => s.hasAuthority(PERMISSIONS.ROLE_WRITE));
@@ -35,6 +46,12 @@ export function RolesPage() {
   const [creating, setCreating] = useState(false);
   const [assignPermsTo, setAssignPermsTo] = useState<Role | null>(null);
   const [deleting, setDeleting] = useState<Role | null>(null);
+
+  const roleSearchFields = [
+    { key: 'name', label: t('common.role'), searchable: true },
+    { key: 'description', label: t('common.description'), searchable: true },
+    { key: 'permissions', label: t('common.permissions'), searchable: false },
+  ];
 
   const columns: Column<Role>[] = [
     {
@@ -88,7 +105,16 @@ export function RolesPage() {
         onPageChange={setPage}
         sort={sort}
         onSortChange={toggleSort}
-        toolbar={<SearchInput value={search} onChange={setSearch} placeholder={t('roles.searchPh')} />}
+        toolbar={
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder={t('roles.searchPh')}
+            fields={roleSearchFields}
+            selectedFields={searchFields}
+            onSelectedFieldsChange={setSearchFields}
+          />
+        }
         actionsHeader={t('common.actions')}
         actions={(r) => (
           <RowMenu

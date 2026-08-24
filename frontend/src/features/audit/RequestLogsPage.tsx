@@ -17,7 +17,7 @@ import { useListPageState } from '../../lib/useListPageState';
  */
 export function RequestLogsPage() {
   const { t } = useT();
-  const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, q } =
+  const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, searchFields, setSearchFields, q } =
     useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' }, storageKey: 'request-logs' });
   const { data, isLoading, isFetching } = useRequestLogs({
     page,
@@ -25,6 +25,18 @@ export function RequestLogsPage() {
     sort: `${sort.field},${sort.dir}`,
     q: q || undefined,
   });
+
+  const requestSearchFields = [
+    { key: 'traceId', label: t('requestLog.trace'), searchable: true },
+    { key: 'path', label: t('requestLog.path'), searchable: true },
+    { key: 'user', label: t('requestLog.user'), searchable: true },
+    { key: 'method', label: t('requestLog.method'), searchable: false },
+    { key: 'status', label: t('requestLog.status'), searchable: false },
+    { key: 'duration', label: t('requestLog.duration'), searchable: false },
+    { key: 'ipAddress', label: t('requestLog.ip'), searchable: false },
+    { key: 'userAgent', label: t('requestLog.userAgent'), searchable: false },
+    { key: 'createdAt', label: t('requestLog.date'), searchable: false },
+  ];
 
   const columns: Column<RequestLog>[] = [
     {
@@ -122,7 +134,16 @@ export function RequestLogsPage() {
         onPageChange={setPage}
         sort={sort}
         onSortChange={toggleSort}
-        toolbar={<SearchInput value={search} onChange={setSearch} placeholder={t('requestLog.searchPh')} />}
+        toolbar={
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder={t('requestLog.searchPh')}
+            fields={requestSearchFields}
+            selectedFields={searchFields}
+            onSelectedFieldsChange={setSearchFields}
+          />
+        }
       />
     </Page>
   );

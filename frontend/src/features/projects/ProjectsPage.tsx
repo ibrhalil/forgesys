@@ -36,8 +36,19 @@ function useTypeOptions() {
 export function ProjectsPage() {
   const { t } = useT();
   const navigate = useNavigate();
-  const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, q } =
-    useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'projects' });
+  const {
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+    sort,
+    toggleSort,
+    search,
+    setSearch,
+    searchFields,
+    setSearchFields,
+    q,
+  } = useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'projects' });
   const { data, isLoading, isFetching } = useProjects({ page, size: pageSize, sorts: [sort], q: q || undefined });
   const delProject = useDeleteProject();
   const canDelete = useAuthStore((s) => s.hasAuthority(PERMISSIONS.PROJECT_DELETE));
@@ -45,6 +56,12 @@ export function ProjectsPage() {
 
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<Project | null>(null);
+
+  const projectSearchFields = [
+    { key: 'name', label: t('projects.project'), searchable: true },
+    { key: 'type', label: t('projects.type'), searchable: false },
+    { key: 'description', label: t('common.description'), searchable: true },
+  ];
 
   const columns: Column<Project>[] = [
     {
@@ -99,7 +116,16 @@ export function ProjectsPage() {
         onPageChange={setPage}
         sort={sort}
         onSortChange={toggleSort}
-        toolbar={<SearchInput value={search} onChange={setSearch} placeholder={t('projects.searchPh')} />}
+        toolbar={
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder={t('projects.searchPh')}
+            fields={projectSearchFields}
+            selectedFields={searchFields}
+            onSelectedFieldsChange={setSearchFields}
+          />
+        }
         actionsHeader={t('common.actions')}
         actions={(p) => (
           <RowMenu

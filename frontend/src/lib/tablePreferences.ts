@@ -7,6 +7,8 @@ export interface TablePreferences {
   columnOrder?: string[];
   /** Optional table display density for future customization. */
   density?: 'compact' | 'normal' | 'relaxed';
+  /** Target search column/field keys for smart search. Empty or omitted indicates all searchable fields. */
+  searchFields?: string[];
   /** Extensible key-value dictionary for future table customization needs. */
   [key: string]: unknown;
 }
