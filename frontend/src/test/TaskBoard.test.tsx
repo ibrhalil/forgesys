@@ -139,3 +139,88 @@ describe('TaskBoard (card action overflow)', () => {
     expect(dialog.querySelector('input[role="combobox"]')).not.toBeNull();
   });
 });
+
+describe('TaskBoard (drag-drop wiring)', () => {
+  beforeEach(() => {
+    useLocaleStore.setState({ locale: 'en' });
+    useAuthStore.setState({ hasAuthority: () => true });
+    calls = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        calls.push({ url, method: init?.method ?? 'GET' });
+        const body = url.startsWith('/api/v1/projects/p-1/tasks') ? TASKS_PAYLOAD : EMPTY_PAGE;
+        return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }),
+    );
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('marks cards draggable and columns droppable while pm:task:write is held', async () => {
+    renderBoard();
+    await screen.findByText('Fix login');
+
+    const card = screen.getByText('Fix login').closest('article');
+    expect(card).toHaveAttribute('role', 'button');
+    expect(card).toHaveAttribute('aria-roledescription', 'draggable');
+    expect(card).toHaveStyle({ touchAction: 'manipulation' });
+
+    for (const id of ['col:TODO', 'col:IN_PROGRESS', 'col:DONE']) {
+      expect(document.querySelector(`[data-droppable-id="${id}"]`)).toBeInTheDocument();
+    }
+  });
+
+  it('renders cards without draggable attributes when writing is not allowed', async () => {
+    useAuthStore.setState({ hasAuthority: (a: string) => a !== 'pm:task:write' });
+    renderBoard();
+    await screen.findByText('Fix login');
+
+    const card = screen.getByText('Fix login').closest('article');
+    expect(card).not.toHaveAttribute('role');
+    expect(card).not.toHaveAttribute('aria-roledescription');
+  });
+
+  it('moves optimistically and rolls back to the old column when the update fails', async () => {
+    // Gate the PUT so the optimistic state is observable before it settles.
+    let resolvePut!: (res: Response) => void;
+    const putGate = new Promise<Response>((res) => {
+      resolvePut = res;
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        calls.push({ url, method: init?.method ?? 'GET' });
+        if ((init?.method ?? 'GET') === 'PUT' && url === '/api/v1/projects/p-1/tasks/t-1') return putGate;
+        return Promise.resolve(
+          new Response(JSON.stringify(url.startsWith('/api/v1/projects/p-1/tasks') ? TASKS_PAYLOAD : EMPTY_PAGE), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderBoard();
+    await screen.findByText('Fix login');
+
+    // Same move path a drag end takes — via the card's status mover.
+    await user.click(screen.getAllByRole('combobox')[0]);
+    await user.click(await screen.findByRole('option', { name: 'Done' }));
+
+    // Optimistic: the card jumps to DONE before the PUT resolves.
+    await waitFor(() => {
+      expect(document.querySelector('[data-droppable-id="col:DONE"]')).toContainElement(screen.getByText('Fix login'));
+    });
+    expect(document.querySelector('[data-droppable-id="col:TODO"]')).not.toContainElement(screen.getByText('Fix login'));
+    const put = calls.find((c) => c.method === 'PUT');
+    expect(put?.url).toBe('/api/v1/projects/p-1/tasks/t-1');
+
+    resolvePut(new Response(JSON.stringify({ code: 'internal_error' }), { status: 500 }));
+    await waitFor(() => {
+      expect(document.querySelector('[data-droppable-id="col:TODO"]')).toContainElement(screen.getByText('Fix login'));
+    });
+  });
+});

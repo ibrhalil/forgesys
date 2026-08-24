@@ -133,4 +133,88 @@ describe('RecordBoard', () => {
     renderBoard({ view: { ...VIEW, config: { groupBy: 'p-missing' } } });
     expect(screen.getByText(/group-by property is missing/i)).toBeInTheDocument();
   });
+
+  it('marks cards draggable and columns droppable while apps:record:write is held', () => {
+    renderBoard();
+
+    const card = screen.getByText('Fix login').closest('article');
+    expect(card).toHaveAttribute('role', 'button');
+    expect(card).toHaveAttribute('aria-roledescription', 'draggable');
+    expect(card).toHaveStyle({ touchAction: 'manipulation' });
+
+    for (const id of ['col:Todo', 'col:Done', 'col:__empty']) {
+      expect(document.querySelector(`[data-droppable-id="${id}"]`)).toBeInTheDocument();
+    }
+  });
+
+  it('renders cards without draggable attributes when writing is not allowed', () => {
+    useAuthStore.setState({ hasAuthority: (a: string) => a !== 'apps:record:write' });
+    renderBoard();
+
+    const card = screen.getByText('Fix login').closest('article');
+    expect(card).not.toHaveAttribute('role');
+    expect(card).not.toHaveAttribute('aria-roledescription');
+  });
+
+  it('moves optimistically through the records cache and rolls back when the PATCH fails', async () => {
+    // The optimistic write targets the underlying records query — verified end
+    // to end through RecordsPanel, whose grouping recomputes from the cache.
+    const { RecordsPanel } = await import('../features/apps/components/RecordsPanel');
+    const recordsPage = {
+      data: [R1, R2, R3],
+      meta: { page: 0, pageSize: 1000, totalElements: 3, totalPages: 1, hasNext: false, hasPrevious: false },
+    };
+    let resolvePatch!: (res: Response) => void;
+    const patchGate = new Promise<Response>((res) => {
+      resolvePatch = res;
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const method = init?.method ?? 'GET';
+        calls.push({ method, url, body: init?.body ? String(init.body) : undefined });
+        if (method === 'PATCH') return patchGate;
+        if (url.includes('/plan-limits')) {
+          return Promise.resolve(new Response(JSON.stringify({ maxRecordsPerApp: -1 }), { status: 200 }));
+        }
+        // 'size=1000'.includes('size=1') is true — compare the parsed param, not substrings.
+        const pageSize = new URLSearchParams(url.split('?')[1] ?? '').get('size');
+        const body =
+          url.includes(`/api/v1/apps/${APP_ID}/records`) && pageSize === '1'
+            ? { data: [], meta: { page: 0, pageSize: 1, totalElements: 3, totalPages: 3, hasNext: true, hasPrevious: false } }
+            : recordsPage;
+        return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+      }),
+    );
+
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <RecordsPanel app={{ ...APP, views: [VIEW] }} />
+      </QueryClientProvider>,
+    );
+
+    // First mover belongs to the first card (Fix login — Todo).
+    const user = userEvent.setup();
+    const movers = await screen.findAllByRole('combobox');
+    await user.click(movers[0]);
+    await user.click(await screen.findByRole('option', { name: 'Done' }));
+
+    // Optimistic: the card lands in the Done column before the PATCH resolves.
+    await waitFor(() => {
+      expect(document.querySelector('[data-droppable-id="col:Done"]')).toContainElement(screen.getByText('Fix login'));
+    });
+    expect(document.querySelector('[data-droppable-id="col:Todo"]')).not.toContainElement(
+      screen.getByText('Fix login'),
+    );
+    const patch = calls.find((c) => c.method === 'PATCH');
+    expect(patch?.url).toBe(`/api/v1/apps/${APP_ID}/records/r-1`);
+    expect(JSON.parse(patch?.body ?? '{}')).toEqual({ values: { 'p-status': 'Done' } });
+
+    resolvePatch(new Response(JSON.stringify({ code: 'internal_error' }), { status: 500 }));
+    await waitFor(() => {
+      expect(document.querySelector('[data-droppable-id="col:Todo"]')).toContainElement(screen.getByText('Fix login'));
+    });
+  });
 });
