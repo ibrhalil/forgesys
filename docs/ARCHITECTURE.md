@@ -168,6 +168,7 @@ flowchart TB
 5. Admin user INSERT (email/password-hash token'dan, `emailVerified=true`) + `RbacSeeder.seedForCurrentTenant()` (Admin rolü + permission catalog).
 6. `TenantContext.clear()` `finally`'de.
 7. `Company.status = ACTIVE`, `token.usedAt = now`.
+8. Transaction commit'inden sonra (afterCommit senkronizasyonu) sample data seeding ([K-47](DECISIONS.md#k-47)): `TenantSampleDataService` config gate (`forgesys.provisioning.sample-data.enabled`) + iki katman fail-safe; seed'in REQUIRES_NEW tx'i aktivasyon/subscription satırlarını görmek zorunda olduğundan bilinçli post-commit.
 
 **Bootstrap auto-verify** (`provisionSystemTenant`, K-24): `SystemAdminBootstrapRunner` faz 1 (mail yok) + faz 2'yi arka arkaya çağırır — `system` tenant'ı startup'ta mail loop olmadan provision edilir.
 

@@ -25,6 +25,11 @@ management:
       enabled: false
 
 forgesys:
+  provisioning:
+    # K-47: sample data seeding stays off in tests — fixtures are built manually and
+    # provisioning tests mock the seed service.
+    sample-data:
+      enabled: false
   security:
     # Non-secret placeholder pepper for the test profile only. Lets the
     # PepperingPasswordEncoder bean load without a PASSWORD_PEPPER env var.

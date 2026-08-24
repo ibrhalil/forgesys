@@ -10,6 +10,7 @@ import com.ibrhalil.forgesys.entity.Plan;
 import com.ibrhalil.forgesys.entity.Subscription;
 import com.ibrhalil.forgesys.entity.SubscriptionStatus;
 import com.ibrhalil.forgesys.entity.TenantVerificationToken;
+import com.ibrhalil.forgesys.entity.User;
 import com.ibrhalil.forgesys.exception.BusinessException;
 import com.ibrhalil.forgesys.exception.ErrorCode;
 import com.ibrhalil.forgesys.persistence.repository.CompanyRepository;
@@ -17,6 +18,7 @@ import com.ibrhalil.forgesys.persistence.repository.PlanRepository;
 import com.ibrhalil.forgesys.persistence.repository.SubscriptionRepository;
 import com.ibrhalil.forgesys.persistence.repository.TenantVerificationTokenRepository;
 import com.ibrhalil.forgesys.persistence.repository.UserRepository;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,6 +29,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -42,6 +46,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -58,6 +63,7 @@ class TenantProvisioningServiceTest {
 
     private static final String SUBDOMAIN = "geba-klubu";
     private static final String SCHEMA_NAME = "tenant_geba_klubu";
+    private static final UUID ADMIN_ID = UUID.randomUUID();
 
     @Mock private CompanyRepository companyRepository;
     @Mock private UserRepository userRepository;
@@ -68,6 +74,7 @@ class TenantProvisioningServiceTest {
     @Mock private DataSource dataSource;
     @Mock private TenantMigrationSupport tenantMigrationSupport;
     @Mock private ModuleActivationService moduleActivationService;
+    @Mock private TenantSampleDataService sampleDataService;
     @Mock private VerificationSender verificationSender;
     @Mock private ObjectProvider<RbacSeeder> rbacSeederProvider;
     @Mock private ObjectProvider<TenantProvisioningService> self;
@@ -81,13 +88,27 @@ class TenantProvisioningServiceTest {
         service = new TenantProvisioningService(
                 companyRepository, userRepository, tokenRepository, planRepository, subscriptionRepository,
                 passwordEncoder, dataSource, tenantMigrationSupport, moduleActivationService,
-                verificationSender, rbacSeederProvider, self);
+                sampleDataService, verificationSender, rbacSeederProvider, self);
         ReflectionTestUtils.setField(service, "appBaseUrl", "http://test.local");
         ReflectionTestUtils.setField(service, "tokenTtlHours", 24L);
         // REQUIRES_NEW self-proxy: createAdminUser is invoked through self.getObject(),
         // which in the unit test just returns the same (proxy-less) service instance.
         // Lenient because not every test reaches createAdminUser (e.g. token-error paths).
         lenient().when(self.getObject()).thenReturn(service);
+        // K-47: verifyAndProvision registers the sample-data seed as an afterCommit
+        // synchronization when one is active — emulate the transactional caller.
+        TransactionSynchronizationManager.initSynchronization();
+    }
+
+    @AfterEach
+    void tearDown() {
+        TransactionSynchronizationManager.clearSynchronization();
+    }
+
+    /** Fires the registered afterCommit callbacks (the production commit point). */
+    private void commitProvisioning() {
+        TransactionSynchronizationManager.getSynchronizations()
+                .forEach(TransactionSynchronization::afterCommit);
     }
 
     @Test
@@ -142,6 +163,7 @@ class TenantProvisioningServiceTest {
         stubCreateSchema();
         when(companyRepository.save(any(Company.class))).thenAnswer(inv -> inv.getArgument(0));
         stubFreePlan();
+        stubAdminUserSave();
 
         CompanyVerifyResponse response = service.verifyAndProvision("good-token");
 
@@ -168,10 +190,41 @@ class TenantProvisioningServiceTest {
         RbacSeeder seeder = org.mockito.Mockito.mock(RbacSeeder.class);
         seederCaptor.getValue().accept(seeder);
         verify(seeder).seedForCurrentTenant();
-        verify(seeder).assignAdminTo(any(com.ibrhalil.forgesys.entity.User.class));
+        verify(seeder).assignAdminTo(any(User.class));
         // [RISK-25] the claim UPDATE persists used_at; the service no longer re-saves the
         // token afterwards.
         verify(tokenRepository, never()).save(any(TenantVerificationToken.class));
+        // K-47: the sample-data seed fires after the provisioning transaction commits,
+        // with the new admin's id (the Linear onboarding pattern).
+        commitProvisioning();
+        verify(sampleDataService).seedForCompany(company, ADMIN_ID);
+    }
+
+    /**
+     * K-47 fail-safe proof: even when the sample-data seed throws, provisioning has
+     * already succeeded — the afterCommit callback swallows the failure and the
+     * Company stays ACTIVE.
+     */
+    @Test
+    void verifyAndProvision_sampleDataSeedFails_provisioningStillSucceeds() throws Exception {
+        Company company = companyWithStatus(CompanyStatus.PROVISIONING);
+        TenantVerificationToken token = validToken(company);
+        when(tokenRepository.findByToken("good-token")).thenReturn(Optional.of(token));
+        when(tokenRepository.claimToken(eq("good-token"), any(OffsetDateTime.class))).thenReturn(1);
+        stubCreateSchema();
+        when(companyRepository.save(any(Company.class))).thenAnswer(inv -> inv.getArgument(0));
+        stubFreePlan();
+        stubAdminUserSave();
+        doThrow(new RuntimeException("seed exploded"))
+                .when(sampleDataService).seedForCompany(any(Company.class), any());
+
+        CompanyVerifyResponse response = service.verifyAndProvision("good-token");
+
+        assertThat(response.status()).isEqualTo(CompanyStatus.ACTIVE);
+        assertThat(company.getStatus()).isEqualTo(CompanyStatus.ACTIVE);
+        // The exception must not escape the afterCommit callback.
+        commitProvisioning();
+        verify(sampleDataService).seedForCompany(company, ADMIN_ID);
     }
 
     @Test
@@ -253,6 +306,7 @@ class TenantProvisioningServiceTest {
         stubFreePlan();
         when(companyRepository.findById(any(UUID.class)))
                 .thenAnswer(inv -> Optional.of(companyWithStatus(CompanyStatus.ACTIVE)));
+        stubAdminUserSave();
 
         Company result = service.provisionSystemTenant(request());
 
@@ -262,6 +316,10 @@ class TenantProvisioningServiceTest {
         verify(tenantMigrationSupport).migrateSchema(SCHEMA_NAME);
         verify(subscriptionRepository).save(any(Subscription.class));
         verify(moduleActivationService).activateDefaultModules(any(Company.class));
+        // K-47: the bootstrap path runs the same afterCommit seed — the system tenant
+        // gets sample data too (closeable via the config gate).
+        commitProvisioning();
+        verify(sampleDataService).seedForCompany(any(Company.class), eq(ADMIN_ID));
     }
 
     /**
@@ -336,5 +394,14 @@ class TenantProvisioningServiceTest {
         plan.setRank(0);
         plan.setActive(true);
         when(planRepository.findByKey("free")).thenReturn(Optional.of(plan));
+    }
+
+    /** The mock save does not run @GeneratedValue — stamp the id the seed hook needs (K-47). */
+    private void stubAdminUserSave() {
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> {
+            User user = inv.getArgument(0);
+            user.setId(ADMIN_ID);
+            return user;
+        });
     }
 }

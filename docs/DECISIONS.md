@@ -229,6 +229,14 @@ Standart haline gelmiş kararlar. Yeni gereksinim bunlardan biriyle çelişirse 
 - **Durum:** UYGULANDI (2026-08-24).
 - **Etki:** Workflow-level `on.paths` BİLİNÇLİ kullanılmadı — job-level skip required check'ler açısından success sayılır, workflow-level skip pending'te asılı kalır. `docker` `!cancelled()` + failure/cancelled guard'larıyla skip-propagation'a karşı korunur. Docs/infra-only değişiklikler hiçbir job tetiklemez.
 
+### K-47
+**Provisioning'te Sample Data Seeding (Linear deseni)**
+- **Karar:** Yeni tenant ilk login'de bomboş ekranlarla değil, öğretici örnek veriyle karşılaşır. Seeding Java tarafında (`TenantSampleDataService`), provisioning akışında — mevcut service'ler yeniden kullanılır (authority kontrolleri controller katmanında olduğundan sistem-context çağrı 403 üretmez; `@AuditLog` actor fallback `"system"`). Dil EN sabit string (tenant verisi, UI değil → i18n bilinçli YOK). Kapsam: pm (1 TASKS proje + 4 görev), notes (2 kategori + 2 not), apps (1 app + 3 property + 2 view + 4 kayıt) — FREE plan limitleri içinde.
+- **Zamanlama (kritik):** Seed provisioning transaction'ı COMMIT ettikten sonra koşar (`TransactionSynchronization.afterCommit`, senkron — aynı istek). Seed kendi REQUIRES_NEW tx'ini açar (RISK-26 — outer session public-pinli) ve bu tx'in `t_tenant_modules` aktivasyon kayıtları ile `t_subscriptions` FREE satırını GÖRMESİ gerekir (`ProjectService.assertTypeActivatable` + `PlanLimitService.activePlan` kapıları); read-committed altında aynı-tx çağrı bu satırları göremez → sessiz MODULE_NOT_ACTIVE / SUBSCRIPTION_NOT_FOUND başarısızlığı.
+- **Gate + fail-safe:** `forgesys.provisioning.sample-data.enabled` (`FORGESYS_SAMPLE_DATA`, default true; test profili false). İki katman fail-safe: `seedForCompany` içi catch (warn log) + afterCommit callback'inde catch — seeding hatası provisioning'i asla kırmaz. `provisionSystemTenant` yolu aynı hook'u tetikler → system tenant da seed edilir (bilinçli; gate ile kapatılabilir).
+- **Reddedilen alternatifler:** Flyway `afterMigrate`/seed migration — `TenantMigrationRunner` tüm eski tenantlara uygular (mevcut tenantların verisi değişmez ilkesi ihlal); frontend mock — gerçek veri değil, kalıcı değil, öğretici değil.
+- **Durum:** UYGULANDI (2026-08-24).
+
 ---
 
 ## Risk Kayıtları (RISK-XX)
