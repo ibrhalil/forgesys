@@ -223,6 +223,12 @@ Standart haline gelmiş kararlar. Yeni gereksinim bunlardan biriyle çelişirse 
 - **Durum:** UYGULANDI (Faz 1, 2026-08-23: `tenant/V3` + `module/notes/V2` + `module/apps/V2` + tip kataloğu/aktivasyon kapısı/nested API'ler + üç yönlü proje detay UI'ı. Faz 2 görünüm sekmeleri ve Faz 3 `t_links` taahhütsüz yöndür; Faz 1 sırasında benimsenen yan karar: proje isim benzersizliği TİP BAZLI oldu — `uk_projects_type_name (project_type, name)` — böylece NOTES/APPS defaultları aynı "Genel" adını taşıyabilir).
 - **Etki:** Migration sıralama güvencesi: `TenantMigrationRunner` (`@Order(2)`) core'u, `ModuleSyncRunner` modülleri koşturur → `tenant/V3` her zaman `module/*/V2`'den önce iner; module V2 `is_default`'a güvenle başvurabilir. Bağımlılık yönü tek yönlü: içerik repoları konteyneri bilir; görünüm/link katmanları konteyner+içeriği bilir, tersi asla (cyclic dependency yasağı katmanlararasında da geçerli). `ProjectType.NOTES` (K-38 istisnası) anlamlanır; `APPS` eklenir. Üst nav `/notes` `/apps` girdileri cross-container görünüm olarak yaşar (project-first navigasyonla çelişmez).
 
+### K-46
+**CI Path-Based Job Filtreleme**
+- **Karar:** CI'a `changes` job eklendi (saf git-diff, üçüncü parti action yok): PR'da hedef branch ucuna üç-nokta diff, push'ta `event.before` diff'i. Job-level `if` gate'leri: `backend`+`integration` → `backend|common|persistence/**` + kök `pom.xml`/`mvnw`/`ci.yml`; `frontend` → `frontend/**` + `.npmrc`/`.nvmrc`/`ci.yml`; `docker` → backend||frontend||`Dockerfile`/`.dockerignore`/`docker-compose*` (docs-only push'ta imaj basılmaz). Base çözülemezse (yeni branch, force push) fail-safe: tüm dosyalar değişmiş sayılır. `integration` her backend değişikliğinde koşmaya devam eder (tenant izolasyonu kritik).
+- **Durum:** UYGULANDI (2026-08-24).
+- **Etki:** Workflow-level `on.paths` BİLİNÇLİ kullanılmadı — job-level skip required check'ler açısından success sayılır, workflow-level skip pending'te asılı kalır. `docker` `!cancelled()` + failure/cancelled guard'larıyla skip-propagation'a karşı korunur. Docs/infra-only değişiklikler hiçbir job tetiklemez.
+
 ---
 
 ## Risk Kayıtları (RISK-XX)
