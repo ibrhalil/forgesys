@@ -15,8 +15,80 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    name: Changes (path detection)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      docker: ${{ steps.filter.outputs.docker }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Merge-base (BASE...HEAD) hesabı için tam geçmiş gerekir.
+          fetch-depth: 0
+
+      # Saf git-diff path detection (üçüncü parti action yok).
+      # - pull_request -> hedef branch ucu (origin/<base_ref>) ile üç-nokta diff
+      # - push -> event.before ile diff
+      # - base çözülemezse (yeni branch / force push / zero SHA) fail-safe:
+      #   tüm dosyalar değişmiş sayılır -> hiçbir job skip edilmez.
+      # Ortak dosyalar (pom.xml, mvnw, ci.yml) ilgili tüm filtreleri tetikler;
+      # docs/**, README.md, infra/** hiçbir job'u tetiklemez.
+      - name: Detect changed paths
+        id: filter
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          ZERO_SHA="0000000000000000000000000000000000000000"
+
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            # Hedef branch ucunun yerelde olduğundan emin ol (idempotent).
+            git fetch --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+            BASE="refs/remotes/origin/${BASE_REF}"
+          elif [ -n "$BEFORE" ] && [ "$BEFORE" != "$ZERO_SHA" ] && git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            BASE="$BEFORE"
+          else
+            BASE=""
+          fi
+
+          if [ -n "$BASE" ]; then
+            FILES="$(git diff --name-only "${BASE}...HEAD")"
+          else
+            FILES="$(git ls-tree -r --name-only HEAD)"
+          fi
+
+          BACKEND_RE='^(backend|common|persistence)/|^pom\.xml$|^mvnw(\.cmd)?$|^\.github/workflows/ci\.yml$'
+          FRONTEND_RE='^frontend/|^\.npmrc$|^\.nvmrc$|^\.github/workflows/ci\.yml$'
+          DOCKER_RE='^Dockerfile$|^\.dockerignore$|^docker-compose[^/]*\.yml$|^\.github/workflows/ci\.yml$'
+
+          filter() { printf '%s\n' "$FILES" | grep -Eq "$1" && echo true || echo false; }
+
+          BACKEND_CHANGED="$(filter "$BACKEND_RE")"
+          FRONTEND_CHANGED="$(filter "$FRONTEND_RE")"
+          # İmaj backend+frontend'i birlikte paketler -> ikisinden biri veya
+          # Docker dosyaları değişince yeniden build gerekir.
+          if [ "$BACKEND_CHANGED" = true ] || [ "$FRONTEND_CHANGED" = true ] || [ "$(filter "$DOCKER_RE")" = true ]; then
+            DOCKER_CHANGED=true
+          else
+            DOCKER_CHANGED=false
+          fi
+
+          {
+            echo "backend=$BACKEND_CHANGED"
+            echo "frontend=$FRONTEND_CHANGED"
+            echo "docker=$DOCKER_CHANGED"
+          } >> "$GITHUB_OUTPUT"
+
   backend:
     name: Backend (Maven + H2 tests)
+    needs: changes
+    # Path gate: yalnız backend/common/persistence + kök pom/mvnw/ci.yml değişince koşar.
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -40,6 +112,10 @@ jobs:
 
   integration:
     name: Integration (Testcontainers — real PG + Redis)
+    needs: changes
+    # Path gate: backend job ile aynı tetikleyiciler (tenant izolasyonu kritik,
+    # her backend değişikliğinde koşar).
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -68,6 +144,9 @@ jobs:
 
   frontend:
     name: Frontend (lint + test + build)
+    needs: changes
+    # Path gate: yalnız frontend + .npmrc/.nvmrc/ci.yml değişince koşar.
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -77,12 +156,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node 20
+      # Lock file yok (proje politikası: .npmrc package-lock=false) ->
+      # setup-node cache: npm kullanılamaz; ~/.npm tarball cache'i manuel
+      # tutulur (key: package.json hash — save-exact pin'ler değişince miss).
+      - name: Cache npm (~/.npm)
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: npm-${{ runner.os }}-${{ hashFiles('frontend/package.json') }}
+          restore-keys: npm-${{ runner.os }}-
+
+      - name: Setup Node 24
         uses: actions/setup-node@v4
         with:
           node-version: '24'
-          # package-lock.json commit edilmez (.npmrc package-lock=false)
-          # -> cache: npm kullanmıyoruz.
 
       # Lock file yok (proje politikası: .npmrc package-lock=false).
       # --include=optional: native paketler (esbuild/rollup) linux için kurulur.
@@ -101,9 +188,19 @@ jobs:
 
   docker:
     name: Docker (build + GHCR publish)
-    needs: [backend, frontend, integration]
+    needs: [changes, backend, frontend, integration]
     # CD: yalnız develop/main push'unda imaj basılır (PR'da koşmaz).
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    # docs-only push'ta "docker" output false gelir -> imaj basılmaz.
+    # !cancelled(): upstream job'lardan biri path filtresiyle skip edildiğinde
+    # bu job'ın otomatik skip olmasını engeller; failure/cancelled guard'ları
+    # mevcut "hepsi başarılıysa" semantiğini korur (skip == başarılı sayılır).
+    if: >-
+      !cancelled() &&
+      !contains(needs.*.result, 'failure') &&
+      !contains(needs.*.result, 'cancelled') &&
+      needs.changes.outputs.docker == 'true' &&
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
