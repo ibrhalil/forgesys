@@ -18,7 +18,7 @@ import type { AppDetail, AppRecord } from '../types';
 import { useRecords, usePatchRecord, useDeleteRecord } from '../hooks';
 import { cellDisplay, cellEditValue, parseCellInput } from '../cellValue';
 import { useValueResolvers } from '../valueLabels';
-import { UserPicker } from './UserPicker';
+import { UserPicker } from '../../../components/pickers/UserPicker';
 import { RelationPicker } from './RelationPicker';
 import { RecordFormModal } from './RecordFormModal';
 
@@ -70,7 +70,8 @@ export function RecordTable({
   const delRecord = useDeleteRecord(app.id);
   const canWrite = useAuthStore((s) => s.hasAuthority(PERMISSIONS.APP_RECORD_WRITE));
   const canDelete = useAuthStore((s) => s.hasAuthority(PERMISSIONS.APP_RECORD_DELETE));
-  const resolve = useValueResolvers(app);
+  // USER labels resolve over the rows actually shown (override: panel-fed; self: server page).
+  const resolve = useValueResolvers(app, override ? override.records : (data?.items ?? []));
 
   const [edit, setEdit] = useState<EditState | null>(null);
   const [creating, setCreating] = useState(false);

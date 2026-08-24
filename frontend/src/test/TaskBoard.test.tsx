@@ -100,4 +100,42 @@ describe('TaskBoard (card action overflow)', () => {
       expect(calls.some((c) => c.method === 'DELETE' && c.url === '/api/v1/projects/p-1/tasks/t-1')).toBe(true);
     });
   });
+
+  it('shows the shortened id for an assigned-but-unresolved assignee (never "Unassigned")', async () => {
+    // Assignee beyond the directory page AND without a resolvable detail.
+    const assigned = {
+      ...TASKS_PAYLOAD,
+      data: TASKS_PAYLOAD.data.map((t, i) => (i === 0 ? { ...t, assigneeId: 'zz9-zed-unresolved' } : t)),
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        const body = url.startsWith('/api/v1/projects/p-1/tasks')
+          ? assigned
+          : url === '/api/v1/users/zz9-zed-unresolved'
+            ? { code: 'resource_not_found' }
+            : EMPTY_PAGE;
+        const status = body === EMPTY_PAGE || url.startsWith('/api/v1/projects') ? 200 : 404;
+        return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+      }),
+    );
+
+    renderBoard();
+    expect(await screen.findByText('Fix login')).toBeInTheDocument();
+    // shortenId("zz9-zed-unresolved") — the ASSIGNED card never renders "Unassigned"
+    // (the other, genuinely unassigned card keeps its own label).
+    expect(screen.getByText('zz9-zed-…')).toBeInTheDocument();
+  });
+
+  it('task modal assignee field is an async UserPicker combobox', async () => {
+    const user = userEvent.setup();
+    renderBoard();
+    await screen.findByText('Fix login');
+
+    await user.click(screen.getByRole('button', { name: /New Task/i }));
+    const dialog = await screen.findByRole('dialog');
+    // The assignee control is a searchable picker (not a static option list).
+    expect(dialog.querySelector('input[role="combobox"]')).not.toBeNull();
+  });
 });

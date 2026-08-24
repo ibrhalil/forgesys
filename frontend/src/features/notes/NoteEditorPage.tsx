@@ -4,7 +4,8 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useNote, useNoteCategories, useCreateNote, useUpdateNote, useDeleteNote, useCreateNoteCategory } from './hooks';
-import { useProjectTypes, useProjects } from '../projects/hooks';
+import { useProjectTypes } from '../projects/hooks';
+import { useProject } from '../projects/hooks';
 import type { NoteCategory } from './types';
 import { notify, extractFieldErrors, errorMessage } from '../../lib/notify';
 import { LuEye, LuSquarePen, LuTrash2 } from 'react-icons/lu';
@@ -15,6 +16,7 @@ import { TextField } from '../../components/ui/Field';
 import { TextAreaField } from '../../components/ui/TextArea';
 import { SelectInput } from '../../components/ui/SelectInput';
 import { Toggle } from '../../components/ui/Toggle';
+import { ProjectPicker } from '../../components/pickers/ProjectPicker';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { RowMenu } from '../../components/ui/RowMenu';
 import { useT } from '../../lib/i18n';
@@ -38,10 +40,9 @@ export function NoteEditorPage() {
   const { data: typeCatalog } = useProjectTypes();
   const defaultNotesProjectId = typeCatalog?.find((c) => c.type === 'NOTES')?.defaultProjectId ?? null;
   const [projectId, setProjectId] = useState<string | null>(searchParams.get('projectId'));
-  const { data: projects } = useProjects(
-    { page: 0, size: 100, sorts: [{ field: 'name', dir: 'asc' }], type: 'NOTES' },
-    isNew,
-  );
+  // Target-container label for the picker seed (create mode only — edit keeps
+  // the container fixed and shows it as a Badge).
+  const { data: projectDetail } = useProject(isNew ? projectId ?? undefined : undefined);
   const currentProjectId = isNew ? projectId : note?.projectId;
   const { data: categories } = useNoteCategories(currentProjectId ?? undefined);
   const update = useUpdateNote();
@@ -76,9 +77,7 @@ export function NoteEditorPage() {
     }
   }, [isNew, projectId, defaultNotesProjectId]);
 
-  const projectOptions = (projects?.items ?? []).map((p) => ({ value: p.id, label: p.name }));
-  const categoryOptions = (categories?.items ?? []).map((c: NoteCategory) => ({ value: c.id, label: c.name }));
-  const saving = create.isPending || update.isPending;
+  const categoryOptions = (categories?.items ?? []).map((c: NoteCategory) => ({ value: c.id, label: c.name }));  const saving = create.isPending || update.isPending;
 
   const handleCategoryChange = async (next: { value: string; label: string } | { value: string; label: string }[] | null) => {
     setCategoryError(null);
@@ -164,14 +163,13 @@ export function NoteEditorPage() {
               />
             </div>
             {isNew ? (
-              <SelectInput
+              <ProjectPicker
                 className="w-48"
                 label={t('projects.project')}
-                placeholder={t('common.loading')}
-                options={projectOptions}
-                value={projectOptions.find((o) => o.value === projectId) ?? null}
-                onChange={(next) => {
-                  setProjectId((next as { value: string } | null)?.value ?? null);
+                value={projectId}
+                valueLabel={projectDetail?.name}
+                onChange={(v) => {
+                  setProjectId(v);
                   // Categories are per-container — a stale selection must not survive.
                   setCategoryId(null);
                 }}

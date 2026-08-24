@@ -1,7 +1,7 @@
 import { PERMISSIONS } from '../../../lib/permissions';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import type { Task, TaskPriority, TaskStatus, TaskRequest } from '../types';
-import { useUsers } from '../../users/hooks';
+import { useUserLabels } from '../../users/hooks';
 import { useTasks, useCreateTask, useUpdateTask, useDeleteTask } from '../hooks';
 import { notify, extractFieldErrors } from '../../../lib/notify';
 import { Modal } from '../../../components/ui/Modal';
@@ -12,6 +12,8 @@ import { Badge } from '../../../components/ui/Badge';
 import { TextField } from '../../../components/ui/Field';
 import { TextAreaField } from '../../../components/ui/TextArea';
 import { SelectInput } from '../../../components/ui/SelectInput';
+import { UserPicker } from '../../../components/pickers/UserPicker';
+import { shortenId } from '../../../lib/format';
 import { LuEllipsisVertical, LuPencil, LuTrash2 } from 'react-icons/lu';
 import type { SelectOption } from '../../../lib/select';
 import { useT } from '../../../lib/i18n';
@@ -77,13 +79,8 @@ export function TaskBoard({ projectId }: { projectId: string }) {
   const canWrite = useAuthStore((s) => s.hasAuthority(PERMISSIONS.TASK_WRITE));
   const canDelete = useAuthStore((s) => s.hasAuthority(PERMISSIONS.TASK_DELETE));
   const { data: tasks, isLoading } = useTasks(projectId);
-  const { data: usersPage } = useUsers({ size: 100 });
-  const users = useMemo(() => usersPage?.items ?? [], [usersPage]);
-  const usersById = useMemo(() => {
-    const m = new Map<string, string>();
-    users.forEach((u) => m.set(u.id, u.email));
-    return m;
-  }, [users]);
+  // Assignee id→email at any scale: shared directory page + per-id detail fallback.
+  const assigneeLabels = useUserLabels((tasks?.items ?? []).map((tk) => tk.assigneeId));
 
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Task | null>(null);
@@ -120,7 +117,7 @@ export function TaskBoard({ projectId }: { projectId: string }) {
                       key={task.id}
                       task={task}
                       projectId={projectId}
-                      usersById={usersById}
+                      assigneeLabels={assigneeLabels}
                       canWrite={canWrite}
                       canDelete={canDelete}
                       onEdit={() => setEditing(task)}
@@ -135,10 +132,15 @@ export function TaskBoard({ projectId }: { projectId: string }) {
       </div>
 
       {creating && (
-        <TaskModal projectId={projectId} users={users} onClose={() => setCreating(false)} />
+        <TaskModal projectId={projectId} assigneeLabels={assigneeLabels} onClose={() => setCreating(false)} />
       )}
       {editing && (
-        <TaskModal projectId={projectId} task={editing} users={users} onClose={() => setEditing(null)} />
+        <TaskModal
+          projectId={projectId}
+          task={editing}
+          assigneeLabels={assigneeLabels}
+          onClose={() => setEditing(null)}
+        />
       )}
 
       <ConfirmDialog
@@ -167,7 +169,7 @@ export function TaskBoard({ projectId }: { projectId: string }) {
 function TaskCard({
   task,
   projectId,
-  usersById,
+  assigneeLabels,
   canWrite,
   canDelete,
   onEdit,
@@ -175,7 +177,7 @@ function TaskCard({
 }: {
   task: Task;
   projectId: string;
-  usersById: Map<string, string>;
+  assigneeLabels: Map<string, string>;
   canWrite: boolean;
   canDelete: boolean;
   onEdit: () => void;
@@ -196,7 +198,10 @@ function TaskCard({
       {task.description && <p className="line-clamp-2 text-xs text-muted">{task.description}</p>}
       <div className="flex items-center justify-between text-xs text-muted">
         <span className="truncate">
-          {task.assigneeId ? usersById.get(task.assigneeId) ?? t('tasks.unassigned') : t('tasks.unassigned')}
+          {/* Assigned-but-unresolved users show the shortened id — never "unassigned". */}
+          {task.assigneeId
+            ? assigneeLabels.get(task.assigneeId) ?? shortenId(task.assigneeId)
+            : t('tasks.unassigned')}
         </span>
         {task.dueDate && <span className="whitespace-nowrap">{formatDate(task.dueDate)}</span>}
       </div>
@@ -234,12 +239,12 @@ function TaskCard({
 function TaskModal({
   projectId,
   task,
-  users,
+  assigneeLabels,
   onClose,
 }: {
   projectId: string;
   task?: Task;
-  users: { id: string; email: string }[];
+  assigneeLabels: Map<string, string>;
   onClose: () => void;
 }) {
   const { t } = useT();
@@ -311,16 +316,12 @@ function TaskModal({
             onChange={(next) => setPriority((next as SelectOption<TaskPriority> | null)?.value ?? 'MEDIUM')}
           />
         </div>
-        <SelectInput
+        <UserPicker
           label={t('tasks.assignee')}
           isClearable
-          options={users.map((u) => ({ value: u.id, label: u.email }))}
-          value={
-            assigneeId
-              ? { value: assigneeId, label: users.find((u) => u.id === assigneeId)?.email ?? assigneeId }
-              : null
-          }
-          onChange={(next) => setAssigneeId((next as SelectOption | null)?.value ?? '')}
+          value={assigneeId || null}
+          valueLabel={assigneeId ? assigneeLabels.get(assigneeId) : undefined}
+          onChange={(v) => setAssigneeId(v ?? '')}
           placeholder={t('tasks.unassigned')}
         />
         <TextField label={t('tasks.dueDate')} type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} error={fieldErrors.dueDate ?? null} />

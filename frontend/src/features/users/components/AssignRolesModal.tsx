@@ -1,11 +1,9 @@
 import { useState } from 'react';
-import type { Role } from '../../roles/types';
 import { useSetUserRoles, useUser } from '../hooks';
-import { useRoles } from '../../roles/hooks';
 import { notify } from '../../../lib/notify';
 import { Modal } from '../../../components/ui/Modal';
 import { Button } from '../../../components/ui/Button';
-import { CheckboxList, type CheckboxItem } from '../../../components/ui/CheckboxList';
+import { RolePicker } from '../../../components/pickers/RolePicker';
 import { useT } from '../../../lib/i18n';
 
 /**
@@ -14,14 +12,11 @@ import { useT } from '../../../lib/i18n';
  */
 export function AssignRolesModal({ user, onClose }: { user: { id: string; email: string }; onClose: () => void }) {
   const { t } = useT();
-  const { data: rolesData, isLoading } = useRoles({ size: 100 });
   const { data: detail, isLoading: detailLoading } = useUser(user.id);
   const setRoles = useSetUserRoles();
   // null = untouched → follow the fetched detail; first interaction pins the selection.
   const [selected, setSelected] = useState<string[] | null>(null);
   const effective = selected ?? detail?.roles.map((r) => r.id) ?? [];
-
-  const items: CheckboxItem[] = (rolesData?.items ?? []).map((r: Role) => ({ id: r.id, label: r.name, description: r.description }));
 
   const submit = async () => {
     try {
@@ -41,10 +36,15 @@ export function AssignRolesModal({ user, onClose }: { user: { id: string; email:
         <Button variant="primary" loading={setRoles.isPending} disabled={detailLoading} onClick={submit}>{t('common.save')}</Button>
       </>}
     >
-      {isLoading || detailLoading ? (
+      {detailLoading ? (
         <div className="py-8 text-center text-sm text-muted">{t('users.loadingRoles')}</div>
       ) : (
-        <CheckboxList items={items} selectedIds={effective} onChange={setSelected} emptyMessage={t('users.noRolesDefined')} />
+        <RolePicker
+          isMulti
+          values={effective}
+          selectedOptions={(detail?.roles ?? []).map((r) => ({ value: r.id, label: r.name }))}
+          onValuesChange={setSelected}
+        />
       )}
     </Modal>
   );

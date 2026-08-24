@@ -11,6 +11,7 @@ export const messages = {
     'common.nothingToSelect': 'Seçilecek öğe yok',
     'common.loadingAria': 'Yükleniyor',
     'common.language': 'Dil',
+    'common.typeToSearch': 'Aramak için yazın…',
     'common.close': 'Kapat',
     'common.save': 'Kaydet',
     'common.create': 'Oluştur',
@@ -216,8 +217,6 @@ export const messages = {
     'users.groupsTitle': 'Gruplar — {email}',
     'users.loadingRoles': 'Roller yükleniyor…',
     'users.loadingGroups': 'Gruplar yükleniyor…',
-    'users.noRolesDefined': 'Tanımlı rol yok — Roller sayfasında bir rol oluşturun',
-    'users.noGroupsDefined': 'Tanımlı grup yok — Gruplar sayfasında bir grup oluşturun',
     'users.loadingUser': 'Kullanıcı yükleniyor…',
     'users.notFound': 'Kullanıcı bulunamadı.',
     'users.backToUsers': '← Tüm kullanıcılar',
@@ -533,7 +532,6 @@ export const messages = {
     'apps.calendarMode.week': 'Hafta',
 
     // apps — pickers
-    'apps.userPickerPh': 'Kullanıcı ara…',
     'apps.relationPickerPh': 'Kayıt ara…',
     'apps.pickerNoOptions': 'Sonuç yok',
     'apps.relationTargetMissing': 'Hedef uygulama yapılandırılmamış',
@@ -677,6 +675,7 @@ export const messages = {
     'common.nothingToSelect': 'Nothing to select',
     'common.loadingAria': 'Loading',
     'common.language': 'Language',
+    'common.typeToSearch': 'Type to search…',
     'common.close': 'Close',
     'common.save': 'Save',
     'common.create': 'Create',
@@ -882,8 +881,6 @@ export const messages = {
     'users.groupsTitle': 'Groups — {email}',
     'users.loadingRoles': 'Loading roles…',
     'users.loadingGroups': 'Loading groups…',
-    'users.noRolesDefined': 'No roles defined — create one in the Roles page',
-    'users.noGroupsDefined': 'No groups defined — create one in the Groups page',
     'users.loadingUser': 'Loading user…',
     'users.notFound': 'User not found.',
     'users.backToUsers': '← All users',
@@ -1200,7 +1197,6 @@ export const messages = {
     'apps.calendarMode.week': 'Week',
 
     // apps — pickers
-    'apps.userPickerPh': 'Search users…',
     'apps.relationPickerPh': 'Search records…',
     'apps.pickerNoOptions': 'No results',
     'apps.relationTargetMissing': 'No target app configured',

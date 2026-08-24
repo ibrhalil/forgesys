@@ -1,11 +1,9 @@
 import { useState } from 'react';
-import type { Group } from '../../groups/types';
 import { useSetUserGroups, useUser } from '../hooks';
-import { useGroups } from '../../groups/hooks';
 import { notify } from '../../../lib/notify';
 import { Modal } from '../../../components/ui/Modal';
 import { Button } from '../../../components/ui/Button';
-import { CheckboxList, type CheckboxItem } from '../../../components/ui/CheckboxList';
+import { GroupPicker } from '../../../components/pickers/GroupPicker';
 import { useT } from '../../../lib/i18n';
 
 /**
@@ -14,14 +12,11 @@ import { useT } from '../../../lib/i18n';
  */
 export function AssignGroupsModal({ user, onClose }: { user: { id: string; email: string }; onClose: () => void }) {
   const { t } = useT();
-  const { data: groupsData, isLoading } = useGroups({ size: 100 });
   const { data: detail, isLoading: detailLoading } = useUser(user.id);
   const setGroups = useSetUserGroups();
   // null = untouched → follow the fetched detail; first interaction pins the selection.
   const [selected, setSelected] = useState<string[] | null>(null);
   const effective = selected ?? detail?.groups.map((g) => g.id) ?? [];
-
-  const items: CheckboxItem[] = (groupsData?.items ?? []).map((g: Group) => ({ id: g.id, label: g.name, description: g.description }));
 
   const submit = async () => {
     try {
@@ -41,10 +36,15 @@ export function AssignGroupsModal({ user, onClose }: { user: { id: string; email
         <Button variant="primary" loading={setGroups.isPending} disabled={detailLoading} onClick={submit}>{t('common.save')}</Button>
       </>}
     >
-      {isLoading || detailLoading ? (
+      {detailLoading ? (
         <div className="py-8 text-center text-sm text-muted">{t('users.loadingGroups')}</div>
       ) : (
-        <CheckboxList items={items} selectedIds={effective} onChange={setSelected} emptyMessage={t('users.noGroupsDefined')} />
+        <GroupPicker
+          isMulti
+          values={effective}
+          selectedOptions={(detail?.groups ?? []).map((g) => ({ value: g.id, label: g.name }))}
+          onValuesChange={setSelected}
+        />
       )}
     </Modal>
   );

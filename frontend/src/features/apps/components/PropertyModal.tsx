@@ -7,8 +7,9 @@ import { Toggle } from '../../../components/ui/Toggle';
 import { SelectInput } from '../../../components/ui/SelectInput';
 import type { SelectOption } from '../../../lib/select';
 import { extractFieldErrors, notify } from '../../../lib/notify';
-import type { App, AppProperty, PropertyType } from '../types';
-import { useApps, useCreateProperty, useUpdateProperty } from '../hooks';
+import type { AppProperty, PropertyType } from '../types';
+import { useApp, useCreateProperty, useUpdateProperty } from '../hooks';
+import { AppPicker } from '../../../components/pickers/AppPicker';
 
 /** Order matters — mirrors the backend PropertyType catalog. FORMULA is listed but
  * disabled: the backend rejects it on create (deferred type). */
@@ -18,9 +19,6 @@ export function PropertyModal({ appId, property, onClose }: { appId: string; pro
   const { t } = useT();
   const create = useCreateProperty(appId);
   const update = useUpdateProperty(appId);
-  // RELATION target picker — apps list (cross-feature hook, hook-level import is allowed).
-  const { data: appsData } = useApps({ size: 100, sorts: [{ field: 'name', dir: 'asc' }] });
-
   const [name, setName] = useState(property?.name ?? '');
   const [type, setType] = useState<PropertyType>(property?.type ?? 'TEXT');
   const [required, setRequired] = useState(property?.required ?? false);
@@ -30,11 +28,10 @@ export function PropertyModal({ appId, property, onClose }: { appId: string; pro
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [configError, setConfigError] = useState<string | null>(null);
   const isEdit = !!property;
+  // RELATION target label seed — only edit mode knows the configured target.
+  const { data: targetAppDetail } = useApp(isEdit ? property?.config?.targetAppId : undefined);
 
   const typeOptions: SelectOption<PropertyType>[] = PROPERTY_TYPES.map((v) => ({ value: v, label: t(`apps.type.${v}`) }));
-  const targetOptions: SelectOption<string>[] = (appsData?.items ?? [])
-    .filter((a: App) => a.id !== appId)
-    .map((a: App) => ({ value: a.id, label: a.name }));
 
   const submit = async () => {
     setFieldErrors({});
@@ -123,12 +120,12 @@ export function PropertyModal({ appId, property, onClose }: { appId: string; pro
           />
         )}
         {type === 'RELATION' && (
-          <SelectInput<string>
-            id="property-target"
+          <AppPicker
             label={t('apps.relationTarget')}
-            options={targetOptions}
-            value={targetOptions.find((o) => o.value === targetAppId) ?? null}
-            onChange={(o) => setTargetAppId((o as SelectOption<string> | null)?.value ?? null)}
+            value={targetAppId}
+            valueLabel={targetAppDetail?.name}
+            onChange={setTargetAppId}
+            excludeIds={[appId]}
             isClearable
             error={configError}
           />

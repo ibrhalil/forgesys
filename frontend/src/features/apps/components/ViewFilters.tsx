@@ -6,7 +6,7 @@ import { SelectInput } from '../../../components/ui/SelectInput';
 import type { SelectOption } from '../../../lib/select';
 import { allowedOperators, operatorNeedsValue, toWireFilter } from '../viewQuery';
 import type { AppDetail, AppValueFilter, AppValueOperator, AppValueSort } from '../types';
-import { UserPicker } from './UserPicker';
+import { UserPicker } from '../../../components/pickers/UserPicker';
 import { RelationPicker } from './RelationPicker';
 
 /** Hard limits from the backend DTOs (filters ≤10, sorts ≤5). */

@@ -1,10 +1,8 @@
 import { PERMISSIONS } from '../../lib/permissions';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { Role } from '../roles/types';
 import type { Group } from './types';
 import { useGroups, useCreateGroup, useDeleteGroup, useSetGroupRoles } from './hooks';
-import { useRoles } from '../roles/hooks';
 import { notify, extractFieldErrors } from '../../lib/notify';
 import { LuShield, LuTrash2, LuUsersRound } from 'react-icons/lu';
 import { DataTable, type Column } from '../../components/ui/DataTable';
@@ -19,7 +17,7 @@ import { Page } from '../../components/Page';
 import { Badge } from '../../components/ui/Badge';
 import { TextField } from '../../components/ui/Field';
 import { TextAreaField } from '../../components/ui/TextArea';
-import { CheckboxList, type CheckboxItem } from '../../components/ui/CheckboxList';
+import { RolePicker } from '../../components/pickers/RolePicker';
 import { useT } from '../../lib/i18n';
 import { useListPageState } from '../../lib/useListPageState';
 import { useAuthStore } from '../../store/authStore';
@@ -193,15 +191,14 @@ function CreateGroupModal({ onClose }: { onClose: () => void }) {
 
 function AssignGroupRolesModal({ group, onClose }: { group: Group; onClose: () => void }) {
   const { t } = useT();
-  const { data: rolesData, isLoading } = useRoles({ size: 100 });
   const setRoles = useSetGroupRoles();
-  const [selected, setSelected] = useState<string[]>(group.roles.map((r) => r.id));
-
-  const items: CheckboxItem[] = (rolesData?.items ?? []).map((r: Role) => ({ id: r.id, label: r.name, description: r.description }));
+  // null = untouched → follow the group's roles; first interaction pins the selection.
+  const [selected, setSelected] = useState<string[] | null>(null);
+  const effective = selected ?? group.roles.map((r) => r.id);
 
   const submit = async () => {
     try {
-      await setRoles.mutateAsync({ id: group.id, data: { roleIds: selected } });
+      await setRoles.mutateAsync({ id: group.id, data: { roleIds: effective } });
       notify.success(t('common.rolesUpdated'));
       onClose();
     } catch { /* global toast */ }
@@ -217,11 +214,12 @@ function AssignGroupRolesModal({ group, onClose }: { group: Group; onClose: () =
         <Button variant="primary" loading={setRoles.isPending} onClick={submit}>{t('common.save')}</Button>
       </>}
     >
-      {isLoading ? (
-        <div className="py-8 text-center text-sm text-muted">{t('users.loadingRoles')}</div>
-      ) : (
-        <CheckboxList items={items} selectedIds={selected} onChange={setSelected} emptyMessage={t('users.noRolesDefined')} />
-      )}
+      <RolePicker
+        isMulti
+        values={effective}
+        selectedOptions={group.roles.map((r) => ({ value: r.id, label: r.name }))}
+        onValuesChange={setSelected}
+      />
     </Modal>
   );
 }

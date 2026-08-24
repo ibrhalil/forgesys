@@ -67,6 +67,11 @@ src/
     LanguageToggle.tsx     #   TR/EN segmented switch
     ErrorBoundary.tsx, Toaster.tsx
     detail/                #   DetailPanel/DetailField/PermissionBadges + AssignSection (IAM detail pages)
+    pickers/               #   reference-data selects: UserPicker/RolePicker/GroupPicker/ProjectPicker/
+                           #   AppPicker (async `q` typeahead over list endpoints, single or isMulti,
+                           #   id→label bookkeeping with fallback ids) + useDebouncedLoadOptions
+                           #   (debounce + stale-response guard). Reference-data selects use these —
+                           #   never capped one-page list fetches.
     ui/                    #   design system: Badge, Button, CheckboxList, ConfirmDialog,
                            #   DataTable (sortable headers + `toolbar` filter slot + SearchInput),
                            #   EmptyState, Field, Modal, RowMenu (row/page-head overflow menu —
@@ -144,7 +149,7 @@ src/
 
 - **z-index scale:** `0` normal content · `20` sticky elements · `50` modal overlay (`Modal`) · `60` fixed portal menus (`RowMenu`, SelectInput menu). New surfaces pick from this scale — don't invent intermediate values.
 - **Size & spacing scale (keep everything on it):** page body `p-6 lg:p-10` (matches topbar `px`); sections `gap-6`; cards/panels `p-5` (DetailPanel — never hand-rolled card sections); action footers `mt-4 flex justify-end gap-3` with default-size (md) buttons; controls (inputs, md buttons) sit on a ~36px height rhythm; empty/loading states `py-16`. Don't invent new paddings for new surfaces — reuse these.
-- **Toggle vs Checkbox:** boolean SETTINGS (account enabled, group active, all-permissions) render as `Toggle` (`role="switch"`). Multi-select LISTS (role/group/permission pickers) stay `CheckboxList` — a switch communicates a single state, not selection.
+- **Toggle vs Checkbox:** boolean SETTINGS (account enabled, group active, all-permissions) render as `Toggle` (`role="switch"`). Multi-select LISTS render as pickers/checkboxes by size: large or reference data (roles, groups, users, projects, apps — anything server-side `q`-searchable) uses the async `components/pickers/*` in `isMulti` mode; `CheckboxList` stays for small, bounded lists only (e.g. permission catalogs). A switch communicates a single state, not selection.
 - **Page head actions:** at most TWO visible controls in the `Page` head — the primary action (list pages' create button) or the most frequent action (detail pages' Edit, `sm` ghost + pencil icon) plus a `RowMenu` overflow (`icon={LuEllipsisVertical}`) for everything else. Destructive actions live ONLY inside the overflow (danger tone), never as top-level buttons. Pass permission-filtered items — an empty array renders no trigger.
 - **Save/Cancel placement:** commit actions always sit bottom-right of the editing surface — modal footers (`Modal` renders them `justify-end`) or a `mt-4 flex justify-end gap-3` footer row inside the card/panel, with default-size (md) buttons. Never place Save in a `DetailPanel` header (the `action` prop was removed), left-aligned, or in `sm` size.
 - **Scroll architecture (sticky elements):** on desktop the shell is viewport-locked (`lg:h-screen` + `lg:overflow-hidden`) — the sidebar and the breadcrumb topbar are fixed; ONLY the page body scrolls, inside AppShell's `flex-1 overflow-y-auto` container. Sticky elements inside pages (e.g. future sticky DataTable headers) must use plain `top-0` relative to that scroll container — never offset for the topbar (it is outside the scroller) and never `position: fixed`.

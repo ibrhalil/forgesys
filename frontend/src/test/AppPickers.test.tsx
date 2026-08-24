@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { UserPicker } from '../features/apps/components/UserPicker';
+import { UserPicker } from '../components/pickers/UserPicker';
 import { RelationPicker } from '../features/apps/components/RelationPicker';
 import type { AppProperty } from '../features/apps/types';
 import { useLocaleStore } from '../store/localeStore';
@@ -64,7 +64,7 @@ describe('UserPicker', () => {
   it('typeahead-loads directory users and emits the picked id', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    render(<UserPicker value={null} onChange={onChange} />);
+    render(<UserPicker value={null} onChange={onChange} debounceMs={0} />);
 
     const combobox = screen.getByRole('combobox');
     await user.click(combobox);
@@ -77,7 +77,7 @@ describe('UserPicker', () => {
   });
 
   it('shows the provided valueLabel for the current value', () => {
-    render(<UserPicker value={'u-jane'} valueLabel="jane@acme.com" onChange={vi.fn()} />);
+    render(<UserPicker value={'u-jane'} valueLabel="jane@acme.com" onChange={vi.fn()} debounceMs={0} />);
     expect(screen.getByText('jane@acme.com')).toBeInTheDocument();
   });
 });
