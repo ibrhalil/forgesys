@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { useNote, useNoteCategories, useCreateNote, useUpdateNote, useDeleteNote } from './hooks';
+import { useNote, useNoteCategories, useCreateNote, useUpdateNote, useDeleteNote, useCreateNoteCategory } from './hooks';
 import { useProjectTypes, useProjects } from '../projects/hooks';
 import type { NoteCategory } from './types';
 import { notify, extractFieldErrors } from '../../lib/notify';
@@ -41,9 +41,11 @@ export function NoteEditorPage() {
     { page: 0, size: 100, sorts: [{ field: 'name', dir: 'asc' }], type: 'NOTES' },
     isNew,
   );
-  const { data: categories } = useNoteCategories(isNew ? (projectId ?? undefined) : (note?.projectId ?? undefined));
+  const currentProjectId = isNew ? projectId : note?.projectId;
+  const { data: categories } = useNoteCategories(currentProjectId ?? undefined);
   const update = useUpdateNote();
   const create = useCreateNote();
+  const createCategory = useCreateNoteCategory();
   const delNote = useDeleteNote();
   const canWrite = useAuthStore((s) => s.hasAuthority(PERMISSIONS.NOTE_WRITE));
   const canDelete = useAuthStore((s) => s.hasAuthority(PERMISSIONS.NOTE_DELETE));
@@ -75,6 +77,31 @@ export function NoteEditorPage() {
   const projectOptions = (projects?.items ?? []).map((p) => ({ value: p.id, label: p.name }));
   const categoryOptions = (categories?.items ?? []).map((c: NoteCategory) => ({ value: c.id, label: c.name }));
   const saving = create.isPending || update.isPending;
+
+  const handleCategoryChange = async (next: { value: string; label: string } | { value: string; label: string }[] | null) => {
+    if (!next) {
+      setCategoryId(null);
+      return;
+    }
+    const option = Array.isArray(next) ? next[0] : next;
+    // Check if this is a new category (not in existing options)
+    const exists = categoryOptions.some((o) => o.value === option.value);
+    if (exists) {
+      setCategoryId(option.value);
+      return;
+    }
+    // Create new category in the current project
+    if (!currentProjectId) {
+      notify.error(t('notes.categoryCreateNoProject'));
+      return;
+    }
+    try {
+      const created = await createCategory.mutateAsync({ name: option.label, projectId: currentProjectId });
+      setCategoryId(created.id);
+    } catch (e) {
+      setFieldErrors(extractFieldErrors(e));
+    }
+  };
 
   const save = async () => {
     setFieldErrors({});
@@ -170,9 +197,11 @@ export function NoteEditorPage() {
               label={t('notes.categoryCol')}
               placeholder={t('notes.uncategorized')}
               isClearable
+              creatable
               options={categoryOptions}
               value={categoryId ? categoryOptions.find((o) => o.value === categoryId) ?? null : null}
-              onChange={(next) => setCategoryId((next as { value: string } | null)?.value ?? null)}
+              onChange={handleCategoryChange}
+              formatCreateLabel={(input) => t('notes.createCategory', { name: input })}
             />
             {pinned && <Badge tone="accent"><LuPin size={12} className="mr-1 inline" />{t('notes.pinned')}</Badge>}
           </div>
