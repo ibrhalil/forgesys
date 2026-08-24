@@ -48,8 +48,9 @@ export function PropertyModal({ appId, property, onClose }: { appId: string; pro
     }
     const data = {
       name,
-      // Immutable after create — omitted on edit (backend rejects type changes).
-      ...(isEdit ? {} : { type }),
+      // The backend DTO keeps type @NotNull on create AND update (immutability
+      // is a service-level rule — the SAME type must be re-sent on edit).
+      type,
       config:
         type === 'SELECT'
           ? { options }
@@ -57,7 +58,8 @@ export function PropertyModal({ appId, property, onClose }: { appId: string; pro
             ? { targetAppId: targetAppId! }
             : undefined,
       required,
-      position: Number(position) || 0,
+      // Create appends at max+1 (no field shown); edit resends the explicit value.
+      ...(isEdit ? { position: Number(position) || 0 } : {}),
     };
     try {
       if (isEdit) {
@@ -105,6 +107,7 @@ export function PropertyModal({ appId, property, onClose }: { appId: string; pro
           isDisabled={isEdit}
           isOptionDisabled={(o) => o.value === 'FORMULA'}
           hint={isEdit ? t('apps.typeImmutable') : t('apps.formulaDisabled')}
+          error={fieldErrors.type ?? null}
         />
         {type === 'SELECT' && (
           <SelectInput<string>
@@ -131,15 +134,17 @@ export function PropertyModal({ appId, property, onClose }: { appId: string; pro
           />
         )}
         <Toggle checked={required} onChange={setRequired} label={t('apps.requiredBadge')} />
-        <TextField
-          id="property-position"
-          label={t('apps.position')}
-          type="number"
-          min={0}
-          max={9999}
-          value={position}
-          onChange={(e) => setPosition(e.target.value)}
-        />
+        {isEdit && (
+          <TextField
+            id="property-position"
+            label={t('apps.position')}
+            type="number"
+            min={0}
+            max={9999}
+            value={position}
+            onChange={(e) => setPosition(e.target.value)}
+          />
+        )}
       </div>
     </Modal>
   );

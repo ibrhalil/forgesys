@@ -4,8 +4,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useNote, useNoteCategories, useCreateNote, useUpdateNote, useDeleteNote, useCreateNoteCategory } from './hooks';
-import { useProjectTypes } from '../projects/hooks';
-import { useProject } from '../projects/hooks';
+import { useProject, useProjectTypes } from '../projects/hooks';
 import type { NoteCategory } from './types';
 import { notify, extractFieldErrors, errorMessage } from '../../lib/notify';
 import { LuEye, LuSquarePen, LuTrash2 } from 'react-icons/lu';
@@ -34,7 +33,7 @@ export function NoteEditorPage() {
   const { t } = useT();
   const navigate = useNavigate();
   const { noteId } = useParams<{ noteId: string }>();
-  const isNew = noteId === 'new';
+  const isNew = !noteId;
   const [searchParams] = useSearchParams();
   const { data: note, isLoading } = useNote(isNew ? undefined : noteId);
   const { data: typeCatalog } = useProjectTypes();
@@ -77,7 +76,8 @@ export function NoteEditorPage() {
     }
   }, [isNew, projectId, defaultNotesProjectId]);
 
-  const categoryOptions = (categories?.items ?? []).map((c: NoteCategory) => ({ value: c.id, label: c.name }));  const saving = create.isPending || update.isPending;
+  const categoryOptions = (categories?.items ?? []).map((c: NoteCategory) => ({ value: c.id, label: c.name }));
+  const saving = create.isPending || update.isPending;
 
   const handleCategoryChange = async (next: { value: string; label: string } | { value: string; label: string }[] | null) => {
     setCategoryError(null);

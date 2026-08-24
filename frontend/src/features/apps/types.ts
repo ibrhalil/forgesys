@@ -129,10 +129,12 @@ export interface AppRecord {
 
 export interface AppPropertyRequest {
   name: string;
-  /** Immutable after create — omitted when editing an existing property. */
-  type?: PropertyType;
+  /** Required on create AND update (backend @NotNull); on edit it must repeat
+   *  the existing type — changing it is rejected by the service. */
+  type: PropertyType;
   config?: AppPropertyConfig;
   required?: boolean;
+  /** Optional: create appends at max+1, update keeps the current value. */
   position?: number;
 }
 
@@ -142,14 +144,15 @@ export interface AppRecordRequest {
 }
 
 /**
- * View create/update payload (full PUT — the backend resets a missing position
- * to 0, so edits always resend the current position).
+ * View create/update payload: position is optional — create appends at max+1,
+ * update keeps the current tab order (edits always resend the current position).
  */
 export interface AppViewRequest {
   name: string;
   type: ViewType;
   config?: AppViewConfig;
-  position: number;
+  /** Optional: create appends at max+1, update keeps the current value. */
+  position?: number;
 }
 
 /**

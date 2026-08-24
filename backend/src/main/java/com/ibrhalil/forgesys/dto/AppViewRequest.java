@@ -9,9 +9,9 @@ import jakarta.validation.constraints.Size;
 
 /**
  * Create/update a view of a custom app (K-15 / Epic 3.0.B). {@code config} is validated
- * against the app's property set and stored as canonical JSON. {@code position} is a
- * wrapper + compact-constructor default (Jackson 3 fails null-into-primitive mapping
- * for absent fields).
+ * against the app's property set and stored as canonical JSON. {@code position} is
+ * optional: absent on create appends at the end (max+1), absent on update keeps the
+ * current value.
  */
 public record AppViewRequest(
         @NotBlank(message = "View name is required")
@@ -27,8 +27,4 @@ public record AppViewRequest(
         @Max(9999)
         Integer position
 ) {
-
-    public AppViewRequest {
-        position = position == null ? 0 : position;
-    }
 }

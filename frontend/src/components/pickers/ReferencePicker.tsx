@@ -91,7 +91,13 @@ export function ReferencePicker({
     return m;
   }, [labels, selectedOptions]);
 
-  const singleValue = value ? { value, label: valueLabel ?? labelMap.get(value) ?? value } : null;
+  // Label precedence: the pick/search-fed map first (a fresh selection must win
+  // over a stale caller-provided seed), the seed only while the id is unknown
+  // to the map, the raw id as the last resort.
+  // Label precedence: the pick/search-fed map first (a fresh selection must win
+  // over a stale caller-provided seed), the seed only while the id is unknown
+  // to the map, the raw id as the last resort.
+  const singleValue = value ? { value, label: labelMap.get(value) ?? valueLabel ?? value } : null;
   const multiValue = (values ?? []).map((id) => ({ value: id, label: labelMap.get(id) ?? id }));
 
   return (

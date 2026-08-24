@@ -137,4 +137,59 @@ describe('RecordFormModal', () => {
       expect(JSON.parse(post!.body!)).toEqual({ values: { 'p-title': 'First' } });
     });
   });
+
+  it('shows the picked record title, not the raw UUID, for a RELATION value on create', async () => {
+    const user = userEvent.setup();
+    const TARGET_ID = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+    const relApp: AppDetail = {
+      ...APP,
+      properties: [
+        ...APP.properties,
+        { id: 'p-rel', appId: APP_ID, name: 'Customer', type: 'RELATION', config: { targetAppId: TARGET_ID }, required: false, position: 2 },
+      ],
+    };
+    const targetDetail = { ...relApp, id: TARGET_ID, name: 'Customers', properties: relApp.properties.slice(0, 1) };
+    const targetRecords = {
+      data: [{ id: 'rec-cust', appId: TARGET_ID, values: { 'p-title': 'Acme Corp' }, createdDate: '2026-08-10T09:00:00Z', updatedAt: '2026-08-10T09:00:00Z', createdBy: 'u1' }],
+      meta: { page: 0, pageSize: 1000, totalElements: 1, totalPages: 1, hasNext: false, hasPrevious: false },
+    };
+    const created = { id: 'r-new', appId: APP_ID, values: {}, createdDate: '2026-08-20T09:00:00Z', updatedAt: '2026-08-20T09:00:00Z', createdBy: 'u1' };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        calls.push({ method: init?.method ?? 'GET', url, body: init?.body ? String(init.body) : undefined });
+        const body = url === `/api/v1/apps/${TARGET_ID}` ? targetDetail
+          : url.startsWith(`/api/v1/apps/${TARGET_ID}/records`) ? targetRecords
+          : url.includes('/users') ? EMPTY_PAGE
+          : url === `/api/v1/apps/${APP_ID}/records` && init?.method === 'POST' ? created
+          : null;
+        if (body === null) return new Response(JSON.stringify({ code: 'resource_not_found' }), { status: 404 });
+        return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }),
+    );
+
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <RecordFormModal app={relApp} onClose={vi.fn()} />
+      </QueryClientProvider>,
+    );
+
+    const combo = await screen.findByRole('combobox', { name: /customer/i });
+    // Async picker — options load on typeahead, not on menu open.
+    await user.click(combo);
+    await user.type(combo, 'Ac');
+    await user.click(await screen.findByRole('option', { name: 'Acme Corp' }));
+
+    // The selected control value must carry the record title — never the raw UUID.
+    expect(screen.getByText('Acme Corp')).toBeInTheDocument();
+    expect(screen.queryByText('rec-cust')).not.toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('Title *'), 'First');
+    await user.click(screen.getByRole('button', { name: 'Create' }));
+    await waitFor(() => {
+      const post = calls.find((c) => c.method === 'POST');
+      expect(JSON.parse(post!.body!)).toEqual({ values: { 'p-title': 'First', 'p-rel': 'rec-cust' } });
+    });
+  });
 });

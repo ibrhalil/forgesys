@@ -110,7 +110,7 @@ public class AppBuilderService {
                 .findAllByAppIdOrderByPositionAscNameAsc(id).stream().map(this::toResponse).toList();
         String projectName = resolveProjectNames(List.of(app.getProjectId())).get(app.getProjectId());
         return new AppDetailResponse(app.getId(), app.getName(), app.getDescription(), app.getIcon(),
-                app.getProjectId(), projectName, properties, views);
+                app.getProjectId(), projectName, app.getCreatedDate(), app.getUpdatedAt(), properties, views);
     }
 
     @Transactional
@@ -170,7 +170,7 @@ public class AppBuilderService {
     // ── properties ──────────────────────────────────────────────────────
 
     @Transactional
-    @AuditLog(action = "app_property_created", entityType = "AppProperty", entityId = "#result.id", entityName = "#app.name + ' / ' + #result.name")
+    @AuditLog(action = "app_property_created", entityType = "AppProperty", entityId = "#result.id", entityName = "#result.name")
     public AppPropertyResponse addProperty(UUID appId, AppPropertyRequest request) {
         App app = getAppOrThrow(appId);
         validatePropertyDefinition(request);
@@ -181,12 +181,16 @@ public class AppBuilderService {
         AppProperty property = new AppProperty();
         property.setAppId(appId);
         applyPropertyRequest(property, request);
+        // Absent position appends at the end (first property = 0).
+        if (request.position() == null) {
+            property.setPosition(nextPosition(propertyRepository.findMaxPosition(appId)));
+        }
         AppProperty saved = propertyRepository.save(property);
         return toResponse(saved);
     }
 
     @Transactional
-    @AuditLog(action = "app_property_updated", entityType = "AppProperty", entityId = "#result.id", entityName = "#app.name + ' / ' + #result.name")
+    @AuditLog(action = "app_property_updated", entityType = "AppProperty", entityId = "#result.id", entityName = "#result.name")
     public AppPropertyResponse updateProperty(UUID appId, UUID propertyId, AppPropertyRequest request) {
         App app = getAppOrThrow(appId);
         AppProperty property = getPropertyOrThrow(appId, propertyId);
@@ -218,7 +222,7 @@ public class AppBuilderService {
     // ── views ───────────────────────────────────────────────────────────
 
     @Transactional
-    @AuditLog(action = "app_view_created", entityType = "AppView", entityId = "#result.id", entityName = "#app.name + ' / ' + #result.name")
+    @AuditLog(action = "app_view_created", entityType = "AppView", entityId = "#result.id", entityName = "#result.name")
     public AppViewResponse addView(UUID appId, AppViewRequest request) {
         App app = getAppOrThrow(appId);
         if (viewRepository.existsByAppIdAndName(appId, request.name())) {
@@ -234,13 +238,15 @@ public class AppBuilderService {
         view.setName(request.name());
         view.setType(request.type());
         view.setConfig(config);
-        view.setPosition(request.position());
+        // Absent position appends at the end (first view = 0).
+        view.setPosition(request.position() != null ? request.position()
+                : nextPosition(viewRepository.findMaxPosition(appId)));
         AppView saved = viewRepository.save(view);
         return toResponse(saved);
     }
 
     @Transactional
-    @AuditLog(action = "app_view_updated", entityType = "AppView", entityId = "#result.id", entityName = "#app.name + ' / ' + #result.name")
+    @AuditLog(action = "app_view_updated", entityType = "AppView", entityId = "#result.id", entityName = "#result.name")
     public AppViewResponse updateView(UUID appId, UUID viewId, AppViewRequest request) {
         App app = getAppOrThrow(appId);
         AppView view = getViewOrThrow(appId, viewId);
@@ -256,7 +262,10 @@ public class AppBuilderService {
         view.setName(request.name());
         view.setType(request.type());
         view.setConfig(config);
-        view.setPosition(request.position());
+        // Null position = keep the current tab order (partial-PUT semantics).
+        if (request.position() != null) {
+            view.setPosition(request.position());
+        }
         AppView saved = viewRepository.save(view);
         return toResponse(saved);
     }
@@ -353,8 +362,17 @@ public class AppBuilderService {
         property.setName(request.name());
         property.setType(request.type());
         property.setRequired(request.required());
-        property.setPosition(request.position());
+        // Null position = keep the current value (partial-PUT semantics on update;
+        // create assigns max+1 in addProperty before this persists).
+        if (request.position() != null) {
+            property.setPosition(request.position());
+        }
         property.setConfig(serializeConfig(request.config()));
+    }
+
+    /** 0-based append position for a new child (max+1; 0 when the app has none). */
+    private int nextPosition(Integer max) {
+        return max == null ? 0 : max + 1;
     }
 
     private String serializeConfig(AppPropertyConfigDto config) {

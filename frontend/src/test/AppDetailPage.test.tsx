@@ -88,6 +88,10 @@ describe('AppDetailPage', () => {
     expect(screen.getByText('Text')).toBeInTheDocument();
     expect(screen.getByText('Select')).toBeInTheDocument();
     expect(screen.getByText('User')).toBeInTheDocument();
+    // Properties are columns — the panel lays them out as a wrapping chip row,
+    // not a full-width vertical list.
+    const panelList = screen.getByText('Title', { selector: 'ul span' }).closest('ul');
+    expect(panelList).toHaveClass('flex-wrap');
   });
 
   it('opens the new record modal from the records panel', async () => {

@@ -36,6 +36,9 @@ function renderAt(path: string) {
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[path]}>
         <Routes>
+          {/* Mirror app/Routes.ts topology: /notes/new is a STATIC route (no
+              noteId param) — the dynamic :noteId route must not capture it. */}
+          <Route path="/notes/new" element={<NoteEditorPage />} />
           <Route path="/notes/:noteId" element={<NoteEditorPage />} />
         </Routes>
       </MemoryRouter>
@@ -139,6 +142,8 @@ describe('NoteEditorPage', () => {
       expect(post?.url).toBe('/api/v1/notes');
       expect(post?.body).toMatchObject({ title: 'Fresh note', content: '' });
     });
+    // Regression: create mode must never fall through to an update call.
+    expect(calls.find((c) => c.method === 'PUT')).toBeUndefined();
   });
 
   it('renders the pin switch in the form and Save in the editor footer', async () => {
