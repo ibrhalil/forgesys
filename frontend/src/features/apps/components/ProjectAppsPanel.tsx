@@ -1,11 +1,12 @@
 import { PERMISSIONS } from '../../../lib/permissions';
 import { Link } from 'react-router-dom';
 import { useState } from 'react';
-import { LuPlus, LuTrash2 } from 'react-icons/lu';
+import { LuEllipsisVertical, LuPlus, LuTrash2 } from 'react-icons/lu';
 import { useApps, useDeleteApp } from '../hooks';
 import type { App } from '../types';
 import { AppFormModal } from './AppFormModal';
 import { Button } from '../../../components/ui/Button';
+import { RowMenu } from '../../../components/ui/RowMenu';
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog';
 import { useT } from '../../../lib/i18n';
 import { useAuthStore } from '../../../store/authStore';
@@ -60,17 +61,16 @@ export function ProjectAppsPanel({ projectId }: { projectId: string }) {
               </Link>
               <span className="hidden min-w-0 flex-1 truncate text-muted sm:block">{a.description ?? '—'}</span>
               <span className="shrink-0 text-xs text-muted">{formatDateTime(a.createdDate)}</span>
-              {canDelete && (
-                <button
-                  type="button"
-                  aria-label={t('common.delete')}
-                  title={t('common.delete')}
-                  onClick={() => setDeleting(a)}
-                  className="shrink-0 rounded-md p-1.5 text-muted transition-colors hover:bg-danger/10 hover:text-danger"
-                >
-                  <LuTrash2 size={14} />
-                </button>
-              )}
+              {/* Destructive overflow pattern (RecordGallery): delete lives in the menu. */}
+              <RowMenu
+                ariaLabel={t('common.actions')}
+                icon={LuEllipsisVertical}
+                items={
+                  canDelete
+                    ? [{ label: t('common.delete'), onClick: () => setDeleting(a), icon: LuTrash2, danger: true }]
+                    : []
+                }
+              />
             </li>
           ))}
         </ul>

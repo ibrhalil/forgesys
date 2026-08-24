@@ -6,11 +6,13 @@ import { useTasks, useCreateTask, useUpdateTask, useDeleteTask } from '../hooks'
 import { notify, extractFieldErrors } from '../../../lib/notify';
 import { Modal } from '../../../components/ui/Modal';
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog';
+import { RowMenu } from '../../../components/ui/RowMenu';
 import { Button } from '../../../components/ui/Button';
 import { Badge } from '../../../components/ui/Badge';
 import { TextField } from '../../../components/ui/Field';
 import { TextAreaField } from '../../../components/ui/TextArea';
 import { SelectInput } from '../../../components/ui/SelectInput';
+import { LuEllipsisVertical, LuPencil, LuTrash2 } from 'react-icons/lu';
 import type { SelectOption } from '../../../lib/select';
 import { useT } from '../../../lib/i18n';
 import { formatDate } from '../../../lib/format';
@@ -211,9 +213,19 @@ function TaskCard({
             />
           </div>
         )}
-        {/* Same action pattern as table rows/detail headers: sm buttons, gated by authority. */}
-        {canWrite && <Button size="sm" variant="ghost" className="ml-auto" onClick={onEdit}>{t('common.edit')}</Button>}
-        {canDelete && <Button size="sm" variant="danger" onClick={onDelete}>{t('common.delete')}</Button>}
+        {/* Same action pattern as table rows: destructive actions live only in the overflow. */}
+        {(canWrite || canDelete) && (
+          <div className="ml-auto">
+            <RowMenu
+              ariaLabel={t('common.actions')}
+              icon={LuEllipsisVertical}
+              items={[
+                ...(canWrite ? [{ label: t('common.edit'), onClick: onEdit, icon: LuPencil }] : []),
+                ...(canDelete ? [{ label: t('common.delete'), onClick: onDelete, icon: LuTrash2, danger: true }] : []),
+              ]}
+            />
+          </div>
+        )}
       </div>
     </article>
   );

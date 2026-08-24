@@ -1,6 +1,7 @@
 import { LuEllipsisVertical, LuPencil, LuTrash2 } from 'react-icons/lu';
 import { RowMenu } from '../../../components/ui/RowMenu';
 import { EmptyState } from '../../../components/ui/EmptyState';
+import { TablePagination } from '../../../components/ui/TablePagination';
 import { useT } from '../../../lib/i18n';
 import { useClientPagination } from '../../../lib/useClientPagination';
 import { PERMISSIONS } from '../../../lib/permissions';
@@ -40,8 +41,6 @@ export function RecordGallery({
 
   const titleProp = firstTextProperty(app.properties);
   const cardProps = app.properties.filter((p) => p.id !== titleProp?.id).slice(0, 3);
-  const rangeStart = totalElements === 0 ? 0 : page * pageSize + 1;
-  const rangeEnd = Math.min((page + 1) * pageSize, totalElements);
 
   return (
     <div className="flex flex-col gap-3">
@@ -87,30 +86,14 @@ export function RecordGallery({
               </article>
             ))}
           </div>
-          <div className="flex items-center justify-end gap-3 text-xs text-muted">
-            <span>
-              {totalElements === 0 ? t('table.noItems') : t('table.showingRange', { from: rangeStart, to: rangeEnd, total: totalElements })}
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setPage(page - 1)}
-                disabled={page === 0}
-                className="rounded-md border border-glass bg-surface px-3 py-1 text-xs text-main transition-colors hover:bg-accent/5 disabled:opacity-40"
-              >
-                {t('table.prev')}
-              </button>
-              <span>{t('table.page', { current: page + 1, total: totalPages })}</span>
-              <button
-                type="button"
-                onClick={() => setPage(page + 1)}
-                disabled={page >= totalPages - 1}
-                className="rounded-md border border-glass bg-surface px-3 py-1 text-xs text-main transition-colors hover:bg-accent/5 disabled:opacity-40"
-              >
-                {t('table.next')}
-              </button>
-            </div>
-          </div>
+          {/* Shared footer (DataTable-identical): fixed card page size — no rows-per-page. */}
+          <TablePagination
+            page={page}
+            pageSize={pageSize}
+            totalElements={totalElements}
+            totalPages={totalPages}
+            onPageChange={setPage}
+          />
         </>
       )}
     </div>

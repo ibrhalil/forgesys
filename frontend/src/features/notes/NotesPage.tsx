@@ -133,7 +133,8 @@ export function NotesPage() {
               onSelectedFieldsChange={setSearchFields}
             />
             <SelectInput
-              className="w-44"
+              size="sm"
+              className="w-36"
               placeholder={t('notes.allCategories')}
               isClearable
               options={(categories?.items ?? []).map((c) => ({ value: c.id, label: c.name }))}

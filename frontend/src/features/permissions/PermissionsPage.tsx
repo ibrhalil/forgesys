@@ -75,7 +75,7 @@ export function PermissionsPage() {
       breadcrumb={[{ label: t('nav.identity') }, { label: t('nav.permissions') }]}
       title={t('common.permissions')}
       description={<>{t('permissions.desc')} <code className="font-mono text-accent">module:resource:action</code>.</>}
-      actions={<Button variant="primary" onClick={() => setCreating(true)}>{t('permissions.new')}</Button>}
+      actions={canWrite ? <Button variant="primary" onClick={() => setCreating(true)}>{t('permissions.new')}</Button> : undefined}
     >
 
       <DataTable<Permission>

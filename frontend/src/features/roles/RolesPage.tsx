@@ -86,7 +86,7 @@ export function RolesPage() {
       breadcrumb={[{ label: t('nav.identity') }, { label: t('nav.roles') }]}
       title={t('roles.title')}
       description={t('roles.desc')}
-      actions={<Button variant="primary" onClick={() => setCreating(true)}>{t('roles.new')}</Button>}
+      actions={canWrite ? <Button variant="primary" onClick={() => setCreating(true)}>{t('roles.new')}</Button> : undefined}
     >
 
       <DataTable<Role>

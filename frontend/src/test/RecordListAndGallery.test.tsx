@@ -124,4 +124,21 @@ describe('RecordGallery', () => {
     await user.click(await screen.findByRole('menuitem', { name: 'Delete' }));
     expect(onRequestDelete).toHaveBeenCalledWith(RECORDS[0]);
   });
+
+  it('paginates through the shared TablePagination footer (fixed card page size)', async () => {
+    // 15 records > GALLERY_PAGE_SIZE (12): first page shows 12, Next reveals the rest.
+    const many = Array.from({ length: 15 }, (_, i) => record(`r-${i + 1}`, `Order ${i + 1}`, `n${i}`));
+    const user = userEvent.setup();
+    renderGallery(many);
+
+    expect(screen.getByText('Showing 1–12 of 15')).toBeInTheDocument();
+    // Fixed page size — the rows-per-page selector must not render.
+    expect(screen.queryByRole('group', { name: 'Rows per page' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Rows per page')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Next' }));
+    expect(await screen.findByText('Order 13')).toBeInTheDocument();
+    expect(screen.getByText('Showing 13–15 of 15')).toBeInTheDocument();
+    expect(screen.getByText('Page 2 / 2')).toBeInTheDocument();
+  });
 });

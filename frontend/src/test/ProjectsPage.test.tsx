@@ -75,4 +75,11 @@ describe('ProjectsPage (typed container catalog)', () => {
       expect(screen.getByRole('option', { name: /Apps — custom app collection/ })).toBeInTheDocument();
     });
   });
+
+  it('hides the create action without pm:project:write', () => {
+    useAuthStore.setState({ hasAuthority: (a: string) => a !== 'pm:project:write' });
+    renderPage();
+
+    expect(screen.queryByRole('button', { name: /New Project/ })).not.toBeInTheDocument();
+  });
 });

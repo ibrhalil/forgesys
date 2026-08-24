@@ -117,12 +117,15 @@ describe('RecordBoard', () => {
     expect(screen.getByText('Fix login')).toBeInTheDocument();
   });
 
-  it('opens the record form through the card edit action', async () => {
+  it('opens the record form through the card overflow menu edit action', async () => {
     const user = userEvent.setup();
     const onEdit = vi.fn();
     renderBoard({ onRequestEdit: onEdit });
 
-    await user.click(screen.getAllByRole('button', { name: 'Edit' })[0]);
+    // Edit lives inside the card's overflow menu (RecordGallery pattern), not as a button.
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+    await user.click(screen.getAllByRole('button', { name: 'Actions' })[0]);
+    await user.click(await screen.findByRole('menuitem', { name: 'Edit' }));
     expect(onEdit).toHaveBeenCalledWith(R1);
   });
 

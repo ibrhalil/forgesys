@@ -2,9 +2,10 @@ import { useParams } from 'react-router-dom';
 import { useUserSessions, useRevokeUserSession, useRevokeAllUserSessions } from './hooks';
 import { useUser } from '../users/hooks';
 import { SessionList, type SessionRow } from './components/SessionList';
-import { Button } from '../../components/ui/Button';
+import { RowMenu } from '../../components/ui/RowMenu';
 import { Page } from '../../components/Page';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
+import { LuEllipsisVertical, LuTrash2 } from 'react-icons/lu';
 import { useState } from 'react';
 import { useT } from '../../lib/i18n';
 
@@ -41,7 +42,12 @@ export function UserSessionsPage() {
       title={t('sessions.userTitle')}
       description={t('sessions.userDesc')}
       actions={(data?.length ?? 0) > 0 ? (
-        <Button variant="danger" onClick={() => setRevokingAll(true)}>{t('sessions.revokeAll')}</Button>
+        /* Destructive overflow pattern: revoke-all lives only inside the menu. */
+        <RowMenu
+          ariaLabel={t('common.actions')}
+          icon={LuEllipsisVertical}
+          items={[{ label: t('sessions.revokeAll'), onClick: () => setRevokingAll(true), icon: LuTrash2, danger: true }]}
+        />
       ) : undefined}
     >
 

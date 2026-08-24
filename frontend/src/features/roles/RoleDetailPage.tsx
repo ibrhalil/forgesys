@@ -10,6 +10,7 @@ import {
 import { usePermissions } from '../permissions/hooks';
 import { notify } from '../../lib/notify';
 import { Button } from '../../components/ui/Button';
+import { Badge } from '../../components/ui/Badge';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { SelectInput } from '../../components/ui/SelectInput';
 import { RowMenu } from '../../components/ui/RowMenu';
@@ -84,27 +85,45 @@ export function RoleDetailPage() {
         </dl>
       </DetailPanel>
 
-      <RolePermissionsSection
-        role={role}
-        options={permissionOptions}
-        saving={setPermissions.isPending}
-        onSave={async (data) => {
-          await setPermissions.mutateAsync({ id: role.id, data });
-        }}
-      />
+      {/* Editing surfaces only for iam:role:write holders — a read-only viewer
+          still sees the grants in the effective-permissions panel below. */}
+      {canWrite && (
+        <RolePermissionsSection
+          role={role}
+          options={permissionOptions}
+          saving={setPermissions.isPending}
+          onSave={async (data) => {
+            await setPermissions.mutateAsync({ id: role.id, data });
+          }}
+        />
+      )}
 
-      <AssignSection
-        title={t('roles.parentSection')}
-        options={parentOptions}
-        selectedValues={(role.parents ?? []).map((p) => p.id)}
-        saving={setParents.isPending}
-        placeholder={t('roles.parentPh')}
-        emptySelectedHint={t('roles.parentEmpty')}
-        successMessage={t('roles.parentsUpdated')}
-        onSave={async (roleIds) => {
-          await setParents.mutateAsync({ id: role.id, data: { roleIds } });
-        }}
-      />
+      {canWrite ? (
+        <AssignSection
+          title={t('roles.parentSection')}
+          options={parentOptions}
+          selectedValues={(role.parents ?? []).map((p) => p.id)}
+          saving={setParents.isPending}
+          placeholder={t('roles.parentPh')}
+          emptySelectedHint={t('roles.parentEmpty')}
+          successMessage={t('roles.parentsUpdated')}
+          onSave={async (roleIds) => {
+            await setParents.mutateAsync({ id: role.id, data: { roleIds } });
+          }}
+        />
+      ) : (
+        <DetailPanel title={t('roles.parentSection')}>
+          {(role.parents ?? []).length === 0 ? (
+            <p className="text-sm text-muted">{t('roles.parentEmpty')}</p>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {(role.parents ?? []).map((p) => (
+                <Badge key={p.id} tone="accent">{p.name}</Badge>
+              ))}
+            </div>
+          )}
+        </DetailPanel>
+      )}
 
       <DetailPanel title={t('roles.effectivePerms', { count: role.allPermissions ? (permissions?.items ?? []).length : role.permissions.length })}>
         <PermissionBadges

@@ -88,32 +88,62 @@ export function GroupDetailPage() {
         </dl>
       </DetailPanel>
 
+      {/* Editing surfaces only for iam:group:write holders — a read-only viewer
+          sees the current assignments as badges (UserDetailPage pattern). */}
       <div className="grid gap-6 lg:grid-cols-2">
-        <AssignSection
-          title={t('common.roles')}
-          options={roleOptions}
-          selectedValues={group.roles.map((r) => r.id)}
-          saving={setRoles.isPending}
-          placeholder={t('groups.rolesPh')}
-          emptySelectedHint={t('groups.rolesEmpty')}
-          successMessage={t('common.rolesUpdated')}
-          onSave={async (roleIds) => {
-            await setRoles.mutateAsync({ id: group.id, data: { roleIds } });
-          }}
-        />
+        {canWrite ? (
+          <AssignSection
+            title={t('common.roles')}
+            options={roleOptions}
+            selectedValues={group.roles.map((r) => r.id)}
+            saving={setRoles.isPending}
+            placeholder={t('groups.rolesPh')}
+            emptySelectedHint={t('groups.rolesEmpty')}
+            successMessage={t('common.rolesUpdated')}
+            onSave={async (roleIds) => {
+              await setRoles.mutateAsync({ id: group.id, data: { roleIds } });
+            }}
+          />
+        ) : (
+          <DetailPanel title={t('common.roles')}>
+            {group.roles.length === 0 ? (
+              <p className="text-sm text-muted">{t('groups.rolesEmpty')}</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {group.roles.map((r) => (
+                  <Badge key={r.id} tone="accent">{r.name}</Badge>
+                ))}
+              </div>
+            )}
+          </DetailPanel>
+        )}
 
-        <AssignSection
-          title={t('groups.membersSection', { count: group.memberCount })}
-          options={memberOptions}
-          selectedValues={group.members.map((m) => m.id)}
-          saving={setMembers.isPending}
-          placeholder={t('groups.membersPh')}
-          emptySelectedHint={t('groups.membersEmpty')}
-          successMessage={t('groups.membersUpdated')}
-          onSave={async (userIds) => {
-            await setMembers.mutateAsync({ id: group.id, data: { userIds } });
-          }}
-        />
+        {canWrite ? (
+          <AssignSection
+            title={t('groups.membersSection', { count: group.memberCount })}
+            options={memberOptions}
+            selectedValues={group.members.map((m) => m.id)}
+            saving={setMembers.isPending}
+            placeholder={t('groups.membersPh')}
+            emptySelectedHint={t('groups.membersEmpty')}
+            successMessage={t('groups.membersUpdated')}
+            onSave={async (userIds) => {
+              await setMembers.mutateAsync({ id: group.id, data: { userIds } });
+            }}
+          />
+        ) : (
+          <DetailPanel title={t('groups.membersSection', { count: group.memberCount })}>
+            {group.members.length === 0 ? (
+              <p className="text-sm text-muted">{t('groups.membersEmpty')}</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {group.members.map((m) => (
+                  <Badge key={m.id} tone="blue">{m.email}</Badge>
+                ))}
+              </div>
+            )}
+          </DetailPanel>
+        )}
       </div>
 
       <DetailPanel title={t('groups.effectivePerms', { count: effectivePerms?.length ?? 0 })}>
