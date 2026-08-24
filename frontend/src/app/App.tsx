@@ -36,6 +36,22 @@ const FormDemoPage = import.meta.env.DEV
 const RowMenuDemoPage = import.meta.env.DEV
   ? lazy(() => import('../features/demo/pages/RowMenuDemoPage').then((m) => ({ default: m.RowMenuDemoPage })))
   : null;
+const ListPagePatternDemo = import.meta.env.DEV
+  ? lazy(() => import('../features/demo/pages/patterns/ListPagePatternDemo').then((m) => ({ default: m.ListPagePatternDemo })))
+  : null;
+const DetailPagePatternDemo = import.meta.env.DEV
+  ? lazy(() => import('../features/demo/pages/patterns/DetailPagePatternDemo').then((m) => ({ default: m.DetailPagePatternDemo })))
+  : null;
+const FormModalPatternDemo = import.meta.env.DEV
+  ? lazy(() => import('../features/demo/pages/patterns/FormModalPatternDemo').then((m) => ({ default: m.FormModalPatternDemo })))
+  : null;
+const DashboardPatternDemo = import.meta.env.DEV
+  ? lazy(() => import('../features/demo/pages/patterns/DashboardPatternDemo').then((m) => ({ default: m.DashboardPatternDemo })))
+  : null;
+const MasterDetailPatternDemo = import.meta.env.DEV
+  ? lazy(() => import('../features/demo/pages/patterns/MasterDetailPatternDemo').then((m) => ({ default: m.MasterDetailPatternDemo })))
+  : null;
+
 
 
 
@@ -121,6 +137,11 @@ export default function App() {
               {FormDemoPage && <Route path="form" element={<FormDemoPage />} />}
               {ModalDemoPage && <Route path="modal" element={<ModalDemoPage />} />}
               {RowMenuDemoPage && <Route path="rowmenu" element={<RowMenuDemoPage />} />}
+              {ListPagePatternDemo && <Route path="patterns/list" element={<ListPagePatternDemo />} />}
+              {DetailPagePatternDemo && <Route path="patterns/detail" element={<DetailPagePatternDemo />} />}
+              {FormModalPatternDemo && <Route path="patterns/form" element={<FormModalPatternDemo />} />}
+              {DashboardPatternDemo && <Route path="patterns/dashboard" element={<DashboardPatternDemo />} />}
+              {MasterDetailPatternDemo && <Route path="patterns/master-detail" element={<MasterDetailPatternDemo />} />}
             </Route>
           )}
 

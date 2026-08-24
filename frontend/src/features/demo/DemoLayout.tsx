@@ -8,6 +8,11 @@ import {
   LuLayers,
   LuTextCursorInput,
   LuMenu,
+  LuLayoutList,
+  LuFileText,
+  LuLayoutDashboard,
+  LuColumns3,
+  LuSquarePlus,
 } from 'react-icons/lu';
 import { cn } from '../../lib/cn';
 import { Spinner } from '../../components/ui/Spinner';
@@ -18,14 +23,35 @@ interface NavItem {
   icon: React.ElementType;
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { label: 'DataTable', to: '/demo/datatable', icon: LuTable2 },
-  { label: 'Badge', to: '/demo/badge', icon: LuTag },
-  { label: 'Button & Spinner', to: '/demo/button', icon: LuMousePointerClick },
-  { label: 'Form Controls', to: '/demo/form', icon: LuTextCursorInput },
-  { label: 'Modal & Dialogs', to: '/demo/modal', icon: LuLayers },
-  { label: 'RowMenu & Empty', to: '/demo/rowmenu', icon: LuMenu },
+interface NavGroup {
+  title: string;
+  items: NavItem[];
+}
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    title: 'Primitives',
+    items: [
+      { label: 'DataTable', to: '/demo/datatable', icon: LuTable2 },
+      { label: 'Badge', to: '/demo/badge', icon: LuTag },
+      { label: 'Button & Spinner', to: '/demo/button', icon: LuMousePointerClick },
+      { label: 'Form Controls', to: '/demo/form', icon: LuTextCursorInput },
+      { label: 'Modal & Dialogs', to: '/demo/modal', icon: LuLayers },
+      { label: 'RowMenu & Empty', to: '/demo/rowmenu', icon: LuMenu },
+    ],
+  },
+  {
+    title: 'Screen Patterns',
+    items: [
+      { label: 'Full List Page', to: '/demo/patterns/list', icon: LuLayoutList },
+      { label: 'Entity Detail View', to: '/demo/patterns/detail', icon: LuFileText },
+      { label: 'Form & Modal CRUD', to: '/demo/patterns/form', icon: LuSquarePlus },
+      { label: 'Dashboard & Metrics', to: '/demo/patterns/dashboard', icon: LuLayoutDashboard },
+      { label: 'Master-Detail Split', to: '/demo/patterns/master-detail', icon: LuColumns3 },
+    ],
+  },
 ];
+
 
 
 /**
@@ -58,30 +84,34 @@ export function DemoLayout() {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 overflow-y-auto p-2" aria-label="Component categories">
-          <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted">
-            Components
-          </p>
-          <ul className="space-y-0.5">
-            {NAV_ITEMS.map((item) => (
-              <li key={item.to}>
-                <NavLink
-                  to={item.to}
-                  className={({ isActive }) =>
-                    cn(
-                      'flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors',
-                      isActive
-                        ? 'bg-accent/10 font-semibold text-accent'
-                        : 'text-muted hover:bg-main/5 hover:text-main',
-                    )
-                  }
-                >
-                  <item.icon className="h-4 w-4 shrink-0" aria-hidden />
-                  <span className="truncate">{item.label}</span>
-                </NavLink>
-              </li>
-            ))}
-          </ul>
+        <nav className="flex-1 overflow-y-auto p-2 space-y-4" aria-label="Component categories">
+          {NAV_GROUPS.map((group) => (
+            <div key={group.title}>
+              <p className="mb-1 px-2 text-[10px] font-bold uppercase tracking-widest text-muted/80">
+                {group.title}
+              </p>
+              <ul className="space-y-0.5">
+                {group.items.map((item) => (
+                  <li key={item.to}>
+                    <NavLink
+                      to={item.to}
+                      className={({ isActive }) =>
+                        cn(
+                          'flex items-center gap-2.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors',
+                          isActive
+                            ? 'bg-accent/10 font-semibold text-accent'
+                            : 'text-muted hover:bg-main/5 hover:text-main',
+                        )
+                      }
+                    >
+                      <item.icon className="h-4 w-4 shrink-0" aria-hidden />
+                      <span className="truncate">{item.label}</span>
+                    </NavLink>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </nav>
 
         {/* Footer */}
