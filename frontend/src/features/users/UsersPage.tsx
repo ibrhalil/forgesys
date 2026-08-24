@@ -25,7 +25,7 @@ import { ResetPasswordModal } from './components/ResetPasswordModal';
 export function UsersPage() {
   const { t } = useT();
   const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, q } =
-    useListPageState({ defaultSort: { field: 'email', dir: 'asc' } });
+    useListPageState({ defaultSort: { field: 'email', dir: 'asc' }, storageKey: 'users' });
   const { data, isLoading, isFetching } = useUsers({ page, size: pageSize, sorts: [sort], q: q || undefined });
   const delUser = useDeleteUser();
   const unlockUser = useUnlockUser();
@@ -46,6 +46,7 @@ export function UsersPage() {
       header: t('common.user'),
       // Column key ≠ backend field: the composite name cell sorts by email.
       sortKey: 'email',
+      hideable: false,
       render: (u) => (
         <div className="flex flex-col">
           <Link to={`/users/${u.id}`} className="font-medium text-main transition-colors hover:text-accent">{u.email}</Link>
@@ -111,6 +112,7 @@ export function UsersPage() {
         columns={columns}
         data={data?.items ?? []}
         rowKey={(u) => u.id}
+        storageKey="users"
         loading={isLoading || (isFetching && !data)}
         emptyMessage={q ? t('users.emptyFiltered') : t('users.empty')}
         page={data?.page ?? page}

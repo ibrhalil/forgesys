@@ -26,7 +26,7 @@ import { useAuthStore } from '../../store/authStore';
 export function RolesPage() {
   const { t } = useT();
   const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, q } =
-    useListPageState({ defaultSort: { field: 'name', dir: 'asc' } });
+    useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'roles' });
   const { data, isLoading, isFetching } = useRoles({ page, size: pageSize, sorts: [sort], q: q || undefined });
   const delRole = useDeleteRole();
   const canWrite = useAuthStore((s) => s.hasAuthority(PERMISSIONS.ROLE_WRITE));
@@ -37,7 +37,13 @@ export function RolesPage() {
   const [deleting, setDeleting] = useState<Role | null>(null);
 
   const columns: Column<Role>[] = [
-    { key: 'name', header: t('common.role'), sortKey: 'name', render: (r) => <Link to={`/roles/${r.id}`} className="font-medium text-main transition-colors hover:text-accent">{r.name}</Link> },
+    {
+      key: 'name',
+      header: t('common.role'),
+      sortKey: 'name',
+      hideable: false,
+      render: (r) => <Link to={`/roles/${r.id}`} className="font-medium text-main transition-colors hover:text-accent">{r.name}</Link>,
+    },
     { key: 'description', header: t('common.description'), render: (r) => <span className="text-muted">{r.description ?? '—'}</span> },
     {
       key: 'permissions',
@@ -70,6 +76,7 @@ export function RolesPage() {
         columns={columns}
         data={data?.items ?? []}
         rowKey={(r) => r.id}
+        storageKey="roles"
         loading={isLoading || (isFetching && !data)}
         emptyMessage={q ? t('roles.emptyFiltered') : t('roles.empty')}
         page={data?.page ?? page}

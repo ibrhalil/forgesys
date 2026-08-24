@@ -106,4 +106,102 @@ describe('DataTable', () => {
     await user.click(screen.getByRole('button', { name: '25' }));
     expect(props.onPageSizeChange).toHaveBeenCalledWith(25);
   });
+
+  it('renders table settings button when storageKey is provided', async () => {
+    renderTable({ storageKey: 'users' });
+    expect(screen.getByRole('button', { name: /table settings/i })).toBeInTheDocument();
+  });
+
+  it('toggles column visibility and persists to localStorage', async () => {
+    const user = userEvent.setup();
+    renderTable({ storageKey: 'users' });
+
+    // Open settings menu (defaults to Columns tab)
+    await user.click(screen.getByRole('button', { name: /table settings/i }));
+    expect(screen.getByText('Customize columns')).toBeInTheDocument();
+
+    // Hide the "Note" column
+    const noteCheckbox = screen.getByRole('checkbox', { name: /note/i });
+    expect(noteCheckbox).toBeChecked();
+    await user.click(noteCheckbox);
+
+    // Note column header is now hidden
+    expect(screen.queryByRole('columnheader', { name: /note/i })).not.toBeInTheDocument();
+
+    // Check localStorage persistence
+    const stored = JSON.parse(window.localStorage.getItem('sf_table_prefs_users') ?? '{}');
+    expect(stored.hiddenColumns).toEqual(['note']);
+  });
+
+  it('changes density and persists to localStorage', async () => {
+    const user = userEvent.setup();
+    renderTable({ storageKey: 'users' });
+
+    // Open settings menu
+    await user.click(screen.getByRole('button', { name: /table settings/i }));
+    // Switch to Density tab
+    await user.click(screen.getByRole('button', { name: /density/i }));
+
+    // Select Compact
+    await user.click(screen.getByRole('button', { name: /compact/i }));
+
+    const stored = JSON.parse(window.localStorage.getItem('sf_table_prefs_users') ?? '{}');
+    expect(stored.density).toBe('compact');
+  });
+
+  it('shows passive export options with Coming soon badge when onExport is not provided', async () => {
+    const user = userEvent.setup();
+    renderTable({ storageKey: 'users' });
+
+    // Open settings menu
+    await user.click(screen.getByRole('button', { name: /table settings/i }));
+    // Switch to Export tab
+    await user.click(screen.getByRole('button', { name: /export/i }));
+
+    // CSV button is disabled and shows Coming soon
+    const csvBtn = screen.getByRole('button', { name: /export csv/i });
+    expect(csvBtn).toBeDisabled();
+    expect(screen.getAllByText('Coming soon')[0]).toBeInTheDocument();
+  });
+
+  it('triggers onExport when provided', async () => {
+    const user = userEvent.setup();
+    const onExport = vi.fn();
+    renderTable({ storageKey: 'users', onExport });
+
+    // Open settings menu
+    await user.click(screen.getByRole('button', { name: /table settings/i }));
+    // Switch to Export tab
+    await user.click(screen.getByRole('button', { name: /export/i }));
+
+    // Click CSV
+    const csvBtn = screen.getByRole('button', { name: /export csv/i });
+    expect(csvBtn).toBeEnabled();
+    await user.click(csvBtn);
+    expect(onExport).toHaveBeenCalledWith('csv');
+  });
+
+  it('initializes with hidden columns from localStorage', () => {
+    window.localStorage.setItem('sf_table_prefs_users', JSON.stringify({ hiddenColumns: ['note'] }));
+    renderTable({ storageKey: 'users' });
+
+    expect(screen.queryByRole('columnheader', { name: /note/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: /name/i })).toBeInTheDocument();
+  });
+
+  it('resets column preferences back to defaults', async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem('sf_table_prefs_users', JSON.stringify({ hiddenColumns: ['note'] }));
+    renderTable({ storageKey: 'users' });
+
+    // Open menu
+    await user.click(screen.getByRole('button', { name: /table settings/i }));
+    // Click Reset
+    await user.click(screen.getByRole('button', { name: /reset to default/i }));
+
+    // Note column is visible again
+    expect(screen.getByRole('columnheader', { name: /note/i })).toBeInTheDocument();
+    const stored = JSON.parse(window.localStorage.getItem('sf_table_prefs_users') ?? '{}');
+    expect(stored.hiddenColumns).toEqual([]);
+  });
 });

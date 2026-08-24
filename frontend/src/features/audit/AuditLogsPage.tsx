@@ -18,12 +18,23 @@ import { useListPageState } from '../../lib/useListPageState';
 export function AuditLogsPage() {
   const { t } = useT();
   const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, q } =
-    useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' } });
+    useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' }, storageKey: 'audit-logs' });
   const { data, isLoading, isFetching } = useAuditLogs({ page, size: pageSize, sort: `${sort.field},${sort.dir}`, q: q || undefined });
 
   const columns: Column<AuditLog>[] = [
-    { key: 'createdAt', header: t('audit.date'), sortKey: 'createdDate', render: (l) => <span className="whitespace-nowrap text-muted">{formatDateTime(l.createdAt)}</span> },
-    { key: 'actorName', header: t('audit.actor'), sortKey: 'actorName', render: (l) => <span className="font-medium text-main">{l.actorName}</span> },
+    {
+      key: 'createdAt',
+      header: t('audit.date'),
+      sortKey: 'createdDate',
+      hideable: false,
+      render: (l) => <span className="whitespace-nowrap text-muted">{formatDateTime(l.createdAt)}</span>,
+    },
+    {
+      key: 'actorName',
+      header: t('audit.actor'),
+      sortKey: 'actorName',
+      render: (l) => <span className="font-medium text-main">{l.actorName}</span>,
+    },
     { key: 'action', header: t('audit.action'), sortKey: 'action', render: (l) => <Badge tone="accent">{l.action}</Badge> },
     {
       key: 'entity',
@@ -51,6 +62,7 @@ export function AuditLogsPage() {
         columns={columns}
         data={data?.items ?? []}
         rowKey={(l) => l.id}
+        storageKey="audit-logs"
         loading={isLoading || (isFetching && !data)}
         emptyMessage={search ? t('audit.emptyFiltered') : t('audit.empty')}
         page={data?.page ?? page}

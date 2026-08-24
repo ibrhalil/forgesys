@@ -27,7 +27,7 @@ import { useAuthStore } from '../../store/authStore';
 export function GroupsPage() {
   const { t } = useT();
   const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, q } =
-    useListPageState({ defaultSort: { field: 'name', dir: 'asc' } });
+    useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'groups' });
   const { data, isLoading, isFetching } = useGroups({ page, size: pageSize, sorts: [sort], q: q || undefined });
   const delGroup = useDeleteGroup();
   const canWrite = useAuthStore((s) => s.hasAuthority(PERMISSIONS.GROUP_WRITE));
@@ -38,7 +38,13 @@ export function GroupsPage() {
   const [deleting, setDeleting] = useState<Group | null>(null);
 
   const columns: Column<Group>[] = [
-    { key: 'name', header: t('common.group'), sortKey: 'name', render: (g) => <Link to={`/groups/${g.id}`} className="font-medium text-main transition-colors hover:text-accent">{g.name}</Link> },
+    {
+      key: 'name',
+      header: t('common.group'),
+      sortKey: 'name',
+      hideable: false,
+      render: (g) => <Link to={`/groups/${g.id}`} className="font-medium text-main transition-colors hover:text-accent">{g.name}</Link>,
+    },
     { key: 'description', header: t('common.description'), render: (g) => <span className="text-muted">{g.description ?? '—'}</span> },
     {
       key: 'active',
@@ -74,6 +80,7 @@ export function GroupsPage() {
         columns={columns}
         data={data?.items ?? []}
         rowKey={(g) => g.id}
+        storageKey="groups"
         loading={isLoading || (isFetching && !data)}
         emptyMessage={q ? t('groups.emptyFiltered') : t('groups.empty')}
         page={data?.page ?? page}

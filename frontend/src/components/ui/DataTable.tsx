@@ -1,7 +1,10 @@
-import type { ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { LuColumns3, LuDownload, LuRefreshCw, LuRows3, LuSlidersHorizontal } from 'react-icons/lu';
 import { cn } from '../../lib/cn';
 import { useT } from '../../lib/i18n';
+import { loadTablePreferences, saveTablePreferences } from '../../lib/tablePreferences';
 import type { SortState } from '../../types';
+import { Badge } from './Badge';
 import { EmptyState } from './EmptyState';
 import { Spinner } from './Spinner';
 
@@ -16,7 +19,14 @@ export interface Column<T> {
    * the feature's backend sort whitelist.
    */
   sortKey?: string;
+  /**
+   * Whether this column can be hidden by the user. Defaults to true when
+   * personalization is enabled. Set to false for essential primary columns.
+   */
+  hideable?: boolean;
 }
+
+export type TableDensity = 'compact' | 'normal' | 'relaxed';
 
 interface DataTableProps<T> {
   columns: Column<T>[];
@@ -48,10 +58,32 @@ interface DataTableProps<T> {
    * incrementally; nothing changes for callers that omit it.
    */
   toolbar?: ReactNode;
+  /**
+   * Storage key to persist table preferences (hidden columns, density, etc.) in localStorage.
+   */
+  storageKey?: string;
+  /**
+   * Whether table view customization is enabled. Defaults to true when storageKey is provided.
+   */
+  customizableColumns?: boolean;
+  /**
+   * Optional export handler. If omitted, export options render in a disabled state with "Coming soon".
+   */
+  onExport?: (format: 'csv' | 'excel' | 'pdf') => void;
+  /**
+   * Optional manual refresh handler. If omitted, refresh options render in a disabled state with "Coming soon".
+   */
+  onRefresh?: () => void;
+  /**
+   * Additional custom toolbar action buttons rendered alongside table controls.
+   */
+  tableTools?: ReactNode;
 }
 
 /** Above this many choices the footer switches from segments to a compact select. */
 const MAX_SEGMENTS = 6;
+
+type SettingsTab = 'columns' | 'density' | 'export' | 'refresh';
 
 export function DataTable<T>({
   columns,
@@ -71,11 +103,93 @@ export function DataTable<T>({
   actions,
   actionsHeader,
   toolbar,
+  storageKey,
+  customizableColumns = true,
+  onExport,
+  onRefresh,
+  tableTools,
 }: DataTableProps<T>) {
   const { t } = useT();
-  const colCount = columns.length + (actions ? 1 : 0);
+
+  const [hiddenColumns, setHiddenColumns] = useState<string[]>(() => {
+    if (!storageKey) return [];
+    return loadTablePreferences(storageKey).hiddenColumns ?? [];
+  });
+  const [density, setDensity] = useState<TableDensity>(() => {
+    if (!storageKey) return 'normal';
+    return (loadTablePreferences(storageKey).density as TableDensity) ?? 'normal';
+  });
+
+  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
+  const [activeTab, setActiveTab] = useState<SettingsTab>('columns');
+
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on click outside or Escape key
+  useEffect(() => {
+    if (!showSettingsMenu) return;
+
+    const onPointerDown = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as Node;
+      if (menuRef.current && !menuRef.current.contains(target)) {
+        setShowSettingsMenu(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowSettingsMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('touchstart', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('touchstart', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [showSettingsMenu]);
+
+  const visibleColumns = useMemo(() => {
+    return columns.filter((col) => !hiddenColumns.includes(col.key));
+  }, [columns, hiddenColumns]);
+
+  const colCount = visibleColumns.length + (actions ? 1 : 0);
   const rangeStart = totalElements === 0 ? 0 : page * pageSize + 1;
   const rangeEnd = Math.min((page + 1) * pageSize, totalElements);
+
+  const isCustomizationEnabled = !!storageKey && customizableColumns;
+  const hasActivePreferences = hiddenColumns.length > 0 || density !== 'normal';
+
+  const toggleColumnVisibility = (colKey: string) => {
+    const isHidden = hiddenColumns.includes(colKey);
+    let nextHidden: string[];
+    if (isHidden) {
+      nextHidden = hiddenColumns.filter((k) => k !== colKey);
+    } else {
+      if (visibleColumns.length <= 1) return; // Keep at least one column visible
+      nextHidden = [...hiddenColumns, colKey];
+    }
+    setHiddenColumns(nextHidden);
+    if (storageKey) {
+      saveTablePreferences(storageKey, { hiddenColumns: nextHidden });
+    }
+  };
+
+  const handleResetColumns = () => {
+    setHiddenColumns([]);
+    if (storageKey) {
+      saveTablePreferences(storageKey, { hiddenColumns: [] });
+    }
+  };
+
+  const handleDensityChange = (newDensity: TableDensity) => {
+    setDensity(newDensity);
+    if (storageKey) {
+      saveTablePreferences(storageKey, { density: newDensity });
+    }
+  };
 
   const sortable = (col: Column<T>): boolean => !!col.sortKey && !!onSortChange;
 
@@ -110,28 +224,289 @@ export function DataTable<T>({
     return sort.dir === 'asc' ? 'ascending' : 'descending';
   };
 
+  // Density spacing styles
+  const thPadding =
+    density === 'compact' ? 'px-3 py-2 text-[11px]' : density === 'relaxed' ? 'px-5 py-3.5 text-sm' : 'px-4 py-3 text-xs';
+  const tdPadding =
+    density === 'compact' ? 'px-3 py-2 text-xs' : density === 'relaxed' ? 'px-5 py-4 text-base' : 'px-4 py-3.5 text-sm';
+
   return (
-    <div className="overflow-hidden rounded-xl border border-glass bg-surface shadow-sm shadow-black/[0.03]">
-      {toolbar && (
-        <div className="flex flex-wrap items-end gap-3 border-b border-glass bg-bg/40 px-4 py-3">
-          {toolbar}
+    <div className="rounded-xl border border-glass bg-surface shadow-sm shadow-black/[0.03]">
+      {(toolbar || isCustomizationEnabled || tableTools) && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-t-xl border-b border-glass bg-bg/40 px-4 py-2.5">
+          <div className="flex flex-1 flex-wrap items-center gap-3">
+            {toolbar}
+          </div>
+
+          <div className="flex items-center gap-2">
+            {tableTools}
+
+            {isCustomizationEnabled && (
+              <div className="relative" ref={menuRef}>
+                <button
+                  type="button"
+                  onClick={() => setShowSettingsMenu((v) => !v)}
+                  className={cn(
+                    'relative inline-flex h-8 w-8 items-center justify-center rounded-lg border border-glass bg-surface text-muted transition-colors hover:border-accent/40 hover:bg-accent/5 hover:text-main focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60',
+                    showSettingsMenu && 'border-accent/50 bg-accent/5 text-accent',
+                  )}
+                  title={t('table.settings')}
+                  aria-label={t('table.settings')}
+                  aria-expanded={showSettingsMenu}
+                >
+                  <LuSlidersHorizontal className="h-4 w-4" />
+                  {hasActivePreferences && (
+                    <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-accent ring-2 ring-surface" />
+                  )}
+                </button>
+
+                {showSettingsMenu && (
+                  <div className="absolute right-0 top-full z-50 mt-1.5 w-72 overflow-hidden rounded-xl border border-glass bg-surface shadow-2xl shadow-black/15">
+                    {/* Tab Navigation */}
+                    <div className="flex border-b border-glass bg-bg/30 p-1">
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('columns')}
+                        className={cn(
+                          'flex flex-1 items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-medium transition-colors',
+                          activeTab === 'columns'
+                            ? 'bg-surface text-accent shadow-xs'
+                            : 'text-muted hover:text-main',
+                        )}
+                        title={t('table.columns')}
+                      >
+                        <LuColumns3 className="h-3.5 w-3.5" />
+                        <span>{t('table.columns')}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('density')}
+                        className={cn(
+                          'flex flex-1 items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-medium transition-colors',
+                          activeTab === 'density'
+                            ? 'bg-surface text-accent shadow-xs'
+                            : 'text-muted hover:text-main',
+                        )}
+                        title={t('table.density')}
+                      >
+                        <LuRows3 className="h-3.5 w-3.5" />
+                        <span>{t('table.density')}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('export')}
+                        className={cn(
+                          'flex flex-1 items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-medium transition-colors',
+                          activeTab === 'export'
+                            ? 'bg-surface text-accent shadow-xs'
+                            : 'text-muted hover:text-main',
+                        )}
+                        title={t('table.export')}
+                      >
+                        <LuDownload className="h-3.5 w-3.5" />
+                        <span>{t('table.export')}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('refresh')}
+                        className={cn(
+                          'flex flex-1 items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-medium transition-colors',
+                          activeTab === 'refresh'
+                            ? 'bg-surface text-accent shadow-xs'
+                            : 'text-muted hover:text-main',
+                        )}
+                        title={t('table.autoRefresh')}
+                      >
+                        <LuRefreshCw className="h-3.5 w-3.5" />
+                        <span>{t('table.autoRefresh')}</span>
+                      </button>
+                    </div>
+
+                    {/* Tab Content */}
+                    <div className="p-3">
+                      {/* 1. Columns Tab */}
+                      {activeTab === 'columns' && (
+                        <div>
+                          <div className="mb-2 flex items-center justify-between border-b border-glass pb-1.5">
+                            <span className="text-xs font-semibold text-main">
+                              {t('table.customizeColumns')}
+                            </span>
+                            {hiddenColumns.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={handleResetColumns}
+                                className="text-[11px] font-medium text-accent hover:underline"
+                              >
+                                {t('table.resetColumns')}
+                              </button>
+                            )}
+                          </div>
+                          <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
+                            {columns.map((col) => {
+                              const isHideable = col.hideable !== false;
+                              const isVisible = !hiddenColumns.includes(col.key);
+                              const isLastVisible = isVisible && visibleColumns.length === 1;
+
+                              return (
+                                <label
+                                  key={col.key}
+                                  className={cn(
+                                    'flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors hover:bg-bg/60',
+                                    (!isHideable || isLastVisible) && 'cursor-not-allowed opacity-60',
+                                  )}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isVisible}
+                                    disabled={!isHideable || isLastVisible}
+                                    onChange={() =>
+                                      isHideable && !isLastVisible && toggleColumnVisibility(col.key)
+                                    }
+                                    className="rounded border-glass text-accent focus:ring-accent"
+                                  />
+                                  <span className="truncate text-main">{col.header}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 2. Density Tab */}
+                      {activeTab === 'density' && (
+                        <div className="space-y-1.5">
+                          <span className="mb-2 block text-xs font-semibold text-main">
+                            {t('table.density')}
+                          </span>
+                          {(
+                            [
+                              { key: 'compact', label: t('table.densityCompact') },
+                              { key: 'normal', label: t('table.densityNormal') },
+                              { key: 'relaxed', label: t('table.densityRelaxed') },
+                            ] as const
+                          ).map((item) => (
+                            <button
+                              key={item.key}
+                              type="button"
+                              onClick={() => handleDensityChange(item.key)}
+                              className={cn(
+                                'flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs transition-colors',
+                                density === item.key
+                                  ? 'bg-accent/10 font-semibold text-accent'
+                                  : 'text-main hover:bg-bg/60',
+                              )}
+                            >
+                              <span>{item.label}</span>
+                              {density === item.key && (
+                                <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* 3. Export Tab (Active if onExport provided, passive otherwise) */}
+                      {activeTab === 'export' && (
+                        <div className="space-y-2">
+                          <span className="mb-1 block text-xs font-semibold text-main">
+                            {t('table.export')}
+                          </span>
+                          {(
+                            [
+                              { format: 'csv', label: t('table.exportCsv') },
+                              { format: 'excel', label: t('table.exportExcel') },
+                              { format: 'pdf', label: t('table.exportPdf') },
+                            ] as const
+                          ).map((item) => (
+                            <button
+                              key={item.format}
+                              type="button"
+                              disabled={!onExport}
+                              onClick={() => onExport?.(item.format)}
+                              className={cn(
+                                'flex w-full items-center justify-between rounded-lg border border-glass px-2.5 py-1.5 text-xs transition-colors',
+                                onExport
+                                  ? 'bg-surface text-main hover:border-accent/40 hover:bg-accent/5'
+                                  : 'cursor-not-allowed bg-bg/30 text-muted opacity-70',
+                              )}
+                            >
+                              <span>{item.label}</span>
+                              {!onExport && <Badge tone="muted">{t('table.comingSoon')}</Badge>}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* 4. Auto Refresh Tab (Active if onRefresh provided, passive otherwise) */}
+                      {activeTab === 'refresh' && (
+                        <div className="space-y-2">
+                          <span className="mb-1 block text-xs font-semibold text-main">
+                            {t('table.autoRefresh')}
+                          </span>
+                          {(
+                            [
+                              { interval: 0, label: t('table.refreshOff') },
+                              { interval: 30, label: '30s' },
+                              { interval: 60, label: '1m' },
+                              { interval: 300, label: '5m' },
+                            ] as const
+                          ).map((item) => (
+                            <button
+                              key={item.interval}
+                              type="button"
+                              disabled={!onRefresh}
+                              className={cn(
+                                'flex w-full items-center justify-between rounded-lg border border-glass px-2.5 py-1.5 text-xs transition-colors',
+                                onRefresh
+                                  ? 'bg-surface text-main hover:border-accent/40 hover:bg-accent/5'
+                                  : 'cursor-not-allowed bg-bg/30 text-muted opacity-70',
+                              )}
+                            >
+                              <span>{item.label}</span>
+                              {!onRefresh && <Badge tone="muted">{t('table.comingSoon')}</Badge>}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-sm">
+        <table className="w-full border-collapse">
           <thead>
             <tr className="border-b border-glass bg-bg/40">
-              {columns.map((col) => (
+              {visibleColumns.map((col) => (
                 <th
                   key={col.key}
                   aria-sort={ariaSort(col)}
-                  className={cn('px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted', col.className)}
+                  className={cn(
+                    'text-left font-semibold uppercase tracking-wide text-muted',
+                    thPadding,
+                    col.className,
+                  )}
                 >
                   {headerContent(col)}
                 </th>
               ))}
-              {actions && <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-muted">{actionsHeader}</th>}
+              {actions && (
+                <th
+                  className={cn(
+                    'text-right font-semibold uppercase tracking-wide text-muted',
+                    thPadding,
+                  )}
+                >
+                  {actionsHeader}
+                </th>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -149,13 +524,18 @@ export function DataTable<T>({
               </tr>
             ) : (
               data.map((row) => (
-                <tr key={rowKey(row)} className="border-b border-glass/60 transition-colors last:border-0 hover:bg-accent/[0.04]">
-                  {columns.map((col) => (
-                    <td key={col.key} className={cn('px-4 py-3.5 text-main', col.className)}>
-                      {col.render ? col.render(row) : String((row as Record<string, unknown>)[col.key] ?? '')}
+                <tr
+                  key={rowKey(row)}
+                  className="border-b border-glass/60 transition-colors last:border-0 hover:bg-accent/[0.04]"
+                >
+                  {visibleColumns.map((col) => (
+                    <td key={col.key} className={cn('text-main', tdPadding, col.className)}>
+                      {col.render
+                        ? col.render(row)
+                        : String((row as Record<string, unknown>)[col.key] ?? '')}
                     </td>
                   ))}
-                  {actions && <td className="px-4 py-3.5 text-right">{actions(row)}</td>}
+                  {actions && <td className={cn('text-right', tdPadding)}>{actions(row)}</td>}
                 </tr>
               ))
             )}
@@ -231,3 +611,5 @@ export function DataTable<T>({
     </div>
   );
 }
+
+

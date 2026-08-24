@@ -18,7 +18,7 @@ import { useListPageState } from '../../lib/useListPageState';
 export function RequestLogsPage() {
   const { t } = useT();
   const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, q } =
-    useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' } });
+    useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' }, storageKey: 'request-logs' });
   const { data, isLoading, isFetching } = useRequestLogs({
     page,
     size: pageSize,
@@ -31,6 +31,7 @@ export function RequestLogsPage() {
       key: 'createdAt',
       header: t('requestLog.date'),
       sortKey: 'createdDate',
+      hideable: false,
       render: (l) => <span className="whitespace-nowrap text-muted">{formatDateTime(l.createdAt)}</span>,
     },
     {
@@ -109,6 +110,7 @@ export function RequestLogsPage() {
         columns={columns}
         data={data?.items ?? []}
         rowKey={(l) => l.id}
+        storageKey="request-logs"
         loading={isLoading || (isFetching && !data)}
         emptyMessage={search ? t('requestLog.emptyFiltered') : t('requestLog.empty')}
         page={data?.page ?? page}

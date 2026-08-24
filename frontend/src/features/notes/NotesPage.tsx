@@ -28,7 +28,7 @@ export function NotesPage() {
   const { t } = useT();
   const navigate = useNavigate();
   const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, q } =
-    useListPageState({ defaultSort: { field: 'updatedAt', dir: 'desc' } });
+    useListPageState({ defaultSort: { field: 'updatedAt', dir: 'desc' }, storageKey: 'notes' });
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [pinnedOnly, setPinnedOnly] = useState(false);
 
@@ -52,6 +52,7 @@ export function NotesPage() {
       key: 'title',
       header: t('notes.titleCol'),
       sortKey: 'title',
+      hideable: false,
       render: (n) => (
         <span className="inline-flex items-center gap-2">
           {n.pinned && <LuPin size={14} className="shrink-0 text-accent" aria-label={t('notes.pinned')} />}
@@ -91,6 +92,7 @@ export function NotesPage() {
         columns={columns}
         data={data?.items ?? []}
         rowKey={(n) => n.id}
+        storageKey="notes"
         loading={isLoading || (isFetching && !data)}
         emptyMessage={q || categoryId || pinnedOnly ? t('notes.emptyFiltered') : t('notes.empty')}
         page={data?.page ?? page}
