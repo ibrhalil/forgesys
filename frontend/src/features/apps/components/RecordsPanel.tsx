@@ -146,7 +146,16 @@ export function RecordsPanel({ app }: { app: AppDetail }) {
       case 'BOARD':
         return <RecordBoard app={app} view={activeView} {...common} />;
       case 'CALENDAR':
-        return <RecordCalendar app={app} view={activeView} records={visible} isLoading={recordsQuery.isLoading} resolve={resolve} />;
+        return (
+          <RecordCalendar
+            app={app}
+            view={activeView}
+            records={visible}
+            isLoading={recordsQuery.isLoading}
+            resolve={resolve}
+            onRequestEdit={setEditingRecord}
+          />
+        );
       case 'LIST':
         return <RecordList app={app} {...common} />;
       default:

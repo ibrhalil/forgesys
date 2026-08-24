@@ -1,4 +1,5 @@
 import { cn } from '../../lib/cn';
+import { useT } from '../../lib/i18n';
 
 export interface CheckboxItem {
   id: string;
@@ -13,9 +14,10 @@ interface CheckboxListProps {
   emptyMessage?: string;
 }
 
-export function CheckboxList({ items, selectedIds, onChange, emptyMessage = 'Nothing to select' }: CheckboxListProps) {
+export function CheckboxList({ items, selectedIds, onChange, emptyMessage }: CheckboxListProps) {
+  const { t } = useT();
   if (items.length === 0) {
-    return <p className="py-6 text-center text-sm text-muted">{emptyMessage}</p>;
+    return <p className="py-6 text-center text-sm text-muted">{emptyMessage ?? t('common.nothingToSelect')}</p>;
   }
 
   const toggle = (id: string) => {

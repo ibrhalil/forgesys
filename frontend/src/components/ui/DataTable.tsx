@@ -11,6 +11,7 @@ import {
 } from 'react-icons/lu';
 import { cn } from '../../lib/cn';
 import { useT } from '../../lib/i18n';
+import type { IconType } from 'react-icons';
 import {
   loadTablePreferences,
   saveTablePreferences,
@@ -116,10 +117,14 @@ interface DataTableProps<T> {
    * Custom renderer for 'list' view mode.
    */
   listRender?: (row: T) => ReactNode;
+  /**
+   * Context icon for the empty state (defaults to EmptyState's generic folder).
+   */
+  emptyIcon?: IconType;
 }
 
 
-type SettingsTab = 'columns' | 'density' | 'viewMode' | 'export' | 'refresh';
+type SettingsTab = 'columns' | 'density' | 'export' | 'refresh';
 
 export function DataTable<T>({
   columns,
@@ -149,6 +154,7 @@ export function DataTable<T>({
   onViewModeChange,
   cardRender,
   listRender,
+  emptyIcon,
 }: DataTableProps<T>) {
   const { t } = useT();
 
@@ -467,7 +473,7 @@ export function DataTable<T>({
 
                                   {!isHideable && (
                                     <Badge tone="muted" className="shrink-0 text-[10px]">
-                                      Primary
+                                      {t('table.primary')}
                                     </Badge>
                                   )}
                                 </label>
@@ -590,7 +596,7 @@ export function DataTable<T>({
               <Spinner className="border-muted/40 border-t-accent" />
             </div>
           ) : data.length === 0 ? (
-            <EmptyState message={emptyMessage ?? t('table.noRecords')} />
+            <EmptyState message={emptyMessage ?? t('table.noRecords')} icon={emptyIcon} />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {data.map((row) => (
@@ -638,7 +644,7 @@ export function DataTable<T>({
               <Spinner className="border-muted/40 border-t-accent" />
             </div>
           ) : data.length === 0 ? (
-            <EmptyState message={emptyMessage ?? t('table.noRecords')} />
+            <EmptyState message={emptyMessage ?? t('table.noRecords')} icon={emptyIcon} />
           ) : (
             <div className="divide-y divide-glass/60">
               {data.map((row) => (
@@ -715,7 +721,7 @@ export function DataTable<T>({
               ) : data.length === 0 ? (
                 <tr>
                   <td colSpan={colCount}>
-                    <EmptyState message={emptyMessage ?? t('table.noRecords')} />
+                    <EmptyState message={emptyMessage ?? t('table.noRecords')} icon={emptyIcon} />
                   </td>
                 </tr>
               ) : (

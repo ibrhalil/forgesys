@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { RecordCalendar } from '../features/apps/components/RecordCalendar';
@@ -6,6 +6,7 @@ import { cellDisplay } from '../features/apps/cellValue';
 import { todayIso } from '../features/apps/calendarUtils';
 import type { AppDetail, AppRecord, AppView } from '../features/apps/types';
 import { useLocaleStore } from '../store/localeStore';
+import { useAuthStore } from '../store/authStore';
 
 const APP_ID = '33333333-3333-3333-3333-333333333333';
 
@@ -39,8 +40,17 @@ const RECORDS: AppRecord[] = [
   { id: 'r-nodate', appId: APP_ID, values: { 'p-title': 'Undated' }, createdDate: '2026-08-01T00:00:00Z', updatedAt: '', createdBy: 'u' },
 ];
 
-function renderCalendar(view: AppView = VIEW) {
-  return render(<RecordCalendar app={APP} view={view} records={RECORDS} isLoading={false} resolve={cellDisplay} />);
+function renderCalendar(view: AppView = VIEW, onRequestEdit?: (r: AppRecord) => void) {
+  return render(
+    <RecordCalendar
+      app={APP}
+      view={view}
+      records={RECORDS}
+      isLoading={false}
+      resolve={cellDisplay}
+      onRequestEdit={onRequestEdit}
+    />,
+  );
 }
 
 function monthLabelOf(date: Date): string {
@@ -90,5 +100,23 @@ describe('RecordCalendar', () => {
   it('shows an empty state when the date property is gone', () => {
     renderCalendar({ ...VIEW, config: { dateProperty: 'p-missing' } });
     expect(screen.getByText(/date property is missing/i)).toBeInTheDocument();
+  });
+
+  it('opens the record form through a chip click for apps:record:write holders', async () => {
+    useAuthStore.setState({ hasAuthority: () => true });
+    const onRequestEdit = vi.fn();
+    const user = userEvent.setup();
+    renderCalendar(VIEW, onRequestEdit);
+
+    await user.click(screen.getByRole('button', { name: 'Standup' }));
+    expect(onRequestEdit).toHaveBeenCalledWith(RECORDS[0]);
+  });
+
+  it('keeps chips non-interactive without apps:record:write', () => {
+    useAuthStore.setState({ hasAuthority: (a: string) => a !== 'apps:record:write' });
+    renderCalendar(VIEW, vi.fn());
+
+    expect(screen.queryByRole('button', { name: 'Standup' })).not.toBeInTheDocument();
+    expect(screen.getByText('Standup')).toBeInTheDocument();
   });
 });

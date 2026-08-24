@@ -7,6 +7,10 @@ export const messages = {
   tr: {
     // common
     'common.cancel': 'İptal',
+    'common.confirm': 'Onayla',
+    'common.nothingToSelect': 'Seçilecek öğe yok',
+    'common.loadingAria': 'Yükleniyor',
+    'common.language': 'Dil',
     'common.close': 'Kapat',
     'common.save': 'Kaydet',
     'common.create': 'Oluştur',
@@ -48,6 +52,7 @@ export const messages = {
 
     // data table
     'table.rowsPerPage': 'Satır sayısı',
+    'table.primary': 'Birincil',
     'table.showingRange': 'Gösterilen: {from}–{to} / {total}',
     'table.noItems': 'Kayıt yok',
     'table.page': 'Sayfa {current} / {total}',
@@ -130,6 +135,8 @@ export const messages = {
     'auth.register.subdomainPlaceholder': 'acme',
     'auth.register.subdomainSuffix': '.forgesys',
     'auth.register.adminEmail': 'Admin e-posta',
+    'auth.subdomainLabel': 'Alt alan adı',
+    'auth.adminEmailPh': 'admin@sirket.com',
     'auth.register.adminPassword': 'Admin şifre',
     'auth.register.passwordHint': 'En az 8 karakter',
     'auth.register.firstName': 'Ad (opsiyonel)',
@@ -666,6 +673,10 @@ export const messages = {
   en: {
     // common
     'common.cancel': 'Cancel',
+    'common.confirm': 'Confirm',
+    'common.nothingToSelect': 'Nothing to select',
+    'common.loadingAria': 'Loading',
+    'common.language': 'Language',
     'common.close': 'Close',
     'common.save': 'Save',
     'common.create': 'Create',
@@ -707,6 +718,7 @@ export const messages = {
 
     // data table
     'table.rowsPerPage': 'Rows per page',
+    'table.primary': 'Primary',
     'table.showingRange': 'Showing {from}–{to} of {total}',
     'table.noItems': 'No items',
     'table.page': 'Page {current} / {total}',
@@ -789,6 +801,8 @@ export const messages = {
     'auth.register.subdomainPlaceholder': 'acme',
     'auth.register.subdomainSuffix': '.forgesys',
     'auth.register.adminEmail': 'Admin email',
+    'auth.subdomainLabel': 'Subdomain',
+    'auth.adminEmailPh': 'admin@company.com',
     'auth.register.adminPassword': 'Admin password',
     'auth.register.passwordHint': 'At least 8 characters',
     'auth.register.firstName': 'First name (optional)',

@@ -1,4 +1,4 @@
-import { LuEllipsisVertical, LuPencil, LuTrash2 } from 'react-icons/lu';
+import { LuEllipsisVertical, LuLayoutGrid, LuPencil, LuTrash2 } from 'react-icons/lu';
 import { RowMenu } from '../../../components/ui/RowMenu';
 import { EmptyState } from '../../../components/ui/EmptyState';
 import { TablePagination } from '../../../components/ui/TablePagination';
@@ -47,7 +47,7 @@ export function RecordGallery({
       {isLoading ? (
         <div className="py-16 text-center text-xs text-muted">{t('common.loading')}</div>
       ) : records.length === 0 ? (
-        <EmptyState message={t('apps.emptyRecords')} />
+        <EmptyState message={t('apps.emptyRecords')} icon={LuLayoutGrid} />
       ) : (
         <>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

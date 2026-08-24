@@ -42,8 +42,8 @@ export function ProfilePage() {
       description={t('profile.desc')}
     >
 
-      <div className="rounded-xl border border-glass bg-surface p-2 backdrop-blur-md">
-        <div className="flex flex-wrap items-center gap-3 px-4 py-3">
+      <div className="rounded-xl border border-glass bg-surface p-5 backdrop-blur-md">
+        <div className="flex flex-wrap items-center gap-3 py-0">
           <span className="font-medium text-main">{me.email}</span>
           <Badge tone="muted">@{me.username}</Badge>
           <Badge tone={me.enabled ? 'green' : 'muted'}>{me.enabled ? t('common.active') : t('common.disabled')}</Badge>

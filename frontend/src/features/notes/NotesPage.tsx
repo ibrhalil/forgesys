@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import type { Note } from './types';
 import { useDeleteNote, useNoteCategories, useNotes } from './hooks';
 import { notify } from '../../lib/notify';
-import { LuPin, LuSquarePen, LuTrash2 } from 'react-icons/lu';
+import { LuPin, LuSquarePen, LuStickyNote, LuTrash2 } from 'react-icons/lu';
 import { DataTable, type Column } from '../../components/ui/DataTable';
 import { PAGE_SIZE_OPTIONS } from '../../lib/pagination';
 import { SearchInput } from '../../components/ui/SearchInput';
@@ -111,6 +111,7 @@ export function NotesPage() {
         data={data?.items ?? []}
         rowKey={(n) => n.id}
         storageKey="notes"
+        emptyIcon={LuStickyNote}
         loading={isLoading || (isFetching && !data)}
         emptyMessage={q || categoryId || pinnedOnly ? t('notes.emptyFiltered') : t('notes.empty')}
         page={data?.page ?? page}

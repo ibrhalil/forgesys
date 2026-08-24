@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
   buildRecordPatch,
   cellDisplay,
@@ -10,6 +10,12 @@ import {
   shortenId,
 } from '../features/apps/cellValue';
 import type { AppProperty, AppRecord } from '../features/apps/types';
+import { useLocaleStore } from '../store/localeStore';
+
+// DATE cells render via formatDate — pin the locale for stable assertions.
+beforeEach(() => {
+  useLocaleStore.setState({ locale: 'en' });
+});
 
 const prop = (over: Partial<AppProperty> = {}): AppProperty => ({
   id: 'p1',

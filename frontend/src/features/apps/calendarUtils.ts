@@ -49,9 +49,12 @@ export function todayIso(): string {
 }
 
 /**
- * The 6×7 day cells covering a month: Monday-first weeks, leading/trailing days
- * of the neighbouring months included (rendered muted). Each cell carries its
- * own `{year, month}` so month arithmetic stays correct across year borders.
+ * Up to 6×7 day cells covering a month: Monday-first weeks, leading/trailing days
+ * of the neighbouring months included (rendered muted). Trailing weeks whose EVERY
+ * day belongs to the next month are cropped — 4/5-week months no longer show a
+ * dead all-muted tail week (the leading partial week stays; it holds the 1st).
+ * Each cell carries its own `{year, month}` so month arithmetic stays correct
+ * across year borders.
  */
 export function monthMatrix(year: number, month: number): YearMonthDay[][] {
   const first = new Date(Date.UTC(year, month, 1));
@@ -68,6 +71,13 @@ export function monthMatrix(year: number, month: number): YearMonthDay[][] {
       cursor = new Date(cursor.getTime() + DAY_MS);
     }
     weeks.push(week);
+  }
+  // Crop trailing all-overflow weeks (every day past the target month).
+  while (
+    weeks.length > 0 &&
+    weeks[weeks.length - 1].every((d) => d.month !== month || d.year !== year)
+  ) {
+    weeks.pop();
   }
   return weeks;
 }

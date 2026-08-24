@@ -1,5 +1,6 @@
 import { useLocaleStore } from '../store/localeStore';
 import type { Locale } from '../lib/i18n';
+import { useT } from '../lib/i18n';
 import { cn } from '../lib/cn';
 
 const LOCALES: Locale[] = ['tr', 'en'];
@@ -8,11 +9,12 @@ const LOCALES: Locale[] = ['tr', 'en'];
 export function LanguageToggle() {
   const locale = useLocaleStore((s) => s.locale);
   const setLocale = useLocaleStore((s) => s.setLocale);
+  const { t } = useT();
 
   return (
     <div
       role="group"
-      aria-label="Language"
+      aria-label={t('common.language')}
       className="flex overflow-hidden rounded-lg border border-glass"
     >
       {LOCALES.map((l) => (

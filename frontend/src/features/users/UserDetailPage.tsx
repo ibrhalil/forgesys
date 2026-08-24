@@ -207,29 +207,33 @@ export function UserDetailPage() {
               {t('common.edit')}
             </Button>
           )}
-          <RowMenu
-            ariaLabel={t('common.actions')}
-            icon={LuEllipsisVertical}
-            items={[
-              ...(canWrite
-                ? [
-                    { label: t('users.passwordBtn'), onClick: () => setResetting(true), icon: LuKeyRound },
-                    { label: t('nav.sessions'), onClick: () => navigate(`/admin/users/${user.id}/sessions`), icon: LuMonitor },
-                  ]
-                : []),
-              // Unlock only makes sense while an active lock window is running.
-              ...(canWrite && isLocked(user)
-                ? [{ label: t('users.unlock'), onClick: () => setUnlocking(true), icon: LuLockOpen }]
-                : []),
-              // Effective permissions live behind a searchable modal — the page itself
-              // is iam:user:read gated, so every viewer may open it.
-              { label: t('users.viewEffectivePerms'), onClick: () => setShowPerms(true), icon: LuListChecks },
-              /* Self-delete is rejected by the backend (409 self_delete_forbidden) — omit it on the actor's own page. */
-              ...(canDelete && user.id !== currentUserId
-                ? [{ label: t('common.delete'), onClick: () => setDeleting(true), icon: LuTrash2, danger: true }]
-                : []),
-            ]}
-          />
+          {/* Hidden while editing — a dirty form must not trigger parallel mutations
+              (password reset, delete) from the overflow. */}
+          {!formActive && (
+            <RowMenu
+              ariaLabel={t('common.actions')}
+              icon={LuEllipsisVertical}
+              items={[
+                ...(canWrite
+                  ? [
+                      { label: t('users.passwordBtn'), onClick: () => setResetting(true), icon: LuKeyRound },
+                      { label: t('nav.sessions'), onClick: () => navigate(`/admin/users/${user.id}/sessions`), icon: LuMonitor },
+                    ]
+                  : []),
+                // Unlock only makes sense while an active lock window is running.
+                ...(canWrite && isLocked(user)
+                  ? [{ label: t('users.unlock'), onClick: () => setUnlocking(true), icon: LuLockOpen }]
+                  : []),
+                // Effective permissions live behind a searchable modal — the page itself
+                // is iam:user:read gated, so every viewer may open it.
+                { label: t('users.viewEffectivePerms'), onClick: () => setShowPerms(true), icon: LuListChecks },
+                /* Self-delete is rejected by the backend (409 self_delete_forbidden) — omit it on the actor's own page. */
+                ...(canDelete && user.id !== currentUserId
+                  ? [{ label: t('common.delete'), onClick: () => setDeleting(true), icon: LuTrash2, danger: true }]
+                  : []),
+              ]}
+            />
+          )}
         </>
       ) : undefined}
     >
@@ -301,9 +305,12 @@ export function UserDetailPage() {
             </div>
             {!isCreate && (
               /* Read-only status indicator — the backend has no admin endpoint to
-                 toggle email verification (re-send lives in the overflow menu). */
+                 toggle email verification (re-send lives in the overflow menu);
+                 same labels as the view-mode field. */
               <div className="flex items-center gap-2 self-end pb-2">
-                <Toggle checked={!!user?.emailVerified} onChange={() => {}} label={t('users.emailVerified')} disabled />
+                <Badge tone={user?.emailVerified ? 'blue' : 'warning'}>
+                  {user?.emailVerified ? t('common.verified') : t('common.unverified')}
+                </Badge>
               </div>
             )}
             </form>

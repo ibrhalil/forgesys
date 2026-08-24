@@ -8,7 +8,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useT } from '../../lib/i18n';
 import { useListPageState } from '../../lib/useListPageState';
 
-import { LuEye, LuKeyRound, LuLockOpen, LuMonitor, LuShield, LuTrash2, LuUsers as LuGroup } from 'react-icons/lu';
+import { LuEye, LuKeyRound, LuLockOpen, LuMonitor, LuShield, LuTrash2, LuUsers as LuGroup, LuUsers } from 'react-icons/lu';
 import { notify } from '../../lib/notify';
 import { DataTable, type Column } from '../../components/ui/DataTable';
 import { PAGE_SIZE_OPTIONS } from '../../lib/pagination';
@@ -97,7 +97,7 @@ export function UsersPage() {
         u.roleCount ? (
           <span>
             <span className="font-semibold text-accent">{u.roleCount}</span>{' '}
-            <span className="text-muted">{t('common.roles').toLowerCase()}</span>
+            <span className="lowercase text-muted">{t('common.roles')}</span>
           </span>
         ) : (
           <span className="text-muted">—</span>
@@ -110,7 +110,7 @@ export function UsersPage() {
         u.groupCount ? (
           <span>
             <span className="font-semibold text-accent-blue">{u.groupCount}</span>{' '}
-            <span className="text-muted">{t('common.groups').toLowerCase()}</span>
+            <span className="lowercase text-muted">{t('common.groups')}</span>
           </span>
         ) : (
           <span className="text-muted">—</span>
@@ -131,6 +131,7 @@ export function UsersPage() {
         data={data?.items ?? []}
         rowKey={(u) => u.id}
         storageKey="users"
+        emptyIcon={LuUsers}
         loading={isLoading || (isFetching && !data)}
         emptyMessage={q ? t('users.emptyFiltered') : t('users.empty')}
         page={data?.page ?? page}

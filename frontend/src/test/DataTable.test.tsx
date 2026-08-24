@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { LuUsers } from 'react-icons/lu';
 import { DataTable, type Column } from '../components/ui/DataTable';
 import type { SortState } from '../types';
 import { useLocaleStore } from '../store/localeStore';
@@ -42,8 +43,8 @@ function renderTable(overrides: Partial<Parameters<typeof DataTable<Row>>[0]> = 
     onPageSizeChange: vi.fn(),
     ...overrides,
   };
-  render(<DataTable<Row> {...props} />);
-  return props;
+  const result = render(<DataTable<Row> {...props} />);
+  return { ...props, container: result.container };
 }
 
 describe('DataTable', () => {
@@ -203,5 +204,33 @@ describe('DataTable', () => {
     expect(screen.getByRole('columnheader', { name: /note/i })).toBeInTheDocument();
     const stored = JSON.parse(window.localStorage.getItem('sf_table_prefs_users') ?? '{}');
     expect(stored.hiddenColumns).toEqual([]);
+  });
+
+  it('renders the context empty icon when the table has no rows', () => {
+    // react-icons renders no name class — compare the svg's first path instead.
+    const { container: iconRef } = render(<LuUsers />);
+    const expectedPath = iconRef.querySelector('path')?.getAttribute('d');
+    const { container } = renderTable({ data: [], totalElements: 0, totalPages: 0, emptyIcon: LuUsers });
+
+    const emptyIcon = container.querySelector('svg');
+    expect(emptyIcon?.querySelector('path')?.getAttribute('d')).toBe(expectedPath);
+  });
+
+  it('labels non-hideable columns with the localized Primary badge in the settings menu', async () => {
+    const user = userEvent.setup();
+    renderTable({
+      storageKey: 'users',
+      columns: [
+        { key: 'name', header: 'Name', sortKey: 'name', hideable: false },
+        { key: 'note', header: 'Note' },
+      ],
+    });
+
+    await user.click(screen.getByRole('button', { name: /table settings/i }));
+    expect(screen.getByText('Primary')).toBeInTheDocument();
+
+    // The open menu re-renders with the Turkish label after a locale switch.
+    useLocaleStore.setState({ locale: 'tr' });
+    await waitFor(() => expect(screen.getByText('Birincil')).toBeInTheDocument());
   });
 });
