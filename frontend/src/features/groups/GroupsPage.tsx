@@ -91,7 +91,7 @@ export function GroupsPage() {
       breadcrumb={[{ label: t('nav.identity') }, { label: t('nav.groups') }]}
       title={t('groups.title')}
       description={t('groups.desc')}
-      actions={<Button variant="primary" onClick={() => setCreating(true)}>{t('groups.new')}</Button>}
+      actions={canWrite ? <Button variant="primary" onClick={() => setCreating(true)}>{t('groups.new')}</Button> : undefined}
     >
 
       <DataTable<Group>

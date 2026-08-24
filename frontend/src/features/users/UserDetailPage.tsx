@@ -402,7 +402,7 @@ export function UserDetailPage() {
           </div>
           {/* Standard action footer: bottom-right of the editing surface (the whole
               page is the editing surface in unified mode). */}
-          <div className="flex items-center justify-end gap-3">
+          <div className="mt-4 flex items-center justify-end gap-3">
             <Button variant="primary" loading={saving} onClick={() => handleSubmit()}>
               {t('common.save')}
             </Button>

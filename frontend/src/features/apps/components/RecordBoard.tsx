@@ -1,7 +1,7 @@
-import { LuPencil, LuTrash2 } from 'react-icons/lu';
+import { LuEllipsisVertical, LuPencil, LuTrash2 } from 'react-icons/lu';
 import { Badge } from '../../../components/ui/Badge';
-import { Button } from '../../../components/ui/Button';
 import { EmptyState } from '../../../components/ui/EmptyState';
+import { RowMenu } from '../../../components/ui/RowMenu';
 import { SelectInput } from '../../../components/ui/SelectInput';
 import { useT } from '../../../lib/i18n';
 import { PERMISSIONS } from '../../../lib/permissions';
@@ -189,30 +189,19 @@ function BoardColumn({
                     </div>
                   )}
                   {(canWrite || canDelete) && (
-                    <div className="ml-auto flex items-center gap-1">
-                      {canWrite && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          aria-label={t('common.edit')}
-                          title={t('common.edit')}
-                          onClick={() => onRequestEdit(record)}
-                        >
-                          <LuPencil aria-hidden className="h-4 w-4" />
-                        </Button>
-                      )}
-                      {canDelete && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-danger hover:bg-danger/10 hover:text-danger"
-                          aria-label={t('common.delete')}
-                          title={t('common.delete')}
-                          onClick={() => onRequestDelete(record)}
-                        >
-                          <LuTrash2 aria-hidden className="h-4 w-4" />
-                        </Button>
-                      )}
+                    <div className="ml-auto">
+                      <RowMenu
+                        ariaLabel={t('common.actions')}
+                        icon={LuEllipsisVertical}
+                        items={[
+                          ...(canWrite
+                            ? [{ label: t('common.edit'), onClick: () => onRequestEdit(record), icon: LuPencil }]
+                            : []),
+                          ...(canDelete
+                            ? [{ label: t('common.delete'), onClick: () => onRequestDelete(record), icon: LuTrash2, danger: true }]
+                            : []),
+                        ]}
+                      />
                     </div>
                   )}
                 </div>

@@ -51,6 +51,7 @@ export function ProjectsPage() {
   } = useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'projects' });
   const { data, isLoading, isFetching } = useProjects({ page, size: pageSize, sorts: [sort], q: q || undefined });
   const delProject = useDeleteProject();
+  const canWrite = useAuthStore((s) => s.hasAuthority(PERMISSIONS.PROJECT_WRITE));
   const canDelete = useAuthStore((s) => s.hasAuthority(PERMISSIONS.PROJECT_DELETE));
   const typeOptions = useTypeOptions();
 
@@ -97,7 +98,7 @@ export function ProjectsPage() {
       breadcrumb={[{ label: t('nav.projects') }]}
       title={t('projects.title')}
       description={t('projects.desc')}
-      actions={<Button variant="primary" onClick={() => setCreating(true)}>{t('projects.new')}</Button>}
+      actions={canWrite ? <Button variant="primary" onClick={() => setCreating(true)}>{t('projects.new')}</Button> : undefined}
     >
 
       <DataTable<Project>

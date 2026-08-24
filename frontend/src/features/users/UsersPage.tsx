@@ -123,7 +123,7 @@ export function UsersPage() {
       breadcrumb={[{ label: t('nav.identity') }, { label: t('nav.users') }]}
       title={t('users.title')}
       description={t('users.desc')}
-      actions={<Button variant="primary" onClick={() => navigate('/users/new')}>{t('users.new')}</Button>}
+      actions={canWrite ? <Button variant="primary" onClick={() => navigate('/users/new')}>{t('users.new')}</Button> : undefined}
     >
 
       <DataTable<UserDirectoryView>

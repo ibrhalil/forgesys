@@ -20,6 +20,7 @@ import type { SortState } from '../../types';
 import { Badge } from './Badge';
 import { EmptyState } from './EmptyState';
 import { Spinner } from './Spinner';
+import { TablePagination } from './TablePagination';
 
 export type { TableViewMode };
 
@@ -118,9 +119,6 @@ interface DataTableProps<T> {
 }
 
 
-/** Above this many choices the footer switches from segments to a compact select. */
-const MAX_SEGMENTS = 6;
-
 type SettingsTab = 'columns' | 'density' | 'viewMode' | 'export' | 'refresh';
 
 export function DataTable<T>({
@@ -205,8 +203,6 @@ export function DataTable<T>({
   }, [columns, hiddenColumns]);
 
   const colCount = visibleColumns.length + (actions ? 1 : 0);
-  const rangeStart = totalElements === 0 ? 0 : page * pageSize + 1;
-  const rangeEnd = Math.min((page + 1) * pageSize, totalElements);
 
   const isCustomizationEnabled = !!storageKey && customizableColumns;
   const hasActivePreferences =
@@ -744,71 +740,15 @@ export function DataTable<T>({
         </div>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-4 border-t border-glass bg-bg/40 px-4 py-3">
-        {/* Rows-per-page: minimal segments while few options; a ghost native select when
-            the option list grows, so an extended PAGE_SIZE_OPTIONS never crowds the footer. */}
-        {pageSizeOptions && onPageSizeChange && (
-          pageSizeOptions.length <= MAX_SEGMENTS ? (
-            <div role="group" aria-label={t('table.rowsPerPage')} className="flex items-center gap-0.5">
-              {pageSizeOptions.map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  aria-pressed={pageSize === n}
-                  onClick={() => n !== pageSize && onPageSizeChange(n)}
-                  className={cn(
-                    'rounded-md px-2 py-1 text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60',
-                    pageSize === n
-                      ? 'font-semibold text-accent'
-                      : 'text-muted hover:text-main',
-                  )}
-                >
-                  {n}
-                </button>
-              ))}
-            </div>
-          ) : (
-            <label className="flex items-center gap-1.5 text-xs text-muted">
-              {t('table.rowsPerPage')}
-              <select
-                value={pageSize}
-                onChange={(e) => onPageSizeChange(Number(e.target.value))}
-                className="cursor-pointer rounded-md bg-transparent py-0.5 pl-1 pr-5 text-xs font-semibold text-accent transition-colors hover:text-main focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
-              >
-                {pageSizeOptions.map((n) => (
-                  <option key={n} value={n}>{n}</option>
-                ))}
-              </select>
-            </label>
-          )
-        )}
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-muted">
-            {totalElements === 0
-              ? t('table.noItems')
-              : t('table.showingRange', { from: rangeStart, to: rangeEnd, total: totalElements })}
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => onPageChange(page - 1)}
-              disabled={page === 0}
-              className="rounded-md border border-glass bg-surface px-3 py-1 text-xs text-main transition-colors hover:bg-accent/5 hover:border-accent/30 disabled:opacity-40 disabled:hover:bg-surface disabled:hover:border-glass"
-            >
-              {t('table.prev')}
-            </button>
-            <span className="text-xs text-muted">
-              {t('table.page', { current: totalPages === 0 ? 0 : page + 1, total: totalPages })}
-            </span>
-            <button
-              onClick={() => onPageChange(page + 1)}
-              disabled={page >= totalPages - 1}
-              className="rounded-md border border-glass bg-surface px-3 py-1 text-xs text-main transition-colors hover:bg-accent/5 hover:border-accent/30 disabled:opacity-40 disabled:hover:bg-surface disabled:hover:border-glass"
-            >
-              {t('table.next')}
-            </button>
-          </div>
-        </div>
-      </div>
+      <TablePagination
+        page={page}
+        pageSize={pageSize}
+        totalElements={totalElements}
+        totalPages={totalPages}
+        onPageChange={onPageChange}
+        pageSizeOptions={pageSizeOptions}
+        onPageSizeChange={onPageSizeChange}
+      />
     </div>
   );
 }
