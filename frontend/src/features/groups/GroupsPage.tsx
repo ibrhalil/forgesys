@@ -26,8 +26,19 @@ import { useAuthStore } from '../../store/authStore';
 
 export function GroupsPage() {
   const { t } = useT();
-  const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, q } =
-    useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'groups' });
+  const {
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+    sort,
+    toggleSort,
+    search,
+    setSearch,
+    searchFields,
+    setSearchFields,
+    q,
+  } = useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'groups' });
   const { data, isLoading, isFetching } = useGroups({ page, size: pageSize, sorts: [sort], q: q || undefined });
   const delGroup = useDeleteGroup();
   const canWrite = useAuthStore((s) => s.hasAuthority(PERMISSIONS.GROUP_WRITE));
@@ -36,6 +47,13 @@ export function GroupsPage() {
   const [creating, setCreating] = useState(false);
   const [assignRolesTo, setAssignRolesTo] = useState<Group | null>(null);
   const [deleting, setDeleting] = useState<Group | null>(null);
+
+  const groupSearchFields = [
+    { key: 'name', label: t('common.group'), searchable: true },
+    { key: 'description', label: t('common.description'), searchable: true },
+    { key: 'status', label: t('common.status'), searchable: false },
+    { key: 'roles', label: t('common.roles'), searchable: false },
+  ];
 
   const columns: Column<Group>[] = [
     {
@@ -92,7 +110,16 @@ export function GroupsPage() {
         onPageChange={setPage}
         sort={sort}
         onSortChange={toggleSort}
-        toolbar={<SearchInput value={search} onChange={setSearch} placeholder={t('groups.searchPh')} />}
+        toolbar={
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder={t('groups.searchPh')}
+            fields={groupSearchFields}
+            selectedFields={searchFields}
+            onSelectedFieldsChange={setSearchFields}
+          />
+        }
         actionsHeader={t('common.actions')}
         actions={(g) => (
           <RowMenu

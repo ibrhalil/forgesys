@@ -71,6 +71,14 @@ export const messages = {
     'table.refreshOff': 'Kapalı',
     'table.comingSoon': 'Yakında',
 
+    // smart search
+    'search.fields': 'Arama Alanları',
+    'search.allFields': 'Tüm Alanlarda Ara',
+    'search.specificFields': 'Seçili Alanlar',
+    'search.notSupported': 'Desteklenmiyor',
+    'search.reset': 'Tümünü Seç',
+    'search.activeCount': '{count} alan',
+
     // app bootstrap / error boundary
     'app.loading': 'Uygulama yükleniyor…',
     'error.title': 'Bir şeyler ters gitti',
@@ -719,6 +727,14 @@ export const messages = {
     'table.autoRefresh': 'Refresh',
     'table.refreshOff': 'Off',
     'table.comingSoon': 'Coming soon',
+
+    // smart search
+    'search.fields': 'Search Fields',
+    'search.allFields': 'Search All Fields',
+    'search.specificFields': 'Specific Fields',
+    'search.notSupported': 'Not Supported',
+    'search.reset': 'Select All',
+    'search.activeCount': '{count} fields',
 
     // app bootstrap / error boundary
     'app.loading': 'Loading application…',

@@ -20,7 +20,7 @@ import { AppFormModal } from './components/AppFormModal';
 
 export function AppsPage() {
   const { t } = useT();
-  const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, q } =
+  const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, searchFields, setSearchFields, q } =
     useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'apps' });
   const { data, isLoading, isFetching } = useApps({ page, size: pageSize, sorts: [sort], q: q || undefined });
   // Usage indicator: unfiltered total via a one-row probe (the list above is q-filtered).
@@ -32,6 +32,13 @@ export function AppsPage() {
 
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<App | null>(null);
+
+  const appSearchFields = [
+    { key: 'name', label: t('common.name'), searchable: true },
+    { key: 'description', label: t('common.description'), searchable: true },
+    { key: 'project', label: t('projects.project'), searchable: false },
+    { key: 'createdDate', label: t('apps.createdDate'), searchable: false },
+  ];
 
   const columns: Column<App>[] = [
     {
@@ -112,7 +119,16 @@ export function AppsPage() {
         onPageChange={setPage}
         sort={sort}
         onSortChange={toggleSort}
-        toolbar={<SearchInput value={search} onChange={setSearch} placeholder={t('apps.searchPh')} />}
+        toolbar={
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder={t('apps.searchPh')}
+            fields={appSearchFields}
+            selectedFields={searchFields}
+            onSelectedFieldsChange={setSearchFields}
+          />
+        }
         actionsHeader={t('common.actions')}
         actions={(a) => (
           <RowMenu

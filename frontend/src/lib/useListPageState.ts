@@ -51,6 +51,10 @@ export function useListPageState({
   });
   const [sort, setSort] = useState<SortState>(defaultSort);
   const [search, setSearch] = useState('');
+  const [searchFields, setSearchFieldsState] = useState<string[]>(() => {
+    if (!storageKey) return [];
+    return loadTablePreferences(storageKey).searchFields ?? [];
+  });
   const q = useDebouncedValue(search, debounceMs);
 
   // A new search term invalidates the current page position.
@@ -66,6 +70,14 @@ export function useListPageState({
     setPage(0);
   };
 
+  const setSearchFields = (fields: string[]) => {
+    setSearchFieldsState(fields);
+    if (storageKey) {
+      saveTablePreferences(storageKey, { searchFields: fields });
+    }
+    setPage(0);
+  };
+
   const toggleSort = (field: string) => {
     setSort((prev) =>
       prev.field === field
@@ -75,5 +87,17 @@ export function useListPageState({
     setPage(0);
   };
 
-  return { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, q };
+  return {
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+    sort,
+    toggleSort,
+    search,
+    setSearch,
+    searchFields,
+    setSearchFields,
+    q,
+  };
 }

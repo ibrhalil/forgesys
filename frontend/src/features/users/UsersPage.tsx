@@ -24,8 +24,19 @@ import { ResetPasswordModal } from './components/ResetPasswordModal';
 
 export function UsersPage() {
   const { t } = useT();
-  const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, q } =
-    useListPageState({ defaultSort: { field: 'email', dir: 'asc' }, storageKey: 'users' });
+  const {
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+    sort,
+    toggleSort,
+    search,
+    setSearch,
+    searchFields,
+    setSearchFields,
+    q,
+  } = useListPageState({ defaultSort: { field: 'email', dir: 'asc' }, storageKey: 'users' });
   const { data, isLoading, isFetching } = useUsers({ page, size: pageSize, sorts: [sort], q: q || undefined });
   const delUser = useDeleteUser();
   const unlockUser = useUnlockUser();
@@ -39,6 +50,13 @@ export function UsersPage() {
   const [resetPwdFor, setResetPwdFor] = useState<UserDirectoryView | null>(null);
   const [unlocking, setUnlocking] = useState<UserDirectoryView | null>(null);
   const [deleting, setDeleting] = useState<UserDirectoryView | null>(null);
+
+  const userSearchFields = [
+    { key: 'name', label: t('common.user'), searchable: true },
+    { key: 'status', label: t('common.status'), searchable: false },
+    { key: 'roles', label: t('common.roles'), searchable: false },
+    { key: 'groups', label: t('common.groups'), searchable: false },
+  ];
 
   const columns: Column<UserDirectoryView>[] = [
     {
@@ -124,7 +142,16 @@ export function UsersPage() {
         onPageChange={setPage}
         sort={sort}
         onSortChange={toggleSort}
-        toolbar={<SearchInput value={search} onChange={setSearch} placeholder={t('users.searchPh')} />}
+        toolbar={
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder={t('users.searchPh')}
+            fields={userSearchFields}
+            selectedFields={searchFields}
+            onSelectedFieldsChange={setSearchFields}
+          />
+        }
         actionsHeader={t('common.actions')}
         actions={(u) => (
           <RowMenu

@@ -155,3 +155,38 @@ src/
 - **Icons:** `react-icons` (Lucide set, subpath import `react-icons/lu` — Vite tree-shakes). Never add inline SVGs; pick a Lucide icon.
 - **Light corporate theme tokens:** `src/index.css` `@theme` — pale-sky page bg (`--color-bg: #e0f2fe`), white surfaces (`--color-surface/sidebar`), raspberry accent (`--color-accent: #c2185b`); utilities like `bg-surface`/`text-muted`/`border-glass`. App is light-only (dark theme removed). Never use raw `text-white`/`bg-white/5` outside the gradient logo tiles — use tokens so a future theme stays possible.
 - **Tests (K-39):** Vitest + React Testing Library, `npm test` (CI runs it too). Suite lives in `src/test/` (`setup.ts` + `*.test.ts(x)`); config in `vitest.config.ts` (jsdom, `globals: false` — tests import `describe/it/expect/vi` from `'vitest'` explicitly; `setup.ts` registers RTL cleanup + jest-dom matchers). Mocks: `vi.stubGlobal('fetch', ...)` for `lib/api` (no MSW), `useStore.setState({...})` for zustand stores, `useLocaleStore.setState({ locale: 'en' })` for stable query strings. **A new frontend feature does not merge without tests** — at minimum a hook/logic test plus a render test for new UI primitives.
+
+## Planned: DataTable enhancements (not yet started)
+
+The following features are planned but not implemented. When the time comes, implement them in this order. Each requires user approval before starting.
+
+### 1. Bulk Operations
+
+**Goal:** Checkbox-based multi-row selection in `DataTable`, floating bulk-action bar, extensible `bulkActions` prop.
+
+**Scope:**
+- `DataTable` gains an optional `bulkActions?: BulkAction<T>[]` prop. When provided, a checkbox column is prepended automatically.
+- Header checkbox: checked if all visible rows selected; indeterminate if some are.
+- Shift+Click for range selection.
+- When ≥1 rows are selected, a floating action bar appears at the bottom of the table (above the pagination row) with: selection count, provided bulk action buttons, and a "Clear selection" link.
+- Built-in `bulkDelete` convenience action: shows a `ConfirmDialog` then calls a provided `onBulkDelete(ids: string[])` callback; clears selection on success.
+- Custom actions receive `(selectedItems: T[]) => void` — the caller decides the backend call.
+- Selection is **not persisted** (ephemeral per-page; cleared on page/filter change).
+- Wiring pages: `UsersPage` (bulk delete), others as needed.
+
+**Files to touch:** `DataTable.tsx`, affected list pages, i18n `messages.ts`.
+
+---
+
+### 2. Table View Modes *(deferred — revisit later)*
+
+**Goal:** Toggle between "Table" (current), "Card/Grid", and optionally "Kanban" view per page.
+
+**Scope (to be detailed when ready):**
+- A view-mode toggle button group in the `DataTable` settings popover (or toolbar).
+- Each page opts in with a `viewModes?: ('table' | 'card' | 'kanban')[]` prop.
+- Selected view persisted to localStorage via `tablePreferences` under a new `viewMode` key.
+- Card view renders each row as a tile; layout is caller-provided via a `cardRender?: (item: T) => ReactNode` prop.
+- Kanban is out-of-scope for the initial implementation; note it for a future spike.
+
+**Files to touch:** `DataTable.tsx`, `tablePreferences.ts`, i18n, affected pages.

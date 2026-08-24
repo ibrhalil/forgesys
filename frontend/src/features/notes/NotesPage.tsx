@@ -27,8 +27,19 @@ import { formatDateTime } from '../../lib/format';
 export function NotesPage() {
   const { t } = useT();
   const navigate = useNavigate();
-  const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, q } =
-    useListPageState({ defaultSort: { field: 'updatedAt', dir: 'desc' }, storageKey: 'notes' });
+  const {
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+    sort,
+    toggleSort,
+    search,
+    setSearch,
+    searchFields,
+    setSearchFields,
+    q,
+  } = useListPageState({ defaultSort: { field: 'updatedAt', dir: 'desc' }, storageKey: 'notes' });
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [pinnedOnly, setPinnedOnly] = useState(false);
 
@@ -46,6 +57,13 @@ export function NotesPage() {
   const canDelete = useAuthStore((s) => s.hasAuthority(PERMISSIONS.NOTE_DELETE));
 
   const [deleting, setDeleting] = useState<Note | null>(null);
+
+  const noteSearchFields = [
+    { key: 'title', label: t('notes.titleCol'), searchable: true },
+    { key: 'category', label: t('notes.categoryCol'), searchable: false },
+    { key: 'project', label: t('projects.project'), searchable: false },
+    { key: 'updatedAt', label: t('notes.updatedCol'), searchable: false },
+  ];
 
   const columns: Column<Note>[] = [
     {
@@ -106,7 +124,14 @@ export function NotesPage() {
         onSortChange={toggleSort}
         toolbar={
           <div className="flex flex-wrap items-center gap-2">
-            <SearchInput value={search} onChange={setSearch} placeholder={t('notes.searchPh')} />
+            <SearchInput
+              value={search}
+              onChange={setSearch}
+              placeholder={t('notes.searchPh')}
+              fields={noteSearchFields}
+              selectedFields={searchFields}
+              onSelectedFieldsChange={setSearchFields}
+            />
             <SelectInput
               className="w-44"
               placeholder={t('notes.allCategories')}

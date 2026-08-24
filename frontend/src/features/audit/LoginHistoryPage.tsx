@@ -26,11 +26,20 @@ export function LoginHistoryPage() {
     { value: 'false', label: t('loginHistory.failed') },
   ];
   const [success, setSuccess] = useState<'all' | 'true' | 'false'>('all');
-  const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, q } =
+  const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, searchFields, setSearchFields, q } =
     useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' }, storageKey: 'login-history' });
 
   const successParam = success === 'all' ? undefined : success === 'true';
   const { data, isLoading, isFetching } = useLoginHistory({ page, size: pageSize, sort: `${sort.field},${sort.dir}`, success: successParam, q: q || undefined });
+
+  const loginSearchFields = [
+    { key: 'username', label: t('common.email'), searchable: true },
+    { key: 'success', label: t('loginHistory.result'), searchable: false },
+    { key: 'reason', label: t('loginHistory.reason'), searchable: false },
+    { key: 'ipAddress', label: t('audit.ip'), searchable: false },
+    { key: 'userAgent', label: t('loginHistory.userAgent'), searchable: false },
+    { key: 'createdAt', label: t('audit.date'), searchable: false },
+  ];
 
   const columns: Column<LoginHistory>[] = [
     {
@@ -78,7 +87,14 @@ export function LoginHistoryPage() {
         onSortChange={toggleSort}
         toolbar={(
           <>
-            <SearchInput value={search} onChange={setSearch} placeholder={t('loginHistory.searchPh')} />
+            <SearchInput
+              value={search}
+              onChange={setSearch}
+              placeholder={t('loginHistory.searchPh')}
+              fields={loginSearchFields}
+              selectedFields={searchFields}
+              onSelectedFieldsChange={setSearchFields}
+            />
             <SelectInput
               size="sm"
               className="w-36"

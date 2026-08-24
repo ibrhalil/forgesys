@@ -17,9 +17,18 @@ import { useListPageState } from '../../lib/useListPageState';
  */
 export function AuditLogsPage() {
   const { t } = useT();
-  const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, q } =
+  const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, searchFields, setSearchFields, q } =
     useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' }, storageKey: 'audit-logs' });
   const { data, isLoading, isFetching } = useAuditLogs({ page, size: pageSize, sort: `${sort.field},${sort.dir}`, q: q || undefined });
+
+  const auditSearchFields = [
+    { key: 'actorName', label: t('audit.actor'), searchable: true },
+    { key: 'action', label: t('audit.action'), searchable: true },
+    { key: 'entity', label: t('audit.target'), searchable: true },
+    { key: 'ipAddress', label: t('audit.ip'), searchable: false },
+    { key: 'traceId', label: t('audit.trace'), searchable: false },
+    { key: 'createdAt', label: t('audit.date'), searchable: false },
+  ];
 
   const columns: Column<AuditLog>[] = [
     {
@@ -74,7 +83,16 @@ export function AuditLogsPage() {
         onPageChange={setPage}
         sort={sort}
         onSortChange={toggleSort}
-        toolbar={<SearchInput value={search} onChange={setSearch} placeholder={t('audit.searchPh')} />}
+        toolbar={
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder={t('audit.searchPh')}
+            fields={auditSearchFields}
+            selectedFields={searchFields}
+            onSelectedFieldsChange={setSearchFields}
+          />
+        }
       />
     </Page>
   );
