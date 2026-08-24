@@ -13,6 +13,7 @@ import {
   LuLayoutDashboard,
   LuColumns3,
   LuSquarePlus,
+  LuPalette,
 } from 'react-icons/lu';
 import { cn } from '../../lib/cn';
 import { Spinner } from '../../components/ui/Spinner';
@@ -29,6 +30,12 @@ interface NavGroup {
 }
 
 const NAV_GROUPS: NavGroup[] = [
+  {
+    title: 'Brand & Styling',
+    items: [
+      { label: 'Theme & Palette Explorer', to: '/demo/themes', icon: LuPalette },
+    ],
+  },
   {
     title: 'Primitives',
     items: [

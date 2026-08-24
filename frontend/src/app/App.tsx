@@ -51,6 +51,10 @@ const DashboardPatternDemo = import.meta.env.DEV
 const MasterDetailPatternDemo = import.meta.env.DEV
   ? lazy(() => import('../features/demo/pages/patterns/MasterDetailPatternDemo').then((m) => ({ default: m.MasterDetailPatternDemo })))
   : null;
+const ThemeDemoPage = import.meta.env.DEV
+  ? lazy(() => import('../features/demo/pages/ThemeDemoPage').then((m) => ({ default: m.ThemeDemoPage })))
+  : null;
+
 
 
 
@@ -131,6 +135,7 @@ export default function App() {
 
           {import.meta.env.DEV && DemoLayout && (
             <Route path="/demo" element={<DemoLayout />}>
+              {ThemeDemoPage && <Route path="themes" element={<ThemeDemoPage />} />}
               {DataTableDemoPage && <Route path="datatable" element={<DataTableDemoPage />} />}
               {BadgeDemoPage && <Route path="badge" element={<BadgeDemoPage />} />}
               {ButtonDemoPage && <Route path="button" element={<ButtonDemoPage />} />}
