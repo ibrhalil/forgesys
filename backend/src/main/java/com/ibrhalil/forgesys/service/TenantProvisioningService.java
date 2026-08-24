@@ -30,6 +30,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -81,6 +83,7 @@ public class TenantProvisioningService {
     private final DataSource dataSource;
     private final TenantMigrationSupport tenantMigrationSupport;
     private final ModuleActivationService moduleActivationService;
+    private final TenantSampleDataService sampleDataService;
     private final VerificationSender verificationSender;
     // Optional: RbacSeeder is @Profile("!test") — absent in tests, which never exercise provisioning.
     private final ObjectProvider<RbacSeeder> rbacSeederProvider;
@@ -167,8 +170,9 @@ public class TenantProvisioningService {
         // session must see the switched context to acquire a tenant-schema connection.
         // (createAdminUser also sets it defensively, and clears in finally.)
         TenantContext.setCurrentTenant(schemaName);
+        User adminUser;
         try {
-            self.getObject().createAdminUser(schemaName, verification);
+            adminUser = self.getObject().createAdminUser(schemaName, verification);
         } finally {
             TenantContext.clear();
         }
@@ -181,6 +185,10 @@ public class TenantProvisioningService {
 
         company.setStatus(CompanyStatus.ACTIVE);
         Company saved = companyRepository.save(company);
+
+        // K-47: sample data seed — afterCommit so the seed's REQUIRES_NEW transaction
+        // sees the committed activation records + subscription (see registerSampleDataSeed).
+        registerSampleDataSeed(saved, adminUser.getId());
 
         log.info("Tenant verified and provisioned: subdomain={}", saved.getSubdomain());
         return new CompanyVerifyResponse(
@@ -210,6 +218,38 @@ public class TenantProvisioningService {
     }
 
     // --- internal helpers -------------------------------------------------
+
+    /**
+     * K-47: registers the sample-data seed to run AFTER the provisioning transaction
+     * commits. The seed opens its own REQUIRES_NEW transaction (the outer session is
+     * {@code public}-pinned, RISK-26) and that transaction must SEE the
+     * {@code t_tenant_modules} activation records and the FREE subscription written by
+     * this one — under read-committed an inner transaction cannot, so a
+     * same-transaction call would fail the module gate (MODULE_NOT_ACTIVE) and the
+     * plan chain (SUBSCRIPTION_NOT_FOUND) and be silently swallowed by the seed's own
+     * fail-safe. afterCommit keeps the flow synchronous (same request) while ordering
+     * the seed after the commit; the guard covers non-transactional callers (unit
+     * tests). Fail-safe is two-layered: {@code seedForCompany} catches internally and
+     * the callback catches again, so a synchronization surprise never escapes.
+     */
+    private void registerSampleDataSeed(Company company, UUID adminUserId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            log.debug("No active transaction synchronization — seeding sample data immediately");
+            sampleDataService.seedForCompany(company, adminUserId);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    sampleDataService.seedForCompany(company, adminUserId);
+                } catch (Exception e) {
+                    log.warn("Sample data seeding failed for tenant {} — provisioning continues",
+                            company.getSchemaName(), e);
+                }
+            }
+        });
+    }
 
     private CompanyRegisterResponse createPendingCompanyInternal(CompanyRegisterRequest request,
                                                                  boolean sendVerification) {
@@ -281,7 +321,8 @@ public class TenantProvisioningService {
 
     /**
      * Creates the tenant's first admin user (with the pre-hashed credentials carried by
-     * the verification token) and runs the RBAC seed. Runs in its own transaction
+     * the verification token) and runs the RBAC seed; returns the persisted admin (its
+     * id feeds the post-commit sample-data seed, K-47). Runs in its own transaction
      * (REQUIRES_NEW, invoked via the {@code self} proxy) because {@code verifyAndProvision}'s
      * outer transaction holds a {@code public}-schema connection acquired before
      * {@link TenantContext#setCurrentTenant(String)} is called; without a fresh
@@ -289,7 +330,7 @@ public class TenantProvisioningService {
      * and fail with "relation does not exist" (RISK-26).
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void createAdminUser(String schemaName, TenantVerificationToken verification) {
+    public User createAdminUser(String schemaName, TenantVerificationToken verification) {
         try {
             TenantContext.setCurrentTenant(schemaName);
 
@@ -320,6 +361,7 @@ public class TenantProvisioningService {
                 seeder.assignAdminTo(user);
             });
             log.info("Admin user created for tenant schema: {}", schemaName);
+            return user;
         } finally {
             TenantContext.clear();
         }

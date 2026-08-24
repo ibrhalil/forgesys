@@ -44,6 +44,12 @@ forgesys:
     # the test profile has no ModuleProperties bean and must not run module
     # migrations implicitly; ITs activate modules explicitly.
     default-keys: ${FORGESYS_MODULES_DEFAULT_KEYS:pm,apps,notes}
+  provisioning:
+    # K-47 sample data seeding (Linear-style onboarding content) for NEWLY provisioned
+    # tenants — provisioning-only, existing tenants are unaffected. Fail-safe: a
+    # seeding failure never breaks provisioning.
+    sample-data:
+      enabled: ${FORGESYS_SAMPLE_DATA:true}
   security:
     # Global password pepper (K-23). HMAC-SHA256 pre-hash key combined with BCrypt
     # so a DB leak alone cannot brute-force password hashes. MUST be non-blank —
