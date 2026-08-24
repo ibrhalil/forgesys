@@ -560,6 +560,117 @@ const EMPTY_CODE = `// data={[]} + loading={false} → shows EmptyState.
 />`;
 
 /* ─────────────────────────────────────────────────────────────────
+   11. View Modes (Table vs Cards Grid vs Compact List)
+───────────────────────────────────────────────────────────────── */
+function ViewModesExample() {
+  const [page, setPage] = useState(0);
+  const [search, setSearch] = useState('');
+
+  const filtered = MOCK_PRODUCTS.filter((p) =>
+    [p.name, p.category, p.sku].some((v) => v.toLowerCase().includes(search.toLowerCase())),
+  );
+  const result = paginate(filtered, page, 6);
+
+  const columns: Column<MockProduct>[] = [
+    {
+      key: 'name',
+      header: 'Product',
+      hideable: false,
+      render: (p) => (
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/10 text-accent font-bold text-xs">
+            {p.name.slice(0, 2).toUpperCase()}
+          </div>
+          <div>
+            <span className="font-semibold text-main block">{p.name}</span>
+            <span className="text-[11px] text-muted font-mono">{p.sku}</span>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'category',
+      header: 'Category',
+      render: (p) => <Badge tone="blue">{p.category}</Badge>,
+    },
+    {
+      key: 'price',
+      header: 'Price',
+      render: (p) => <span className="font-bold text-main">${p.price.toFixed(2)}</span>,
+    },
+    {
+      key: 'stock',
+      header: 'Stock',
+      render: (p) => (
+        <span className={p.stock === 0 ? 'text-danger font-semibold text-xs' : 'text-xs text-muted'}>
+          {p.stock === 0 ? 'Out of stock' : `${p.stock} in stock`}
+        </span>
+      ),
+    },
+    {
+      key: 'active',
+      header: 'Status',
+      render: (p) => (
+        <Badge tone={p.active ? 'green' : 'muted'}>
+          {p.active ? 'Active' : 'Draft'}
+        </Badge>
+      ),
+    },
+  ];
+
+  return (
+    <DataTable<MockProduct>
+      columns={columns}
+      data={result.items}
+      rowKey={(p) => p.id}
+      page={result.page}
+      pageSize={result.size}
+      totalElements={result.totalElements}
+      totalPages={result.totalPages}
+      onPageChange={setPage}
+      pageSizeOptions={[6, 12, 24]}
+      storageKey="demo-view-modes-sample"
+      viewModes={['table', 'card', 'list']}
+      toolbar={
+        <SearchInput
+          value={search}
+          onChange={(v) => { setSearch(v); setPage(0); }}
+          placeholder="Filter products..."
+        />
+      }
+      actions={(p) => (
+        <RowMenu
+          ariaLabel="Product actions"
+          items={[
+            { label: 'View Product', onClick: () => alert(`View ${p.name}`), icon: LuEye },
+            { label: 'Edit SKU', onClick: () => alert(`Edit ${p.name}`), icon: LuPencil },
+            { label: 'Delete Item', onClick: () => alert(`Delete ${p.name}`), icon: LuTrash2, danger: true },
+          ]}
+        />
+      )}
+    />
+  );
+}
+
+const VIEW_MODES_CODE = `import { DataTable, type Column } from 'components/ui/DataTable';
+
+// 1. Opt-in with viewModes prop:
+<DataTable
+  columns={columns}
+  data={products}
+  rowKey={(p) => p.id}
+  storageKey="catalog-products"
+  viewModes={['table', 'card', 'list']}    // enables Table / Cards Grid / Compact List switchers
+  toolbar={<SearchInput value={q} onChange={setQ} />}
+  actions={(p) => <RowMenu items={...} />}
+  // Optional custom card template:
+  // cardRender={(item) => <ProductCard product={item} />}
+/>
+
+// The user's active view mode choice is automatically persisted
+// in localStorage via storageKey: 'catalog-products'`;
+
+/* ─────────────────────────────────────────────────────────────────
    10. Custom tableTools slot
 ───────────────────────────────────────────────────────────────── */
 function TableToolsExample() {
@@ -642,13 +753,14 @@ export function DataTableDemoPage() {
         <p className="mt-1 text-sm text-muted">
           Sortable, paginated, personalizable table component. Supports server-side and
           client-side data, custom cell renderers, row actions, toolbar filters, column
-          settings, export and auto-refresh hooks.
+          settings, export and auto-refresh hooks, and Table / Card / List multi-mode views.
         </p>
         <div className="mt-3 flex flex-wrap gap-2 text-xs">
           {[
             'components/ui/DataTable.tsx',
             'Column<T>',
             'DataTableProps<T>',
+            'TableViewMode = "table" | "card" | "list"',
             'TableDensity',
             'SortState',
           ].map((s) => (
@@ -672,7 +784,7 @@ export function DataTableDemoPage() {
 
       <DemoSection
         title="2. Sortable Columns"
-        description="Add sortKey to a column and wire sort + onSortChange. Client-side sort shown here; for server-side, pass sort params to your query."
+        description="Providing sort and onSortChange enables click-to-sort column headers. Columns must have sortKey specified."
         code={SORTABLE_CODE}
       >
         <SortableExample />
@@ -741,6 +853,15 @@ export function DataTableDemoPage() {
       >
         <TableToolsExample />
       </DemoSection>
+
+      <DemoSection
+        title="11. Table View Modes (Table ↔ Cards Grid ↔ Compact List)"
+        description="Passing viewModes={['table', 'card', 'list']} adds one-click segmented view switcher buttons to the toolbar and settings. View selection is automatically persisted in localStorage via storageKey."
+        code={VIEW_MODES_CODE}
+      >
+        <ViewModesExample />
+      </DemoSection>
     </div>
   );
 }
+
