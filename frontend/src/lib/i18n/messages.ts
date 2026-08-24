@@ -424,6 +424,8 @@ export const messages = {
     'notes.previewEmpty': 'Önizleme için içerik yazın.',
     'notes.previewMode': 'Önizle',
     'notes.editMode': 'Düzenle',
+    'notes.createCategory': 'Kategori oluştur: {name}',
+    'notes.categoryCreateNoProject': 'Önce bir proje seçin',
     'apps.missingRequired': 'Zorunlu alanlar eksik: {names}',
 
     // apps — views
@@ -1057,6 +1059,8 @@ export const messages = {
     'notes.previewEmpty': 'Write content to preview it.',
     'notes.previewMode': 'Preview',
     'notes.editMode': 'Edit',
+    'notes.createCategory': 'Create category: {name}',
+    'notes.categoryCreateNoProject': 'Select a project first',
     'apps.missingRequired': 'Missing required fields: {names}',
 
     // apps — views
