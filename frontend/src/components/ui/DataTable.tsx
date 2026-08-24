@@ -359,7 +359,7 @@ export function DataTable<T>({
                 </button>
 
                 {showSettingsMenu && (
-                  <div className="absolute right-0 top-full z-50 mt-1.5 w-72 overflow-hidden rounded-xl border border-glass bg-surface shadow-2xl shadow-black/15">
+                  <div className="absolute right-0 top-full z-60 mt-1.5 w-72 overflow-hidden rounded-xl border border-glass bg-surface shadow-2xl shadow-black/15">
                     {/* Tab Navigation */}
                     <div className="flex border-b border-glass bg-bg/30 p-1">
                       <button

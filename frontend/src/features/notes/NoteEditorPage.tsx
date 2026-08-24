@@ -6,14 +6,15 @@ import remarkGfm from 'remark-gfm';
 import { useNote, useNoteCategories, useCreateNote, useUpdateNote, useDeleteNote, useCreateNoteCategory } from './hooks';
 import { useProjectTypes, useProjects } from '../projects/hooks';
 import type { NoteCategory } from './types';
-import { notify, extractFieldErrors } from '../../lib/notify';
-import { LuEye, LuPin, LuSquarePen, LuTrash2 } from 'react-icons/lu';
+import { notify, extractFieldErrors, errorMessage } from '../../lib/notify';
+import { LuEye, LuSquarePen, LuTrash2 } from 'react-icons/lu';
 import { Button } from '../../components/ui/Button';
 import { Page } from '../../components/Page';
 import { Badge } from '../../components/ui/Badge';
 import { TextField } from '../../components/ui/Field';
 import { TextAreaField } from '../../components/ui/TextArea';
 import { SelectInput } from '../../components/ui/SelectInput';
+import { Toggle } from '../../components/ui/Toggle';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { RowMenu } from '../../components/ui/RowMenu';
 import { useT } from '../../lib/i18n';
@@ -56,6 +57,7 @@ export function NoteEditorPage() {
   const [pinned, setPinned] = useState(false);
   const [preview, setPreview] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [categoryError, setCategoryError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
@@ -79,6 +81,7 @@ export function NoteEditorPage() {
   const saving = create.isPending || update.isPending;
 
   const handleCategoryChange = async (next: { value: string; label: string } | { value: string; label: string }[] | null) => {
+    setCategoryError(null);
     if (!next) {
       setCategoryId(null);
       return;
@@ -99,7 +102,10 @@ export function NoteEditorPage() {
       const created = await createCategory.mutateAsync({ name: option.label, projectId: currentProjectId });
       setCategoryId(created.id);
     } catch (e) {
-      setFieldErrors(extractFieldErrors(e));
+      // The global mutation onError stays silent when fields[] is present — show
+      // the first field message (else the general one) inline next to the select.
+      const first = Object.values(extractFieldErrors(e))[0];
+      setCategoryError(first ?? errorMessage(e));
     }
   };
 
@@ -129,27 +135,15 @@ export function NoteEditorPage() {
     <Page
       breadcrumb={[{ label: t('nav.notes'), to: '/notes' }, { label: isNew ? t('notes.new') : title || t('notes.note') }]}
       title={isNew ? t('notes.newTitle') : title || t('notes.note')}
-      description={note?.categoryName ? undefined : t('notes.editorDesc')}
+      description={t('notes.editorDesc')}
       actions={
-        canWrite ? (
-          <div className="flex items-center gap-3">
-            <Button variant="primary" loading={saving} onClick={save}>
-              {t('common.save')}
-            </Button>
-            <RowMenu
-              ariaLabel={t('common.actions')}
-              items={[
-                {
-                  label: pinned ? t('notes.unpin') : t('notes.pin'),
-                  icon: LuPin,
-                  onClick: () => setPinned((v) => !v),
-                },
-                ...(canDelete && !isNew
-                  ? [{ label: t('common.delete'), icon: LuTrash2, danger: true, onClick: () => setDeleting(true) }]
-                  : []),
-              ]}
-            />
-          </div>
+        canDelete && !isNew ? (
+          <RowMenu
+            ariaLabel={t('common.actions')}
+            items={[
+              { label: t('common.delete'), icon: LuTrash2, danger: true, onClick: () => setDeleting(true) },
+            ]}
+          />
         ) : undefined
       }
     >
@@ -199,11 +193,23 @@ export function NoteEditorPage() {
               isClearable
               creatable
               options={categoryOptions}
-              value={categoryId ? categoryOptions.find((o) => o.value === categoryId) ?? null : null}
+              value={
+                categoryId
+                  ? categoryOptions.find((o) => o.value === categoryId) ?? {
+                      // Options can load late — keep a categorized note labeled,
+                      // never rendered as uncategorized while the list is in flight.
+                      value: categoryId,
+                      label: note?.categoryName ?? categoryId,
+                    }
+                  : null
+              }
               onChange={handleCategoryChange}
+              error={categoryError}
               formatCreateLabel={(input) => t('notes.createCategory', { name: input })}
             />
-            {pinned && <Badge tone="accent"><LuPin size={12} className="mr-1 inline" />{t('notes.pinned')}</Badge>}
+            <div className="pb-2.5">
+              <Toggle checked={pinned} onChange={setPinned} label={t('notes.pinned')} disabled={!canWrite} />
+            </div>
           </div>
 
           <div className="flex items-center justify-end">
@@ -228,6 +234,14 @@ export function NoteEditorPage() {
               rows={16}
               className="font-mono text-sm"
             />
+          )}
+
+          {canWrite && (
+            <div className="mt-4 flex justify-end gap-3">
+              <Button variant="primary" loading={saving} onClick={save}>
+                {t('common.save')}
+              </Button>
+            </div>
           )}
         </div>
       )}

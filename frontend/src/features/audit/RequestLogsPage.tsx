@@ -82,7 +82,7 @@ export function RequestLogsPage() {
       key: 'duration',
       header: t('requestLog.duration'),
       sortKey: 'durationMs',
-      render: (l) => l.durationMs ? (
+      render: (l) => l.durationMs != null ? (
         <span className="whitespace-nowrap text-muted">{l.durationMs} ms</span>
       ) : (
         <span className="text-muted">—</span>

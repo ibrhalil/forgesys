@@ -188,7 +188,7 @@ export function SearchInput({
       </div>
 
       {open && fields && fields.length > 0 && (
-        <div className="absolute right-0 top-full z-50 mt-1.5 w-64 overflow-hidden rounded-xl border border-glass bg-surface p-2 shadow-xl shadow-black/15">
+        <div className="absolute right-0 top-full z-60 mt-1.5 w-64 overflow-hidden rounded-xl border border-glass bg-surface p-2 shadow-xl shadow-black/15">
           <div className="mb-2 flex items-center justify-between border-b border-glass px-1 pb-1.5">
             <span className="text-xs font-semibold text-main">{t('search.fields')}</span>
             {hasActiveFilter && (

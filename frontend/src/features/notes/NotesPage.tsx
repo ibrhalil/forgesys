@@ -138,11 +138,18 @@ export function NotesPage() {
               isClearable
               options={(categories?.items ?? []).map((c) => ({ value: c.id, label: c.name }))}
               value={categoryId ? { value: categoryId, label: categories?.items.find((c) => c.id === categoryId)?.name ?? categoryId } : null}
-              onChange={(next) => setCategoryId((next as { value: string } | null)?.value ?? null)}
+              onChange={(next) => {
+                setCategoryId((next as { value: string } | null)?.value ?? null);
+                setPage(0);
+              }}
             />
             <Button
               variant={pinnedOnly ? 'primary' : 'ghost'}
-              onClick={() => setPinnedOnly((v) => !v)}
+              aria-pressed={pinnedOnly}
+              onClick={() => {
+                setPinnedOnly((v) => !v);
+                setPage(0);
+              }}
             >
               <LuPin size={14} />
               {t('notes.pinned')}
