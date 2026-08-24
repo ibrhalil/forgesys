@@ -21,6 +21,22 @@ const DemoLayout = import.meta.env.DEV
 const DataTableDemoPage = import.meta.env.DEV
   ? lazy(() => import('../features/demo/pages/DataTableDemoPage').then((m) => ({ default: m.DataTableDemoPage })))
   : null;
+const BadgeDemoPage = import.meta.env.DEV
+  ? lazy(() => import('../features/demo/pages/BadgeDemoPage').then((m) => ({ default: m.BadgeDemoPage })))
+  : null;
+const ButtonDemoPage = import.meta.env.DEV
+  ? lazy(() => import('../features/demo/pages/ButtonDemoPage').then((m) => ({ default: m.ButtonDemoPage })))
+  : null;
+const ModalDemoPage = import.meta.env.DEV
+  ? lazy(() => import('../features/demo/pages/ModalDemoPage').then((m) => ({ default: m.ModalDemoPage })))
+  : null;
+const FormDemoPage = import.meta.env.DEV
+  ? lazy(() => import('../features/demo/pages/FormDemoPage').then((m) => ({ default: m.FormDemoPage })))
+  : null;
+const RowMenuDemoPage = import.meta.env.DEV
+  ? lazy(() => import('../features/demo/pages/RowMenuDemoPage').then((m) => ({ default: m.RowMenuDemoPage })))
+  : null;
+
 
 
 const queryClient = new QueryClient({
@@ -97,9 +113,14 @@ export default function App() {
             })}
           </Route>
 
-          {import.meta.env.DEV && DemoLayout && DataTableDemoPage && (
+          {import.meta.env.DEV && DemoLayout && (
             <Route path="/demo" element={<DemoLayout />}>
-              <Route path="datatable" element={<DataTableDemoPage />} />
+              {DataTableDemoPage && <Route path="datatable" element={<DataTableDemoPage />} />}
+              {BadgeDemoPage && <Route path="badge" element={<BadgeDemoPage />} />}
+              {ButtonDemoPage && <Route path="button" element={<ButtonDemoPage />} />}
+              {FormDemoPage && <Route path="form" element={<FormDemoPage />} />}
+              {ModalDemoPage && <Route path="modal" element={<ModalDemoPage />} />}
+              {RowMenuDemoPage && <Route path="rowmenu" element={<RowMenuDemoPage />} />}
             </Route>
           )}
 

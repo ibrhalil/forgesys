@@ -1,6 +1,14 @@
 import { Suspense } from 'react';
 import { NavLink, Outlet, Navigate, useLocation } from 'react-router-dom';
-import { LuFlaskConical, LuLayoutGrid, LuTable2 } from 'react-icons/lu';
+import {
+  LuFlaskConical,
+  LuTable2,
+  LuTag,
+  LuMousePointerClick,
+  LuLayers,
+  LuTextCursorInput,
+  LuMenu,
+} from 'react-icons/lu';
 import { cn } from '../../lib/cn';
 import { Spinner } from '../../components/ui/Spinner';
 
@@ -8,16 +16,17 @@ interface NavItem {
   label: string;
   to: string;
   icon: React.ElementType;
-  soon?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
   { label: 'DataTable', to: '/demo/datatable', icon: LuTable2 },
-  { label: 'Badge', to: '/demo/badge', icon: LuLayoutGrid, soon: true },
-  { label: 'Button', to: '/demo/button', icon: LuLayoutGrid, soon: true },
-  { label: 'Modal', to: '/demo/modal', icon: LuLayoutGrid, soon: true },
-  { label: 'Form Fields', to: '/demo/fields', icon: LuLayoutGrid, soon: true },
+  { label: 'Badge', to: '/demo/badge', icon: LuTag },
+  { label: 'Button & Spinner', to: '/demo/button', icon: LuMousePointerClick },
+  { label: 'Form Controls', to: '/demo/form', icon: LuTextCursorInput },
+  { label: 'Modal & Dialogs', to: '/demo/modal', icon: LuLayers },
+  { label: 'RowMenu & Empty', to: '/demo/rowmenu', icon: LuMenu },
 ];
+
 
 /**
  * Standalone layout for the /demo route tree. Lives entirely outside AppShell:
@@ -56,31 +65,20 @@ export function DemoLayout() {
           <ul className="space-y-0.5">
             {NAV_ITEMS.map((item) => (
               <li key={item.to}>
-                {item.soon ? (
-                  <span
-                    className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-muted/60 cursor-not-allowed"
-                    title="Coming soon"
-                  >
-                    <item.icon className="h-4 w-4 shrink-0" aria-hidden />
-                    <span className="flex-1 truncate">{item.label}</span>
-                    <span className="text-[10px] text-muted/40">soon</span>
-                  </span>
-                ) : (
-                  <NavLink
-                    to={item.to}
-                    className={({ isActive }) =>
-                      cn(
-                        'flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors',
-                        isActive
-                          ? 'bg-accent/10 font-semibold text-accent'
-                          : 'text-muted hover:bg-main/5 hover:text-main',
-                      )
-                    }
-                  >
-                    <item.icon className="h-4 w-4 shrink-0" aria-hidden />
-                    <span className="truncate">{item.label}</span>
-                  </NavLink>
-                )}
+                <NavLink
+                  to={item.to}
+                  className={({ isActive }) =>
+                    cn(
+                      'flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors',
+                      isActive
+                        ? 'bg-accent/10 font-semibold text-accent'
+                        : 'text-muted hover:bg-main/5 hover:text-main',
+                    )
+                  }
+                >
+                  <item.icon className="h-4 w-4 shrink-0" aria-hidden />
+                  <span className="truncate">{item.label}</span>
+                </NavLink>
               </li>
             ))}
           </ul>
