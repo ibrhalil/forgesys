@@ -1,7 +1,7 @@
-import { Suspense, useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Suspense, useEffect, useRef, useState } from 'react';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { LuChevronDown, LuLogOut } from 'react-icons/lu';
+import { LuChevronDown, LuLogOut, LuMenu } from 'react-icons/lu';
 import { useAuthStore } from '../store/authStore';
 import { NAV_GROUPS, NAV_ITEMS, type NavItem } from '../app/Navigation';
 import { BreadcrumbTargetContext } from './BreadcrumbTargetContext';
@@ -21,11 +21,11 @@ function navClass({ isActive }: { isActive: boolean }) {
 }
 
 /** One sidebar entry. Visibility is decided by the caller (authority filter). */
-function NavEntry({ item }: { item: NavItem }) {
+function NavEntry({ item, onClick }: { item: NavItem; onClick?: () => void }) {
   const { t } = useT();
   const Icon = item.icon;
   return (
-    <NavLink to={item.to} end={item.to === '/'} className={navClass}>
+    <NavLink to={item.to} end={item.to === '/'} className={navClass} onClick={onClick}>
       <Icon className="h-[18px] w-[18px] shrink-0" />
       {t(item.labelKey)}
     </NavLink>
@@ -68,7 +68,13 @@ function NavSection({ id, title, children }: { id: string; title: string; childr
   );
 }
 
-export function AppShell() {
+/**
+ * The entire sidebar body — logo, authority-filtered nav and the footer (language
+ * toggle, user chip, logout). Rendered by BOTH the desktop aside and the mobile
+ * drawer so the two surfaces can never drift apart. `onNavigate` (drawer only)
+ * closes the drawer after a nav link tap.
+ */
+function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   // Primitive/action selectors — but `user` (object) stays subscribed on purpose:
   // the nav authority filter must re-run when the session/authorities change.
   const user = useAuthStore((s) => s.user);
@@ -79,8 +85,6 @@ export function AppShell() {
 
   const [confirmingLogout, setConfirmingLogout] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
-  // The topbar element Pages portal their breadcrumb into (set once on mount).
-  const [breadcrumbTarget, setBreadcrumbTarget] = useState<HTMLDivElement | null>(null);
 
   const handleLogout = async () => {
     setLoggingOut(true);
@@ -104,81 +108,150 @@ export function AppShell() {
   const visibleItems = NAV_ITEMS.filter((i) => !i.authority || hasAuthority(i.authority));
 
   return (
+    <>
+      <div className="mb-6 flex items-center gap-3 px-1">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-accent to-accent-blue text-lg font-bold text-white shadow-lg shadow-accent/30">
+          SF
+        </div>
+        <div className="flex min-w-0 flex-col">
+          <h2 className="m-0 text-lg font-semibold leading-tight tracking-tight text-main">ForgeSys</h2>
+          <span className="text-xs text-muted">{t('nav.workspace')}</span>
+        </div>
+      </div>
+
+      <nav className="flex flex-1 flex-col gap-1 overflow-y-auto">
+        {visibleItems.map((item) => (
+          <NavEntry key={item.to} item={item} onClick={onNavigate} />
+        ))}
+
+        {NAV_GROUPS.map((group) => {
+          const items = group.items.filter((i) => !i.authority || hasAuthority(i.authority));
+          if (items.length === 0) return null;
+          return (
+            <NavSection key={group.id} id={group.id} title={t(group.labelKey)}>
+              {items.map((item) => (
+                <NavEntry key={item.to} item={item} onClick={onNavigate} />
+              ))}
+            </NavSection>
+          );
+        })}
+      </nav>
+
+      <div className="mt-3 flex flex-col gap-3 border-t border-glass pt-4">
+        <div className="flex items-center justify-between px-1">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted/70">{t('nav.language')}</span>
+          <LanguageToggle />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <NavLink
+            to="/profile"
+            onClick={onNavigate}
+            className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg p-1.5 transition-colors hover:bg-accent/5"
+            title={user?.email ?? ''}
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/10 text-sm font-semibold text-accent">
+              {initial}
+            </span>
+            <span className="truncate text-left text-sm text-main">{displayName}</span>
+          </NavLink>
+          <button
+            onClick={() => setConfirmingLogout(true)}
+            className="shrink-0 rounded-lg border border-glass p-2 text-muted transition-colors hover:border-accent/40 hover:text-accent"
+            aria-label={t('nav.logout')}
+            title={t('nav.logout')}
+          >
+            <LuLogOut size={16} />
+          </button>
+        </div>
+      </div>
+
+      <ConfirmDialog
+        open={confirmingLogout}
+        title={t('nav.logoutConfirmTitle')}
+        message={t('nav.logoutConfirmMsg')}
+        confirmText={t('nav.logout')}
+        cancelText={t('common.cancel')}
+        danger
+        loading={loggingOut}
+        onConfirm={handleLogout}
+        onClose={() => setConfirmingLogout(false)}
+      />
+    </>
+  );
+}
+
+export function AppShell() {
+  const { t } = useT();
+  const location = useLocation();
+
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  // The topbar element Pages portal their breadcrumb into (set once on mount).
+  const [breadcrumbTarget, setBreadcrumbTarget] = useState<HTMLDivElement | null>(null);
+
+  const hamburgerRef = useRef<HTMLButtonElement>(null);
+  const drawerRef = useRef<HTMLElement>(null);
+
+  // Route changes always close the drawer — onNavigate covers link taps, this is
+  // the safety net for any other navigation while it is open.
+  useEffect(() => {
+    setDrawerOpen(false);
+  }, [location]);
+
+  // Behavior mirrors ui/Modal: Escape closes, body scroll locks while open, focus
+  // moves into the panel on open and returns to the opener (hamburger) on close.
+  useEffect(() => {
+    if (!drawerOpen) return;
+    drawerRef.current?.focus({ preventScroll: true });
+    const opener = hamburgerRef.current;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDrawerOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = '';
+      opener?.focus?.({ preventScroll: true });
+    };
+  }, [drawerOpen]);
+
+  return (
     <BreadcrumbTargetContext.Provider value={breadcrumbTarget}>
       {/* Viewport-locked shell on desktop (sidebar + topbar stay fixed; only the
           page body scrolls inside its own container). Mobile keeps natural page
-          scroll — the grid grows and the page scrolls as a whole. */}
+          scroll — the grid grows and the page scrolls as a whole; the sidebar
+          becomes the off-canvas drawer below. */}
       <div className="grid min-h-screen grid-cols-1 lg:h-screen lg:grid-cols-[260px_1fr] lg:overflow-hidden">
-        <aside className="relative flex flex-col border-b border-glass bg-sidebar p-5 shadow-xl shadow-black/5 lg:border-b-0 lg:border-r">
+        <aside className="relative hidden flex-col bg-sidebar p-5 shadow-xl shadow-black/5 lg:flex lg:border-r lg:border-glass">
           {/* Thin raspberry spine — anchors the sidebar visually. */}
           <span aria-hidden className="absolute inset-y-0 left-0 hidden w-1 bg-gradient-to-b from-accent to-accent-blue lg:block" />
 
-          <div className="mb-6 flex items-center gap-3 px-1">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-accent to-accent-blue text-lg font-bold text-white shadow-lg shadow-accent/30">
-              SF
-            </div>
-            <div className="flex min-w-0 flex-col">
-              <h2 className="m-0 text-lg font-semibold leading-tight tracking-tight text-main">ForgeSys</h2>
-              <span className="text-xs text-muted">{t('nav.workspace')}</span>
-            </div>
-          </div>
-
-          <nav className="flex flex-1 flex-col gap-1 overflow-y-auto">
-            {visibleItems.map((item) => (
-              <NavEntry key={item.to} item={item} />
-            ))}
-
-            {NAV_GROUPS.map((group) => {
-              const items = group.items.filter((i) => !i.authority || hasAuthority(i.authority));
-              if (items.length === 0) return null;
-              return (
-                <NavSection key={group.id} id={group.id} title={t(group.labelKey)}>
-                  {items.map((item) => (
-                    <NavEntry key={item.to} item={item} />
-                  ))}
-                </NavSection>
-              );
-            })}
-          </nav>
-
-          <div className="mt-3 flex flex-col gap-3 border-t border-glass pt-4">
-            <div className="flex items-center justify-between px-1">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted/70">{t('nav.language')}</span>
-              <LanguageToggle />
-            </div>
-
-            <div className="flex items-center gap-2">
-              <NavLink
-                to="/profile"
-                className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg p-1.5 transition-colors hover:bg-accent/5"
-                title={user?.email ?? ''}
-              >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/10 text-sm font-semibold text-accent">
-                  {initial}
-                </span>
-                <span className="truncate text-left text-sm text-main">{displayName}</span>
-              </NavLink>
-              <button
-                onClick={() => setConfirmingLogout(true)}
-                className="shrink-0 rounded-lg border border-glass p-2 text-muted transition-colors hover:border-accent/40 hover:text-accent"
-                aria-label={t('nav.logout')}
-                title={t('nav.logout')}
-              >
-                <LuLogOut size={16} />
-              </button>
-            </div>
-          </div>
+          <SidebarContent />
         </aside>
 
         <main className="flex min-h-0 min-w-0 flex-col">
           {/* Fixed breadcrumb topbar (Page portals its breadcrumb here). It lives
               OUTSIDE the scroll container so it never scrolls away — and future
               sticky elements like table headers can use plain `top-0` inside the
-              scroll container without offset coordination. */}
+              scroll container without offset coordination. The hamburger stays
+              before the breadcrumb portal and outside its scroll influence. */}
           <div
             ref={setBreadcrumbTarget}
-            className="flex h-11 shrink-0 items-center overflow-x-auto border-b border-glass px-6 lg:px-10"
-          />
+            className="flex h-11 shrink-0 items-center gap-3 overflow-x-auto border-b border-glass px-6 lg:px-10"
+          >
+            <button
+              ref={hamburgerRef}
+              type="button"
+              onClick={() => setDrawerOpen(true)}
+              aria-expanded={drawerOpen}
+              aria-controls="mobile-nav-drawer"
+              aria-label={t('nav.menu')}
+              className="shrink-0 rounded-lg border border-glass p-2 text-muted transition-colors hover:border-accent/40 hover:text-accent lg:hidden"
+            >
+              <LuMenu size={16} />
+            </button>
+          </div>
           <div className="flex-1 overflow-y-auto p-6 lg:p-10">
             {/* Route-level code splitting: pages are lazy chunks (app/Routes.ts); the
                 fallback keeps the shell mounted while a chunk loads. */}
@@ -194,17 +267,27 @@ export function AppShell() {
           </div>
         </main>
 
-        <ConfirmDialog
-          open={confirmingLogout}
-          title={t('nav.logoutConfirmTitle')}
-          message={t('nav.logoutConfirmMsg')}
-          confirmText={t('nav.logout')}
-          cancelText={t('common.cancel')}
-          danger
-          loading={loggingOut}
-          onConfirm={handleLogout}
-          onClose={() => setConfirmingLogout(false)}
-        />
+        {/* Mobile off-canvas nav drawer — same z-50 layer as Modal. */}
+        {drawerOpen && (
+          <div className="fixed inset-0 z-50">
+            <div
+              aria-hidden
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => setDrawerOpen(false)}
+            />
+            <aside
+              id="mobile-nav-drawer"
+              ref={drawerRef}
+              role="dialog"
+              aria-modal="true"
+              aria-label={t('nav.menu')}
+              tabIndex={-1}
+              className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col border-r border-glass bg-sidebar p-5 shadow-2xl"
+            >
+              <SidebarContent onNavigate={() => setDrawerOpen(false)} />
+            </aside>
+          </div>
+        )}
       </div>
     </BreadcrumbTargetContext.Provider>
   );

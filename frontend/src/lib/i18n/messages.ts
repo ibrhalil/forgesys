@@ -30,6 +30,7 @@ export const messages = {
 
     // app shell / navigation
     'nav.workspace': 'Çalışma alanı',
+    'nav.menu': 'Menü',
     'nav.projects': 'Projeler',
     'nav.apps': 'Uygulamalar',
     'nav.notes': 'Notlar',
@@ -694,6 +695,7 @@ export const messages = {
 
     // app shell / navigation
     'nav.workspace': 'Workspace',
+    'nav.menu': 'Menu',
     'nav.projects': 'Projects',
     'nav.apps': 'Apps',
     'nav.notes': 'Notes',
