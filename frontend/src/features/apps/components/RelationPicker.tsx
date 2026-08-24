@@ -76,7 +76,13 @@ export function RelationPicker({
       isLoading={!records}
       options={options}
       noOptionsMessage={t('apps.pickerNoOptions')}
-      value={value ? { value, label: valueLabel ?? value } : null}
+      // A picked id is resolved from the loaded options themselves (edit mode
+      // still prefers the caller's resolver label) — the control never flashes
+      // a raw UUID after a selection.
+      // Label precedence: the loaded option set first (a fresh pick must win over
+      // a stale edit-mode seed), the caller's resolver label only while the id is
+      // not among the options, the raw id as the last resort.
+      value={value ? { value, label: options.find((o) => o.value === value)?.label ?? valueLabel ?? value } : null}
       onChange={(o) => onChange((o as { value: string } | null)?.value ?? null)}
       loadOptions={(input) => {
         const q = input.trim().toLowerCase();

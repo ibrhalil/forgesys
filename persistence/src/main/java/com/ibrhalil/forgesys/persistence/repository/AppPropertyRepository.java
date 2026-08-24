@@ -24,6 +24,11 @@ public interface AppPropertyRepository extends JpaRepository<AppProperty, UUID> 
 
     boolean existsByAppIdAndNameAndIdNot(UUID appId, String name, UUID id);
 
+    /** Highest position among the app's live properties (null when it has none) —
+     *  create appends at max+1. Soft-delete scope via the entity @SQLRestriction. */
+    @Query("select max(p.position) from AppProperty p where p.appId = :appId")
+    Integer findMaxPosition(@Param("appId") UUID appId);
+
     /**
      * Hard-deletes the value rows of a property whose definition was (soft-)deleted —
      * value rows are dependent data and carry no standalone meaning once the

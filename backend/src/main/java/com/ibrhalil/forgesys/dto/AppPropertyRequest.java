@@ -10,9 +10,10 @@ import jakarta.validation.constraints.Size;
 /**
  * Create/update a property (column) of a custom app (K-15 / Epic 3.0.B). {@code type}
  * is immutable after creation (existing values would be meaningless after a change);
- * renaming or reconfiguring is allowed. {@code position} is the stable column order.
- * {@code required}/{@code position} are wrappers + compact-constructor defaults:
- * Jackson 3 fails null-into-primitive mapping for absent fields.
+ * renaming or reconfiguring is allowed. {@code position} is optional: absent on
+ * create appends at the end (max+1), absent on update keeps the current value.
+ * {@code required} keeps its wrapper + compact-constructor default (Jackson 3 fails
+ * null-into-primitive mapping for absent fields).
  */
 public record AppPropertyRequest(
         @NotBlank(message = "Property name is required")
@@ -33,6 +34,5 @@ public record AppPropertyRequest(
 
     public AppPropertyRequest {
         required = required == null ? Boolean.FALSE : required;
-        position = position == null ? 0 : position;
     }
 }

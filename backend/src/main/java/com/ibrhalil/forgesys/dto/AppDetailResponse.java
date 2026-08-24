@@ -1,5 +1,6 @@
 package com.ibrhalil.forgesys.dto;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -15,6 +16,8 @@ public record AppDetailResponse(
         String icon,
         UUID projectId,
         String projectName,
+        OffsetDateTime createdDate,
+        OffsetDateTime updatedAt,
         List<AppPropertyResponse> properties,
         List<AppViewResponse> views) {
 }

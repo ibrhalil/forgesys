@@ -55,7 +55,7 @@ describe('ViewModal', () => {
 
     const post = calls.find((c) => c.method === 'POST');
     expect(post?.url).toBe(`/api/v1/apps/${APP_ID}/views`);
-    expect(JSON.parse(post!.body!)).toEqual({ name: 'Main', type: 'TABLE', config: {}, position: 0 });
+    expect(JSON.parse(post!.body!)).toEqual({ name: 'Main', type: 'TABLE', config: {} });
   });
 
   it('requires the groupBy anchor on BOARD views and shows it inline', async () => {
@@ -86,7 +86,6 @@ describe('ViewModal', () => {
       name: 'Kanban',
       type: 'BOARD',
       config: { groupBy: 'p-status' },
-      position: 0,
     });
   });
 

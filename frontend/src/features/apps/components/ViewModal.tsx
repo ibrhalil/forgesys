@@ -81,8 +81,8 @@ export function ViewModal({
         ...(type === 'BOARD' && groupBy ? { groupBy } : {}),
         ...(type === 'CALENDAR' && dateProperty ? { dateProperty } : {}),
       },
-      // Full PUT — resend the current position, the backend resets a missing one to 0.
-      position: view?.position ?? 0,
+      // Create appends at max+1; edit resends the current tab order (full PUT).
+      ...(isEdit && view ? { position: view.position } : {}),
     };
     try {
       if (isEdit && view) {

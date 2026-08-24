@@ -195,6 +195,8 @@ class AppControllerTest extends AbstractRbacWebTest {
         perform(get("/api/v1/apps/" + app.getId()), "apps:app:read")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("CRM"))
+                .andExpect(jsonPath("$.createdDate").exists())
+                .andExpect(jsonPath("$.updatedAt").exists())
                 .andExpect(jsonPath("$.properties[0].name").value("Status"))
                 .andExpect(jsonPath("$.properties[0].type").value("SELECT"))
                 .andExpect(jsonPath("$.properties[0].config.options[0]").value("open"))
@@ -258,6 +260,74 @@ class AppControllerTest extends AbstractRbacWebTest {
 
         perform(delete("/api/v1/apps/" + app.getId() + "/properties/" + id), "apps:app:write")
                 .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void propertyUpdateWithoutTypeIsRejected() throws Exception {
+        App app = seedApp("CRM");
+        AppProperty property = seedProperty(app.getId(), "Priority", PropertyType.TEXT, null, false, 0);
+
+        // Wire contract: `type` is @NotNull on PUT too — clients must re-send the
+        // unchanged type (immutability is a service-level same-type rule).
+        perform(put("/api/v1/apps/" + app.getId() + "/properties/" + property.getId()).contentType(JSON)
+                        .content("""
+                                {"name":"Prio","required":true}"""),
+                "apps:app:write")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("validation_error"))
+                .andExpect(jsonPath("$.fields[0].field").value("type"));
+    }
+
+    @Test
+    void propertyCreateAutoAssignsSequentialPositions() throws Exception {
+        App app = seedApp("CRM");
+
+        perform(post("/api/v1/apps/" + app.getId() + "/properties").contentType(JSON)
+                        .content("""
+                                {"name":"Title","type":"TEXT"}"""),
+                "apps:app:write")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.position").value(0));
+
+        perform(post("/api/v1/apps/" + app.getId() + "/properties").contentType(JSON)
+                        .content("""
+                                {"name":"Status","type":"TEXT"}"""),
+                "apps:app:write")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.position").value(1));
+    }
+
+    @Test
+    void propertyUpdateWithoutPositionKeepsCurrent() throws Exception {
+        App app = seedApp("CRM");
+        AppProperty property = seedProperty(app.getId(), "Priority", PropertyType.TEXT, null, false, 3);
+
+        perform(put("/api/v1/apps/" + app.getId() + "/properties/" + property.getId()).contentType(JSON)
+                        .content("""
+                                {"name":"Prio","type":"TEXT"}"""),
+                "apps:app:write")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Prio"))
+                .andExpect(jsonPath("$.position").value(3));
+    }
+
+    @Test
+    void viewCreateAutoAssignsSequentialPositions() throws Exception {
+        App app = seedApp("CRM");
+
+        perform(post("/api/v1/apps/" + app.getId() + "/views").contentType(JSON)
+                        .content("""
+                                {"name":"Table","type":"TABLE"}"""),
+                "apps:app:write")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.position").value(0));
+
+        perform(post("/api/v1/apps/" + app.getId() + "/views").contentType(JSON)
+                        .content("""
+                                {"name":"List","type":"LIST"}"""),
+                "apps:app:write")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.position").value(1));
     }
 
     @Test

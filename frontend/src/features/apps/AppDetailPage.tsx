@@ -85,13 +85,13 @@ export function AppDetailPage() {
           {app.properties.length === 0 ? (
             <EmptyState message={t('apps.emptyProperties')} />
           ) : (
-            <ul className="m-0 flex list-none flex-col gap-1 p-0">
+            <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
               {app.properties.map((p) => (
                 <li
                   key={p.id}
                   className="flex items-center gap-3 rounded-lg border border-glass px-3 py-2 transition-colors hover:bg-main/5"
                 >
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-main">{p.name}</span>
+                  <span className="max-w-56 min-w-0 truncate text-sm font-medium text-main">{p.name}</span>
                   <Badge tone="blue">{t(`apps.type.${p.type}`)}</Badge>
                   {p.required && <Badge tone="accent">{t('apps.requiredBadge')}</Badge>}
                   <span className="text-xs text-muted/70">#{p.position}</span>
