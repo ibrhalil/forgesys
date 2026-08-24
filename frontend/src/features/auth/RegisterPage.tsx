@@ -83,7 +83,7 @@ export function RegisterPage() {
           <p>{t('auth.register.successBody', { email: adminEmail })}</p>
           {resultSubdomain && (
             <p className="mt-2">
-              Subdomain: <span className="font-mono text-accent">{resultSubdomain}</span>
+              {t('auth.subdomainLabel')}: <span className="font-mono text-accent">{resultSubdomain}</span>
             </p>
           )}
           <p className="mt-2 text-xs text-muted/70">
@@ -186,7 +186,7 @@ export function RegisterPage() {
             type="email"
             value={adminEmail}
             onChange={(e) => setAdminEmail(e.target.value)}
-            placeholder="admin@sirket.com"
+            placeholder={t('auth.adminEmailPh')}
             required
             autoComplete="email"
             error={fieldErrors.adminEmail ?? null}

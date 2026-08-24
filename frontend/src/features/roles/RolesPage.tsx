@@ -94,6 +94,7 @@ export function RolesPage() {
         data={data?.items ?? []}
         rowKey={(r) => r.id}
         storageKey="roles"
+        emptyIcon={LuShieldCheck}
         loading={isLoading || (isFetching && !data)}
         emptyMessage={q ? t('roles.emptyFiltered') : t('roles.empty')}
         page={data?.page ?? page}

@@ -58,6 +58,23 @@ describe('monthMatrix', () => {
       expect(curr - prev).toBe(86_400_000);
     }
   });
+
+  it('crops trailing all-overflow weeks (February 2026 → 5 weeks)', () => {
+    // Feb 1 2026 is a Sunday → 6 leading January days; the raw 6th week would be
+    // entirely March — it must be cropped, the mixed Feb 23–Mar 1 week stays.
+    const weeks = monthMatrix(2026, 1);
+    expect(weeks).toHaveLength(5);
+    expect(weeks[4][0]).toEqual({ year: 2026, month: 1, day: 23 });
+    expect(weeks[4][6]).toEqual({ year: 2026, month: 2, day: 1 });
+  });
+
+  it('crops down to exactly 4 weeks for a Monday-start February (2021)', () => {
+    // Feb 1 2021 is a Monday → no lead; weeks 5 and 6 are pure March → both cropped.
+    const weeks = monthMatrix(2021, 1);
+    expect(weeks).toHaveLength(4);
+    expect(weeks[0][0]).toEqual({ year: 2021, month: 1, day: 1 });
+    expect(weeks[3][6]).toEqual({ year: 2021, month: 1, day: 28 });
+  });
 });
 
 describe('weekDays', () => {

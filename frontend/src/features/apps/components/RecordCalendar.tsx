@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { LuChevronLeft, LuChevronRight } from 'react-icons/lu';
+import { LuCalendarDays, LuChevronLeft, LuChevronRight } from 'react-icons/lu';
 import { Button } from '../../../components/ui/Button';
 import { EmptyState } from '../../../components/ui/EmptyState';
 import { useT } from '../../../lib/i18n';
+import { PERMISSIONS } from '../../../lib/permissions';
+import { useAuthStore } from '../../../store/authStore';
 import { formatDate } from '../../../lib/format';
 import { firstTextProperty, recordTitle } from '../cellValue';
 import type { ValueResolver } from '../valueLabels';
@@ -34,20 +36,24 @@ export function RecordCalendar({
   records,
   isLoading,
   resolve,
+  onRequestEdit,
 }: {
   app: AppDetail;
   view: AppView;
   records: AppRecord[];
   isLoading: boolean;
   resolve: ValueResolver;
+  /** Opens the record form on a chip click — only wired for apps:record:write holders. */
+  onRequestEdit?: (record: AppRecord) => void;
 }) {
   const { t, locale } = useT();
+  const canWrite = useAuthStore((s) => s.hasAuthority(PERMISSIONS.APP_RECORD_WRITE));
   const [mode, setMode] = useState<'month' | 'week'>('month');
   const [anchor, setAnchor] = useState(() => todayIso());
 
   const dateProp = app.properties.find((p) => p.id === view.config?.dateProperty);
   if (!dateProp || dateProp.type !== 'DATE') {
-    return <EmptyState message={t('apps.calendarMissingDateProp')} />;
+    return <EmptyState message={t('apps.calendarMissingDateProp')} icon={LuCalendarDays} />;
   }
 
   const titleProp = firstTextProperty(app.properties);
@@ -80,15 +86,33 @@ export function RecordCalendar({
       ? monthLabel(anchorYmd.year, anchorYmd.month, locale)
       : `${formatDate(toIso(week[0]))} – ${formatDate(toIso(week[6]))}`;
 
-  const chip = (r: AppRecord) => (
-    <span
-      key={r.id}
-      title={recordTitle(r, titleProp, resolve)}
-      className="block truncate rounded bg-accent/15 px-1.5 py-0.5 text-xs text-accent"
-    >
-      {recordTitle(r, titleProp, resolve)}
-    </span>
-  );
+  const chip = (r: AppRecord) => {
+    const title = recordTitle(r, titleProp, resolve);
+    // Chips open the record form for writers (same affordance as sibling renderers'
+    // edit actions); read-only viewers get the same look as a plain span.
+    if (canWrite && onRequestEdit) {
+      return (
+        <button
+          key={r.id}
+          type="button"
+          title={title}
+          onClick={() => onRequestEdit(r)}
+          className="block w-full truncate rounded bg-accent/15 px-1.5 py-0.5 text-left text-xs text-accent transition-colors hover:bg-accent/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+        >
+          {title}
+        </button>
+      );
+    }
+    return (
+      <span
+        key={r.id}
+        title={title}
+        className="block truncate rounded bg-accent/15 px-1.5 py-0.5 text-xs text-accent"
+      >
+        {title}
+      </span>
+    );
+  };
 
   const cell = (iso: string, muted: boolean, tall: boolean) => {
     const dayRecords = byDay.get(iso) ?? [];

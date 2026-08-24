@@ -1,4 +1,5 @@
 import { cn } from '../../lib/cn';
+import { useT } from '../../lib/i18n';
 
 interface SpinnerProps {
   size?: 'sm' | 'md' | 'lg';
@@ -13,10 +14,11 @@ const SIZES = {
 
 /** Indeterminate loading spinner — the single source for the animate-spin pattern. */
 export function Spinner({ size = 'md', className }: SpinnerProps) {
+  const { t } = useT();
   return (
     <span
       role="status"
-      aria-label="loading"
+      aria-label={t('common.loadingAria')}
       className={cn(
         'inline-block animate-spin rounded-full border-current border-t-transparent',
         SIZES[size],

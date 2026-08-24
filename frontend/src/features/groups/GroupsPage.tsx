@@ -6,7 +6,7 @@ import type { Group } from './types';
 import { useGroups, useCreateGroup, useDeleteGroup, useSetGroupRoles } from './hooks';
 import { useRoles } from '../roles/hooks';
 import { notify, extractFieldErrors } from '../../lib/notify';
-import { LuShield, LuTrash2 } from 'react-icons/lu';
+import { LuShield, LuTrash2, LuUsersRound } from 'react-icons/lu';
 import { DataTable, type Column } from '../../components/ui/DataTable';
 import { PAGE_SIZE_OPTIONS } from '../../lib/pagination';
 import { SearchInput } from '../../components/ui/SearchInput';
@@ -77,7 +77,7 @@ export function GroupsPage() {
         g.roles.length ? (
           <span>
             <span className="font-semibold text-accent">{g.roles.length}</span>{' '}
-            <span className="text-muted">{t('common.roles').toLowerCase()}</span>
+            <span className="lowercase text-muted">{t('common.roles')}</span>
           </span>
         ) : (
           <span className="text-muted">—</span>
@@ -99,6 +99,7 @@ export function GroupsPage() {
         data={data?.items ?? []}
         rowKey={(g) => g.id}
         storageKey="groups"
+        emptyIcon={LuUsersRound}
         loading={isLoading || (isFetching && !data)}
         emptyMessage={q ? t('groups.emptyFiltered') : t('groups.empty')}
         page={data?.page ?? page}
