@@ -84,6 +84,10 @@ describe('UserDetailPage (edit-mode polish)', () => {
     expect(switches).toHaveLength(1);
     expect(screen.getByRole('switch', { name: 'Account enabled' })).toBeInTheDocument();
     expect(screen.getByText('Verified')).toBeInTheDocument();
+
+    // Roles/groups pickers are seeded from the user's summaries — the current
+    // role renders as a labeled chip before any search.
+    expect(screen.getByText('Developer')).toBeInTheDocument();
   });
 
   it('hides the overflow menu while editing and restores it on cancel', async () => {

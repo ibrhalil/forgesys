@@ -1,4 +1,5 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMemo } from 'react';
+import { useQuery, useMutation, useQueryClient, useQueries } from '@tanstack/react-query';
 import { usersApi } from './api';
 import { useAuthStore } from '../../store/authStore';
 import type { PageParams } from '../../types';
@@ -16,6 +17,45 @@ export function useUsers(params: PageParams = {}) {
 
 export function useUser(id?: string) {
   return useQuery({ queryKey: ['users', id], queryFn: () => usersApi.get(id!), enabled: !!id });
+}
+
+/**
+ * Resolve user ids → emails at any scale: one shared directory page warms the
+ * cache first (`['users', params]` — the standard list key), then ids it does
+ * not cover fall back to per-id detail queries on the detail-page key
+ * (`['users', id]`), so already-visited details cost nothing. Ids that are
+ * still pending (or failed/garbage payloads) simply stay out of the Map —
+ * callers fall back to a shortened id.
+ */
+export function useUserLabels(ids: Array<string | null | undefined>): Map<string, string> {
+  const { data: page } = useUsers({ page: 0, size: 100, sorts: [{ field: 'email', dir: 'asc' }] });
+
+  const unique = useMemo(
+    () => Array.from(new Set(ids.filter((id): id is string => !!id))),
+    [ids],
+  );
+  const onPage = useMemo(() => new Set((page?.items ?? []).map((u) => u.id)), [page]);
+
+  const details = useQueries({
+    queries: unique.map((id) => ({
+      queryKey: ['users', id],
+      queryFn: () => usersApi.get(id),
+      // Only miss ids fetch details — and only once the warm page has landed,
+      // so on-page ids never trigger extra requests.
+      enabled: page !== undefined && !onPage.has(id),
+    })),
+  });
+
+  return useMemo(() => {
+    const m = new Map<string, string>();
+    for (const u of page?.items ?? []) m.set(u.id, u.email);
+    unique.forEach((_, i) => {
+      const u = details[i].data;
+      // Garbage-tolerant: only email-bearing payloads count as resolved.
+      if (u && typeof u.email === 'string') m.set(u.id, u.email);
+    });
+    return m;
+  }, [page, unique, details]);
 }
 
 export function useUserEffectivePermissions(id?: string) {

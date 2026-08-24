@@ -4,9 +4,10 @@ import { LuEllipsisVertical, LuPencil, LuTrash2 } from 'react-icons/lu';
 import { useAuthStore } from '../../store/authStore';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  useRole, useRoles,
+  useRole,
   useSetRolePermissions, useSetRoleParents, useDeleteRole,
 } from './hooks';
+import { rolesApi } from './api';
 import { usePermissions } from '../permissions/hooks';
 import { notify } from '../../lib/notify';
 import { Button } from '../../components/ui/Button';
@@ -31,7 +32,6 @@ export function RoleDetailPage() {
   const { roleId } = useParams<{ roleId: string }>();
   const { data: role, isLoading } = useRole(roleId);
   const { data: permissions } = usePermissions();
-  const { data: rolesData } = useRoles({ size: 200, sort: 'name' });
   const setPermissions = useSetRolePermissions();
   const setParents = useSetRoleParents();
   const del = useDeleteRole();
@@ -48,8 +48,6 @@ export function RoleDetailPage() {
   }
 
   const permissionOptions = toOptions(permissions?.items ?? [], (p) => p.id, (p) => p.name);
-  // Parent candidates: every role except this one (no self-inheritance).
-  const parentOptions = toOptions((rolesData?.items ?? []).filter((r) => r.id !== role.id), (r) => r.id, (r) => r.name);
 
   return (
     <Page
@@ -101,7 +99,18 @@ export function RoleDetailPage() {
       {canWrite ? (
         <AssignSection
           title={t('roles.parentSection')}
-          options={parentOptions}
+          loadOptions={(input) =>
+            rolesApi
+              .list({ q: input, size: 20, sorts: [{ field: 'name', dir: 'asc' }] })
+              // Parent candidates: every role except this one (no self-inheritance).
+              .then((page) =>
+                page.items
+                  .filter((r) => r.id !== role.id)
+                  .map((r) => ({ value: r.id, label: r.name })),
+              )
+              .catch(() => [])
+          }
+          selectedOptions={(role.parents ?? []).map((p) => ({ value: p.id, label: p.name }))}
           selectedValues={(role.parents ?? []).map((p) => p.id)}
           saving={setParents.isPending}
           placeholder={t('roles.parentPh')}

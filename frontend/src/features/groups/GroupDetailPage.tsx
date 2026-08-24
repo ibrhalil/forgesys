@@ -7,15 +7,14 @@ import {
   useGroup, useGroupEffectivePermissions,
   useSetGroupRoles, useSetGroupMembers, useDeleteGroup,
 } from './hooks';
-import { useRoles } from '../roles/hooks';
-import { useUsers } from '../users/hooks';
+import { rolesApi } from '../roles/api';
+import { usersApi } from '../users/api';
 import { notify } from '../../lib/notify';
 
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { RowMenu } from '../../components/ui/RowMenu';
-import { toOptions } from '../../lib/select';
 import { DetailPanel, DetailField, PermissionBadges } from '../../components/detail/DetailPanel';
 import { Page } from '../../components/Page';
 import { AssignSection } from '../../components/detail/AssignSection';
@@ -28,8 +27,6 @@ export function GroupDetailPage() {
   const { groupId } = useParams<{ groupId: string }>();
   const { data: group, isLoading } = useGroup(groupId);
   const { data: effectivePerms } = useGroupEffectivePermissions(groupId);
-  const { data: rolesData } = useRoles({ size: 200, sort: 'name' });
-  const { data: usersData } = useUsers({ size: 200, sort: 'email' });
   const setRoles = useSetGroupRoles();
   const setMembers = useSetGroupMembers();
   const del = useDeleteGroup();
@@ -44,9 +41,6 @@ export function GroupDetailPage() {
   if (!group) {
     return <DetailNotFound message={t('groups.notFound')} backLabel={t('groups.backToGroups')} backTo="/groups" />;
   }
-
-  const roleOptions = toOptions(rolesData?.items ?? [], (r) => r.id, (r) => r.name);
-  const memberOptions = toOptions(usersData?.items ?? [], (u) => u.id, (u) => u.email);
 
   return (
     <Page
@@ -94,7 +88,13 @@ export function GroupDetailPage() {
         {canWrite ? (
           <AssignSection
             title={t('common.roles')}
-            options={roleOptions}
+            loadOptions={(input) =>
+              rolesApi
+                .list({ q: input, size: 20, sorts: [{ field: 'name', dir: 'asc' }] })
+                .then((page) => page.items.map((r) => ({ value: r.id, label: r.name })))
+                .catch(() => [])
+            }
+            selectedOptions={group.roles.map((r) => ({ value: r.id, label: r.name }))}
             selectedValues={group.roles.map((r) => r.id)}
             saving={setRoles.isPending}
             placeholder={t('groups.rolesPh')}
@@ -121,7 +121,13 @@ export function GroupDetailPage() {
         {canWrite ? (
           <AssignSection
             title={t('groups.membersSection', { count: group.memberCount })}
-            options={memberOptions}
+            loadOptions={(input) =>
+              usersApi
+                .list({ q: input, size: 20, sorts: [{ field: 'email', dir: 'asc' }] })
+                .then((page) => page.items.map((u) => ({ value: u.id, label: u.email })))
+                .catch(() => [])
+            }
+            selectedOptions={group.members.map((m) => ({ value: m.id, label: m.email }))}
             selectedValues={group.members.map((m) => m.id)}
             saving={setMembers.isPending}
             placeholder={t('groups.membersPh')}

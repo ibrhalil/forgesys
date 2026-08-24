@@ -9,7 +9,7 @@ import type { AppDetail, AppRecord } from '../types';
 import { useCreateRecord, usePatchRecord } from '../hooks';
 import { buildRecordPatch, cellEditValue } from '../cellValue';
 import { useValueResolvers } from '../valueLabels';
-import { UserPicker } from './UserPicker';
+import { UserPicker } from '../../../components/pickers/UserPicker';
 import { RelationPicker } from './RelationPicker';
 
 /** Synthetic empty record — create mode diffs against it (every filled field is a change). */
@@ -37,7 +37,7 @@ export function RecordFormModal({
   const isEdit = !!record;
   const create = useCreateRecord(app.id);
   const patch = usePatchRecord(app.id);
-  const resolve = useValueResolvers(app);
+  const resolve = useValueResolvers(app, record ? [record] : []);
   const [draft, setDraft] = useState<Record<string, string>>(() =>
     isEdit && record
       ? Object.fromEntries(app.properties.map((p) => [p.id, cellEditValue(p, record)]))

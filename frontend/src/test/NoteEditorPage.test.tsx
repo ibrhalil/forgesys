@@ -227,9 +227,11 @@ describe('NoteEditorPage', () => {
         calls.push({ url, method: init?.method ?? 'GET', body: init?.body ? JSON.parse(String(init.body)) : undefined });
         const payload = url.startsWith('/api/v1/note-categories')
           ? CATEGORIES_PAYLOAD
-          : url === '/api/v1/notes' && init?.method === 'POST'
-            ? created
-            : null;
+          : url === '/api/v1/projects/proj-notes'
+            ? { id: 'proj-notes', name: 'Journal', description: null, type: 'NOTES', parentProjectId: null, isDefault: false }
+            : url === '/api/v1/notes' && init?.method === 'POST'
+              ? created
+              : null;
         if (payload === null) {
           return new Response(JSON.stringify({ code: 'resource_not_found' }), { status: 404 });
         }
@@ -239,6 +241,10 @@ describe('NoteEditorPage', () => {
 
     renderAt('/notes/new?projectId=proj-notes');
     const title = await screen.findByPlaceholderText('e.g. Meeting notes');
+
+    // The ProjectPicker seed resolves the container's name from GET /projects/{id}.
+    expect(await screen.findByText('Journal')).toBeInTheDocument();
+
     await user.type(title, 'Panel note');
     await user.click(screen.getByRole('button', { name: 'Save' }));
 

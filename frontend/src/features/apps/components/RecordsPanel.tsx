@@ -83,11 +83,11 @@ export function RecordsPanel({ app }: { app: AppDetail }) {
   // self/client modes — the client-mode page is capped at 1000).
   const { data: recordCount } = useRecords(app.id, { page: 0, size: 1 });
   const { data: planLimits } = usePlanLimits();
-  const resolve = useValueResolvers(app);
   const visible = useMemo(
     () => applyViewQuery(recordsQuery.data?.items ?? [], app.properties, effectiveFilters, effectiveSorts),
     [recordsQuery.data, app.properties, effectiveFilters, effectiveSorts],
   );
+  const resolve = useValueResolvers(app, visible);
   const fetchedCount = recordsQuery.data?.items.length ?? 0;
   const truncated = !tableSelfMode && (recordsQuery.data?.totalElements ?? 0) > fetchedCount;
   const filterCount = (effectiveFilters?.length ?? 0) + (effectiveSorts?.length ?? 0);

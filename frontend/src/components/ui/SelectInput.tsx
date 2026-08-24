@@ -20,6 +20,8 @@ export interface SelectInputProps<V> {
   options?: SelectOption<V>[];
   /** Provide to enable async loading (typeahead). */
   loadOptions?: (input: string) => Promise<SelectOption<V>[]>;
+  /** Async mode: load the first page on mount (menu-open shows options before typing). */
+  defaultOptions?: boolean;
   /** Current value: a single option, an array (multi), or null/undefined. */
   value?: SelectOption<V> | SelectOption<V>[] | null;
   onChange?: (value: SelectOption<V> | SelectOption<V>[] | null) => void;
@@ -57,6 +59,7 @@ export function SelectInput<V>({
   placeholder,
   options,
   loadOptions,
+  defaultOptions,
   value,
   onChange,
   isMulti = false,
@@ -137,6 +140,7 @@ export function SelectInput<V>({
       isDisabled={isDisabled}
       isOptionDisabled={isOptionDisabled as never}
       isLoading={isLoading}
+      defaultOptions={loadOptions ? defaultOptions : undefined}
       menuPortalTarget={portal}
       styles={{ menuPortal: (base) => ({ ...base, zIndex: 60 }) }}
       classNames={classNames as never}

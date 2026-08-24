@@ -7,18 +7,16 @@ import {
 } from './hooks';
 import { isLocked } from './types';
 import { formatDateTime } from '../../lib/format';
-import { useRoles } from '../roles/hooks';
-import { useGroups } from '../groups/hooks';
 import { useAuthStore } from '../../store/authStore';
 import { notify, extractFieldErrors } from '../../lib/notify';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { TextField } from '../../components/ui/Field';
-import { SelectInput } from '../../components/ui/SelectInput';
+import { RolePicker } from '../../components/pickers/RolePicker';
+import { GroupPicker } from '../../components/pickers/GroupPicker';
 import { RowMenu } from '../../components/ui/RowMenu';
 import { Toggle } from '../../components/ui/Toggle';
-import { toOptions, type SelectOption } from '../../lib/select';
 import { DetailPanel, DetailField } from '../../components/detail/DetailPanel';
 import { Page } from '../../components/Page';
 import { PermissionListModal } from '../../components/detail/PermissionListModal';
@@ -57,8 +55,6 @@ export function UserDetailPage() {
   const { data: user, isLoading } = useUser(isCreate ? undefined : userId);
   const { data: effectivePerms } = useUserEffectivePermissions(isCreate ? undefined : userId);
   const { data: activity } = useUserActivity(isCreate ? undefined : userId);
-  const { data: rolesData } = useRoles({ size: 200, sort: 'name' });
-  const { data: groupsData } = useGroups({ size: 200, sort: 'name' });
 
   const create = useCreateUser();
   const update = useUpdateUser();
@@ -86,9 +82,6 @@ export function UserDetailPage() {
   const [roleIds, setRoleIds] = useState<string[]>([]);
   const [groupIds, setGroupIds] = useState<string[]>([]);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-
-  const roleOptions = toOptions(rolesData?.items ?? [], (r) => r.id, (r) => r.name);
-  const groupOptions = toOptions(groupsData?.items ?? [], (g) => g.id, (g) => g.name);
 
   const saving = create.isPending || update.isPending || setRoles.isPending || setGroups.isPending;
 
@@ -387,22 +380,20 @@ export function UserDetailPage() {
         <>
           <div className="grid gap-6 lg:grid-cols-2">
             <DetailPanel title={t('users.rolesSection')}>
-              <SelectInput
+              <RolePicker
                 isMulti
-                isClearable
-                options={roleOptions}
-                value={roleOptions.filter((o) => roleIds.includes(o.value))}
-                onChange={(next) => setRoleIds(((next as SelectOption[]) ?? []).map((o) => o.value))}
+                values={roleIds}
+                selectedOptions={(user?.roles ?? []).map((r) => ({ value: r.id, label: r.name }))}
+                onValuesChange={setRoleIds}
                 placeholder={t('users.rolesAtCreate')}
               />
             </DetailPanel>
             <DetailPanel title={t('users.groupsSection')}>
-              <SelectInput
+              <GroupPicker
                 isMulti
-                isClearable
-                options={groupOptions}
-                value={groupOptions.filter((o) => groupIds.includes(o.value))}
-                onChange={(next) => setGroupIds(((next as SelectOption[]) ?? []).map((o) => o.value))}
+                values={groupIds}
+                selectedOptions={(user?.groups ?? []).map((g) => ({ value: g.id, label: g.name }))}
+                onValuesChange={setGroupIds}
                 placeholder={t('users.groupsAtCreate')}
               />
             </DetailPanel>

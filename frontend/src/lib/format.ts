@@ -43,6 +43,11 @@ export function formatDate(iso: string | null | undefined): string {
   return fmt.format(d);
 }
 
+/** "a1b2c3d4…" — shortened raw id for USER/RELATION cells until a label resolves. */
+export function shortenId(id: string): string {
+  return id.length <= 8 ? id : `${id.slice(0, 8)}…`;
+}
+
 /**
  * Coarse relative time ("2m ago", "3h ago", "yesterday") for session "last seen".
  * Intentionally low-resolution — these are approximate, not precise.

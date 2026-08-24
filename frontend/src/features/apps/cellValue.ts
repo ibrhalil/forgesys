@@ -1,5 +1,9 @@
 import type { AppProperty, AppRecord, PropertyType } from './types';
-import { formatDate } from '../../lib/format';
+import { formatDate, shortenId } from '../../lib/format';
+
+// shortenId moved to lib/format (display-helper home) — re-exported so existing
+// imports keep working.
+export { shortenId };
 
 /**
  * Pure helpers around app record cell values (JSON scalars keyed by property id).
@@ -12,11 +16,6 @@ export const INLINE_EDITABLE_TYPES: readonly PropertyType[] = ['TEXT', 'NUMBER',
 
 export function isInlineEditable(prop: AppProperty): boolean {
   return INLINE_EDITABLE_TYPES.includes(prop.type);
-}
-
-/** "a1b2c3d4…" — shortened raw id for USER/RELATION cells until pickers exist. */
-export function shortenId(id: string): string {
-  return id.length <= 8 ? id : `${id.slice(0, 8)}…`;
 }
 
 /** Human-readable cell text for the TABLE renderer; '' for empty cells. */
