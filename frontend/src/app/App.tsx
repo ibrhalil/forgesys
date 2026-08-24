@@ -1,6 +1,6 @@
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import {BrowserRouter, Navigate, Route, Routes} from 'react-router-dom';
-import {useEffect} from 'react';
+import {lazy, useEffect} from 'react';
 import {useAuthStore} from '../store/authStore';
 import {AppShell} from '../components/AppShell';
 import {RequireAuth} from '../components/RequireAuth';
@@ -13,6 +13,15 @@ import {VerifyTenantPage} from '../features/auth/VerifyTenantPage';
 import {ApiError} from '../lib/api';
 import {notifyApiError} from '../lib/notify';
 import {useT} from '../lib/i18n';
+
+// DEV-only: UI component showcase — tree-shaken in production builds.
+const DemoLayout = import.meta.env.DEV
+  ? lazy(() => import('../features/demo/DemoLayout').then((m) => ({ default: m.DemoLayout })))
+  : null;
+const DataTableDemoPage = import.meta.env.DEV
+  ? lazy(() => import('../features/demo/pages/DataTableDemoPage').then((m) => ({ default: m.DataTableDemoPage })))
+  : null;
+
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -87,6 +96,12 @@ export default function App() {
               );
             })}
           </Route>
+
+          {import.meta.env.DEV && DemoLayout && DataTableDemoPage && (
+            <Route path="/demo" element={<DemoLayout />}>
+              <Route path="datatable" element={<DataTableDemoPage />} />
+            </Route>
+          )}
 
           <Route path="*" element={<Navigate to="/" replace/>}/>
         </Routes>
