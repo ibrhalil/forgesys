@@ -73,4 +73,30 @@ describe('useListPageState', () => {
       vi.useRealTimers();
     }
   });
+
+  it('initializes pageSize from localStorage when storageKey is provided', () => {
+    window.localStorage.setItem('sf_table_prefs_users', JSON.stringify({ pageSize: 50 }));
+    const { result } = renderHook(() =>
+      useListPageState({
+        defaultSort: { field: 'name', dir: 'asc' },
+        defaultPageSize: 10,
+        storageKey: 'users',
+      }),
+    );
+    expect(result.current.pageSize).toBe(50);
+  });
+
+  it('persists pageSize changes to localStorage when storageKey is provided', () => {
+    const { result } = renderHook(() =>
+      useListPageState({
+        defaultSort: { field: 'name', dir: 'asc' },
+        defaultPageSize: 10,
+        storageKey: 'users',
+      }),
+    );
+    act(() => result.current.setPageSize(100));
+
+    const stored = JSON.parse(window.localStorage.getItem('sf_table_prefs_users') ?? '{}');
+    expect(stored.pageSize).toBe(100);
+  });
 });

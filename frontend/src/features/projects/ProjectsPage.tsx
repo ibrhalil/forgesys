@@ -37,7 +37,7 @@ export function ProjectsPage() {
   const { t } = useT();
   const navigate = useNavigate();
   const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, q } =
-    useListPageState({ defaultSort: { field: 'name', dir: 'asc' } });
+    useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'projects' });
   const { data, isLoading, isFetching } = useProjects({ page, size: pageSize, sorts: [sort], q: q || undefined });
   const delProject = useDeleteProject();
   const canDelete = useAuthStore((s) => s.hasAuthority(PERMISSIONS.PROJECT_DELETE));
@@ -51,6 +51,7 @@ export function ProjectsPage() {
       key: 'name',
       header: t('projects.project'),
       sortKey: 'name',
+      hideable: false,
       render: (p) => (
         <Link to={`/projects/${p.id}`} className="font-medium text-main transition-colors hover:text-accent">
           {p.name}
@@ -86,6 +87,7 @@ export function ProjectsPage() {
         columns={columns}
         data={data?.items ?? []}
         rowKey={(p) => p.id}
+        storageKey="projects"
         loading={isLoading || (isFetching && !data)}
         emptyMessage={q ? t('projects.emptyFiltered') : t('projects.empty')}
         page={data?.page ?? page}

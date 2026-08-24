@@ -56,15 +56,16 @@ export function RecordTable({
   onRequestEdit?: (record: AppRecord) => void;
 }) {
   const { t } = useT();
+  const storageKey = `app-records-${app.id}`;
   const { page, setPage, pageSize, setPageSize, sort, toggleSort } =
-    useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' } });
+    useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' }, storageKey });
   // Self-mode server query is disabled while the panel feeds records (override).
   const { data, isLoading, isFetching } = useRecords(override ? undefined : app.id, {
     page,
     size: pageSize,
     sorts: [sort],
   });
-  const client = useClientPagination(override?.records ?? []);
+  const client = useClientPagination(override?.records ?? [], 10, storageKey);
   const patch = usePatchRecord(app.id);
   const delRecord = useDeleteRecord(app.id);
   const canWrite = useAuthStore((s) => s.hasAuthority(PERMISSIONS.APP_RECORD_WRITE));
@@ -212,6 +213,7 @@ export function RecordTable({
       columns={columns}
       data={override ? client.paged : (data?.items ?? [])}
       rowKey={(r) => r.id}
+      storageKey={storageKey}
       loading={override ? override.isLoading : isLoading || (isFetching && !data)}
       emptyMessage={t('apps.emptyRecords')}
       page={override ? client.page : (data?.page ?? page)}

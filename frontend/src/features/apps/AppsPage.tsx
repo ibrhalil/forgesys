@@ -21,7 +21,7 @@ import { AppFormModal } from './components/AppFormModal';
 export function AppsPage() {
   const { t } = useT();
   const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, q } =
-    useListPageState({ defaultSort: { field: 'name', dir: 'asc' } });
+    useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'apps' });
   const { data, isLoading, isFetching } = useApps({ page, size: pageSize, sorts: [sort], q: q || undefined });
   // Usage indicator: unfiltered total via a one-row probe (the list above is q-filtered).
   const { data: usage } = useApps({ page: 0, size: 1 });
@@ -38,6 +38,7 @@ export function AppsPage() {
       key: 'name',
       header: t('common.name'),
       sortKey: 'name',
+      hideable: false,
       render: (a) => (
         <Link to={`/apps/${a.id}`} className="font-medium text-main transition-colors hover:text-accent">
           {a.icon ? `${a.icon} ${a.name}` : a.name}
@@ -99,6 +100,7 @@ export function AppsPage() {
         columns={columns}
         data={data?.items ?? []}
         rowKey={(a) => a.id}
+        storageKey="apps"
         loading={isLoading || (isFetching && !data)}
         emptyMessage={q ? t('apps.emptyFiltered') : t('apps.empty')}
         page={data?.page ?? page}

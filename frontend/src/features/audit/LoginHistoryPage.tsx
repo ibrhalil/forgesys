@@ -27,13 +27,19 @@ export function LoginHistoryPage() {
   ];
   const [success, setSuccess] = useState<'all' | 'true' | 'false'>('all');
   const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, q } =
-    useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' } });
+    useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' }, storageKey: 'login-history' });
 
   const successParam = success === 'all' ? undefined : success === 'true';
   const { data, isLoading, isFetching } = useLoginHistory({ page, size: pageSize, sort: `${sort.field},${sort.dir}`, success: successParam, q: q || undefined });
 
   const columns: Column<LoginHistory>[] = [
-    { key: 'createdAt', header: t('audit.date'), sortKey: 'createdDate', render: (l) => <span className="whitespace-nowrap text-muted">{formatDateTime(l.createdAt)}</span> },
+    {
+      key: 'createdAt',
+      header: t('audit.date'),
+      sortKey: 'createdDate',
+      hideable: false,
+      render: (l) => <span className="whitespace-nowrap text-muted">{formatDateTime(l.createdAt)}</span>,
+    },
     { key: 'username', header: t('common.email'), sortKey: 'username', render: (l) => <span className="font-medium text-main">{l.username}</span> },
     {
       key: 'success',
@@ -58,6 +64,7 @@ export function LoginHistoryPage() {
         columns={columns}
         data={data?.items ?? []}
         rowKey={(l) => l.id}
+        storageKey="login-history"
         loading={isLoading || (isFetching && !data)}
         emptyMessage={search ? t('loginHistory.emptyFiltered') : t('loginHistory.empty')}
         page={data?.page ?? page}

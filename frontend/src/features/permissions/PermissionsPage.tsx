@@ -56,11 +56,17 @@ export function PermissionsPage() {
   }, [permissions, query, sort]);
 
   // Full list arrives in one response — paginate locally for the standard footer UX.
-  const pagination = useClientPagination(filtered, 10);
+  const pagination = useClientPagination(filtered, 10, 'permissions');
   const resetPage = () => pagination.setPage(0);
 
   const columns: Column<Permission>[] = [
-    { key: 'name', header: t('common.permission'), sortKey: 'name', render: (p) => <span className="font-mono text-sm font-medium text-main">{p.name}</span> },
+    {
+      key: 'name',
+      header: t('common.permission'),
+      sortKey: 'name',
+      hideable: false,
+      render: (p) => <span className="font-mono text-sm font-medium text-main">{p.name}</span>,
+    },
     { key: 'description', header: t('common.description'), sortKey: 'description', render: (p) => <span className="text-muted">{p.description ?? '—'}</span> },
   ];
 
@@ -76,6 +82,7 @@ export function PermissionsPage() {
         columns={columns}
         data={pagination.paged}
         rowKey={(p) => p.id}
+        storageKey="permissions"
         loading={isLoading || (isFetching && !permissions)}
         emptyMessage={query ? t('permissions.emptyFiltered') : t('permissions.empty')}
         page={pagination.page}

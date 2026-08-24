@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useDebouncedValue } from './useDebouncedValue';
+import { loadTablePreferences, saveTablePreferences } from './tablePreferences';
 import type { SortState } from '../types';
 
 export interface UseListPageStateOptions {
@@ -12,6 +13,10 @@ export interface UseListPageStateOptions {
   defaultPageSize?: number;
   /** Search debounce window; the raw input renders immediately, queries key on `q`. */
   debounceMs?: number;
+  /**
+   * Optional unique key to persist table preferences (e.g. pageSize) in localStorage.
+   */
+  storageKey?: string;
 }
 
 /**
@@ -21,7 +26,7 @@ export interface UseListPageStateOptions {
  * - search is debounced (`q`), and a new term resets the page to 0;
  * - sorting toggles asc/desc on the same field, switches to asc on a new field,
  *   and resets the page to 0;
- * - changing the rows-per-page resets the page to 0.
+ * - changing the rows-per-page resets the page to 0 and persists preference if storageKey is given.
  *
  * Pages wire DataTable directly: `onPageSizeChange={setPageSize}`,
  * `onSortChange={toggleSort}`, `onPageChange={setPage}`,
@@ -37,9 +42,13 @@ export function useListPageState({
   defaultSort,
   defaultPageSize = 10,
   debounceMs = 300,
+  storageKey,
 }: UseListPageStateOptions) {
   const [page, setPage] = useState(0);
-  const [pageSize, setPageSizeState] = useState(defaultPageSize);
+  const [pageSize, setPageSizeState] = useState(() => {
+    if (!storageKey) return defaultPageSize;
+    return loadTablePreferences(storageKey).pageSize ?? defaultPageSize;
+  });
   const [sort, setSort] = useState<SortState>(defaultSort);
   const [search, setSearch] = useState('');
   const q = useDebouncedValue(search, debounceMs);
@@ -51,6 +60,9 @@ export function useListPageState({
 
   const setPageSize = (size: number) => {
     setPageSizeState(size);
+    if (storageKey) {
+      saveTablePreferences(storageKey, { pageSize: size });
+    }
     setPage(0);
   };
 

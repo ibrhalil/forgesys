@@ -17,10 +17,15 @@ export function ModulesPage() {
   const canWrite = useAuthStore((s) => s.hasAuthority(PERMISSIONS.MODULE_WRITE));
 
   // Small catalog — local pagination keeps the standard footer UX.
-  const pagination = useClientPagination(modules ?? [], 10);
+  const pagination = useClientPagination(modules ?? [], 10, 'modules');
 
   const columns: Column<Module>[] = [
-    { key: 'name', header: t('common.name'), render: (m) => <span className="font-medium text-main">{m.name}</span> },
+    {
+      key: 'name',
+      header: t('common.name'),
+      hideable: false,
+      render: (m) => <span className="font-medium text-main">{m.name}</span>,
+    },
     { key: 'key', header: t('modules.key'), render: (m) => <span className="font-mono text-sm text-muted">{m.key}</span> },
     {
       key: 'minPlan',
@@ -44,6 +49,7 @@ export function ModulesPage() {
         columns={columns}
         data={pagination.paged}
         rowKey={(m) => m.key}
+        storageKey="modules"
         loading={isLoading || (isFetching && !modules)}
         emptyMessage={t('modules.empty')}
         page={pagination.page}
