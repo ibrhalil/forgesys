@@ -20,7 +20,7 @@ npm run preview   # serve the build output locally
 
 Every dependency is pinned to an **exact version** (`.npmrc`: `save-exact=true`).
 
-- **dependencies:** `@tanstack/react-query` 5.102.1, `react`/`react-dom` 19.2.8, `react-icons` 5.7.0, `react-markdown` 10.1.0 + `remark-gfm` 4.0.1 (K-44 notes preview — raw HTML deliberately NOT rendered, `rehype-raw` absent), `react-router-dom` 7.18.2, `react-select` 5.10.2, `react-toastify` 11.1.0, `zustand` 5.0.15
+- **dependencies:** `@dnd-kit/core` 6.3.1, `@tanstack/react-query` 5.102.1, `react`/`react-dom` 19.2.8, `react-icons` 5.7.0, `react-markdown` 10.1.0 + `remark-gfm` 4.0.1 (K-44 notes preview — raw HTML deliberately NOT rendered, `rehype-raw` absent), `react-router-dom` 7.18.2, `react-select` 5.10.2, `react-toastify` 11.1.0, `zustand` 5.0.15
 - **devDependencies:** `@tailwindcss/vite` 4.3.3 + `tailwindcss` 4.3.3, `@types/*`, `@vitejs/plugin-react` 6.1.0, `oxlint` 1.79.0, `typescript` 6.0.3, `vite` 8.2.2, `vitest` 4.1.11 + `jsdom` 30.0.1 + `@testing-library/react` 16.3.2 (+dom 19.x) + `@testing-library/jest-dom` 7.0.1 + `@testing-library/user-event` 14.6.6
 - **Lint:** oxlint (`.oxlintrc.json` — plugins: `react`/`typescript`/`oxc`; `react/rules-of-hooks`=error, `react/only-export-components`=[warn, `{allowConstantExport: true}`])
 - **Styling:** Tailwind CSS v4 via `@theme` tokens in `src/index.css` (no `tailwind.config`). Font: Outfit + Inter (Google Fonts, `index.html`).
@@ -160,6 +160,7 @@ src/
 - **Icons:** `react-icons` (Lucide set, subpath import `react-icons/lu` — Vite tree-shakes). Never add inline SVGs; pick a Lucide icon.
 - **Light corporate theme tokens:** `src/index.css` `@theme` — pale-sky page bg (`--color-bg: #e0f2fe`), white surfaces (`--color-surface/sidebar`), raspberry accent (`--color-accent: #c2185b`); utilities like `bg-surface`/`text-muted`/`border-glass`. App is light-only (dark theme removed). Never use raw `text-white`/`bg-white/5` outside the gradient logo tiles — use tokens so a future theme stays possible.
 - **Tests (K-39):** Vitest + React Testing Library, `npm test` (CI runs it too). Suite lives in `src/test/` (`setup.ts` + `*.test.ts(x)`); config in `vitest.config.ts` (jsdom, `globals: false` — tests import `describe/it/expect/vi` from `'vitest'` explicitly; `setup.ts` registers RTL cleanup + jest-dom matchers). Mocks: `vi.stubGlobal('fetch', ...)` for `lib/api` (no MSW), `useStore.setState({...})` for zustand stores, `useLocaleStore.setState({ locale: 'en' })` for stable query strings. **A new frontend feature does not merge without tests** — at minimum a hook/logic test plus a render test for new UI primitives.
+- **Kanban DnD:** boards use DndContext per board (PointerSensor distance:5 + TouchSensor delay:200), droppable columns + DragOverlay; moves are optimistic (setQueryData + rollback onError); the card select-mover stays as the keyboard/touch alternative.
 
 ## Planned: DataTable enhancements
 

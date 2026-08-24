@@ -1,6 +1,20 @@
 import { PERMISSIONS } from '../../../lib/permissions';
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import {
+  closestCorners,
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  TouchSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import type { DragEndEvent } from '@dnd-kit/core';
 import type { Task, TaskPriority, TaskStatus, TaskRequest } from '../types';
+import type { PageResult } from '../../../types';
 import { useUserLabels } from '../../users/hooks';
 import { useTasks, useCreateTask, useUpdateTask, useDeleteTask } from '../hooks';
 import { notify, extractFieldErrors } from '../../../lib/notify';
@@ -13,11 +27,12 @@ import { TextField } from '../../../components/ui/Field';
 import { TextAreaField } from '../../../components/ui/TextArea';
 import { SelectInput } from '../../../components/ui/SelectInput';
 import { UserPicker } from '../../../components/pickers/UserPicker';
-import { shortenId } from '../../../lib/format';
+import { shortenId, formatDate } from '../../../lib/format';
 import { LuEllipsisVertical, LuPencil, LuTrash2 } from 'react-icons/lu';
 import type { SelectOption } from '../../../lib/select';
 import { useT } from '../../../lib/i18n';
-import { formatDate } from '../../../lib/format';
+import { cn } from '../../../lib/cn';
+import { columnDropId, resolveDrop, type DropColumn } from '../../../lib/boardDnd';
 import { useAuthStore } from '../../../store/authStore';
 
 const COLUMN_TONES: Record<TaskStatus, 'muted' | 'blue' | 'green'> = {
@@ -25,6 +40,10 @@ const COLUMN_TONES: Record<TaskStatus, 'muted' | 'blue' | 'green'> = {
   IN_PROGRESS: 'blue',
   DONE: 'green',
 };
+
+const DROP_COLUMNS: DropColumn<TaskStatus>[] = (Object.keys(COLUMN_TONES) as TaskStatus[]).map(
+  (status) => ({ id: columnDropId(status), value: status }),
+);
 
 /** Column + select option labels resolved per-locale at render time. */
 function useTaskLabels() {
@@ -69,9 +88,10 @@ function toRequest(task: Task, overrides: Partial<TaskRequest> = {}): TaskReques
 }
 
 /**
- * Three-column task board (TODO/IN_PROGRESS/DONE). No drag-drop — a card carries its own
- * status select so a user moves it across columns by changing the value (optimistic via
- * invalidate). Tasks are fetched as one list and grouped client-side.
+ * Three-column task board (TODO/IN_PROGRESS/DONE). Cards are dragged between
+ * droppable columns (@dnd-kit) with an optimistic cache write + rollback on
+ * error; the per-card status select stays as the keyboard/touch alternative.
+ * Tasks are fetched as one list and grouped client-side.
  */
 export function TaskBoard({ projectId }: { projectId: string }) {
   const { t } = useT();
@@ -86,6 +106,38 @@ export function TaskBoard({ projectId }: { projectId: string }) {
   const [editing, setEditing] = useState<Task | null>(null);
   const [deleting, setDeleting] = useState<Task | null>(null);
   const delTask = useDeleteTask();
+  const updateTask = useUpdateTask();
+  const qc = useQueryClient();
+  const [dragging, setDragging] = useState<Task | null>(null);
+
+  // PointerSensor distance keeps plain clicks (RowMenu, mover) from starting a
+  // drag; TouchSensor delay keeps touch scrolling usable.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
+  );
+
+  /**
+   * Move a task to another column — one code path for the drag-drop overlay and
+   * the card's status select. Optimistic setQueryData + snapshot rollback; the
+   * error toast comes from the global mutations.onError.
+   */
+  const move = (task: Task, status: TaskStatus) => {
+    const key = ['tasks', projectId];
+    const prev = qc.getQueryData<PageResult<Task>>(key);
+    qc.setQueryData<PageResult<Task>>(key, (cur) =>
+      cur ? { ...cur, items: cur.items.map((t2) => (t2.id === task.id ? { ...t2, status } : t2)) } : cur,
+    );
+    updateTask.mutate(
+      { projectId, taskId: task.id, data: toRequest(task, { status }) },
+      { onError: () => { if (prev) qc.setQueryData(key, prev); } },
+    );
+  };
+
+  const endDrag = () => {
+    setDragging(null);
+    document.body.classList.remove('cursor-grabbing');
+  };
 
   return (
     <div className="flex flex-col gap-5">
@@ -94,42 +146,45 @@ export function TaskBoard({ projectId }: { projectId: string }) {
         {canWrite && <Button variant="primary" onClick={() => setCreating(true)}>{t('tasks.new')}</Button>}
       </header>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        {(Object.keys(COLUMN_TONES) as TaskStatus[]).map((status) => {
-          const colTasks = (tasks?.items ?? []).filter((tk) => tk.status === status);
-          return (
-            <section key={status} className="flex min-h-[12rem] flex-col gap-3 rounded-xl border border-glass bg-surface/40 p-3">
-              <div className="flex items-center justify-between px-1">
-                <div className="flex items-center gap-2">
-                  <Badge tone={COLUMN_TONES[status]}>{statusLabel[status]}</Badge>
-                </div>
-                <span className="text-xs text-muted">{colTasks.length}</span>
-              </div>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCorners}
+        onDragStart={(event) => {
+          setDragging(tasks?.items.find((tk) => tk.id === String(event.active.id)) ?? null);
+          document.body.classList.add('cursor-grabbing');
+        }}
+        onDragEnd={(event: DragEndEvent) => {
+          endDrag();
+          const task = tasks?.items.find((tk) => tk.id === String(event.active.id));
+          if (!task) return;
+          const next = resolveDrop(event.over?.id, task.status, DROP_COLUMNS);
+          if (next !== undefined) move(task, next);
+        }}
+        onDragCancel={endDrag}
+      >
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          {(Object.keys(COLUMN_TONES) as TaskStatus[]).map((status) => (
+            <TaskColumn
+              key={status}
+              status={status}
+              label={statusLabel[status]}
+              colTasks={(tasks?.items ?? []).filter((tk) => tk.status === status)}
+              isLoading={isLoading}
+              assigneeLabels={assigneeLabels}
+              canWrite={canWrite}
+              canDelete={canDelete}
+              movePending={updateTask.isPending}
+              onMove={move}
+              onEdit={setEditing}
+              onDelete={setDeleting}
+            />
+          ))}
+        </div>
 
-              {isLoading ? (
-                <div className="py-6 text-center text-xs text-muted">{t('common.loading')}</div>
-              ) : colTasks.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-glass px-3 py-6 text-center text-xs text-muted">{t('tasks.noTasks')}</div>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  {colTasks.map((task) => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      projectId={projectId}
-                      assigneeLabels={assigneeLabels}
-                      canWrite={canWrite}
-                      canDelete={canDelete}
-                      onEdit={() => setEditing(task)}
-                      onDelete={() => setDeleting(task)}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
-          );
-        })}
-      </div>
+        <DragOverlay>
+          {dragging && <TaskDragPreview task={dragging} assigneeLabels={assigneeLabels} />}
+        </DragOverlay>
+      </DndContext>
 
       {creating && (
         <TaskModal projectId={projectId} assigneeLabels={assigneeLabels} onClose={() => setCreating(false)} />
@@ -166,31 +221,112 @@ export function TaskBoard({ projectId }: { projectId: string }) {
   );
 }
 
-function TaskCard({
-  task,
-  projectId,
+function TaskColumn({
+  status,
+  label,
+  colTasks,
+  isLoading,
   assigneeLabels,
   canWrite,
   canDelete,
+  movePending,
   onEdit,
   onDelete,
+  onMove,
 }: {
-  task: Task;
-  projectId: string;
+  status: TaskStatus;
+  label: string;
+  colTasks: Task[];
+  isLoading: boolean;
   assigneeLabels: Map<string, string>;
   canWrite: boolean;
   canDelete: boolean;
+  movePending: boolean;
+  onEdit: (task: Task) => void;
+  onDelete: (task: Task) => void;
+  onMove: (task: Task, status: TaskStatus) => void;
+}) {
+  const { t } = useT();
+  const { setNodeRef, isOver } = useDroppable({ id: columnDropId(status) });
+
+  return (
+    <section
+      ref={setNodeRef}
+      data-droppable-id={columnDropId(status)}
+      className={cn(
+        'flex min-h-[12rem] flex-col gap-3 rounded-xl border border-glass bg-surface/40 p-3',
+        isOver && 'ring-2 ring-accent/40 bg-accent/5',
+      )}
+    >
+      <div className="flex items-center justify-between px-1">
+        <div className="flex items-center gap-2">
+          <Badge tone={COLUMN_TONES[status]}>{label}</Badge>
+        </div>
+        <span className="text-xs text-muted">{colTasks.length}</span>
+      </div>
+
+      {isLoading ? (
+        <div className="py-6 text-center text-xs text-muted">{t('common.loading')}</div>
+      ) : colTasks.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-glass px-3 py-6 text-center text-xs text-muted">{t('tasks.noTasks')}</div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {colTasks.map((task) => (
+            <TaskCard
+              key={task.id}
+              task={task}
+              assigneeLabels={assigneeLabels}
+              canWrite={canWrite}
+              canDelete={canDelete}
+              movePending={movePending}
+              onEdit={() => onEdit(task)}
+              onDelete={() => onDelete(task)}
+              onMove={(status) => onMove(task, status)}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function TaskCard({
+  task,
+  assigneeLabels,
+  canWrite,
+  canDelete,
+  movePending,
+  onEdit,
+  onDelete,
+  onMove,
+}: {
+  task: Task;
+  assigneeLabels: Map<string, string>;
+  canWrite: boolean;
+  canDelete: boolean;
+  movePending: boolean;
   onEdit: () => void;
   onDelete: () => void;
+  onMove: (status: TaskStatus) => void;
 }) {
   const { t } = useT();
   const { statusOptions, priorityLabel } = useTaskLabels();
-  const updateTask = useUpdateTask();
-  const move = (status: TaskStatus) =>
-    updateTask.mutate({ projectId, taskId: task.id, data: toRequest(task, { status }) });
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: task.id,
+    disabled: !canWrite,
+  });
 
   return (
-    <article className="flex flex-col gap-2 rounded-lg border border-glass bg-bg/40 p-3">
+    <article
+      ref={setNodeRef}
+      {...(canWrite ? { ...attributes, ...listeners } : {})}
+      style={canWrite ? { touchAction: 'manipulation' } : undefined}
+      className={cn(
+        'flex flex-col gap-2 rounded-lg border border-glass bg-bg/40 p-3',
+        canWrite && !isDragging && 'cursor-grab',
+        isDragging && 'opacity-40',
+      )}
+    >
       <div className="flex items-start justify-between gap-2">
         <span className="font-medium text-main">{task.title}</span>
         <Badge tone={PRIORITY_TONE[task.priority]}>{priorityLabel[task.priority]}</Badge>
@@ -206,15 +342,15 @@ function TaskCard({
         {task.dueDate && <span className="whitespace-nowrap">{formatDate(task.dueDate)}</span>}
       </div>
       <div className="flex items-center gap-2 border-t border-glass pt-2">
-        {/* Moving a task across columns is a write — hide the mover without pm:task:write. */}
+        {/* Keyboard/touch alternative to dragging — same optimistic move path. */}
         {canWrite && (
           <div className="w-36">
             <SelectInput
               size="sm"
               options={statusOptions}
               value={statusOptions.find((o) => o.value === task.status) ?? null}
-              onChange={(next) => move((next as SelectOption<TaskStatus> | null)?.value ?? task.status)}
-              isDisabled={updateTask.isPending}
+              onChange={(next) => onMove((next as SelectOption<TaskStatus> | null)?.value ?? task.status)}
+              isDisabled={movePending}
             />
           </div>
         )}
@@ -231,6 +367,25 @@ function TaskCard({
             />
           </div>
         )}
+      </div>
+    </article>
+  );
+}
+
+/** Simplified clone shown in the DragOverlay — title + summary lines, no action footer. */
+function TaskDragPreview({ task, assigneeLabels }: { task: Task; assigneeLabels: Map<string, string> }) {
+  const { t } = useT();
+  return (
+    <article className="flex w-72 rotate-2 flex-col gap-2 rounded-lg border border-glass bg-surface p-3 shadow-2xl">
+      <span className="font-medium text-main">{task.title}</span>
+      {task.description && <p className="line-clamp-2 m-0 text-xs text-muted">{task.description}</p>}
+      <div className="flex items-center justify-between text-xs text-muted">
+        <span className="truncate">
+          {task.assigneeId
+            ? assigneeLabels.get(task.assigneeId) ?? shortenId(task.assigneeId)
+            : t('tasks.unassigned')}
+        </span>
+        {task.dueDate && <span className="whitespace-nowrap">{formatDate(task.dueDate)}</span>}
       </div>
     </article>
   );
