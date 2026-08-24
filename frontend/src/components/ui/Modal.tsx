@@ -40,9 +40,9 @@ export function Modal({ open, title, onClose, children, footer, size = 'md', des
     // Remember the opener so focus can return when the dialog closes.
     openerRef.current = document.activeElement;
     const panel = panelRef.current;
-    // Move focus into the dialog (first focusable, else the panel itself).
-    const first = panel?.querySelector<HTMLElement>(FOCUSABLE);
-    (first ?? panel)?.focus();
+    // Focus the dialog surface itself (not the first control) so opening never
+    // lands on the close button; the focus trap then walks the controls.
+    panel?.focus({ preventScroll: true });
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {

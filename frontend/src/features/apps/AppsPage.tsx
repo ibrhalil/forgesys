@@ -86,7 +86,7 @@ export function AppsPage() {
                     ? t('apps.planUsage', { used: usage.totalElements, max: planLimits.maxApps })
                     : t('apps.planUsageUnlimited', { used: usage.totalElements })}
                 </span>
-                {planLimits.maxApps >= 0 && (
+                {planLimits.maxApps > 0 && (
                   <div className="h-1.5 w-28 overflow-hidden rounded-full bg-main/10" aria-hidden>
                     <div
                       className="h-full rounded-full bg-accent"

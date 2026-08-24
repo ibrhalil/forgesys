@@ -49,7 +49,7 @@ describe('Modal', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
-  it('opens as a labelled dialog and traps Tab/Shift+Tab inside', async () => {
+  it('opens focused on the dialog surface (not the close button) and traps Tab/Shift+Tab inside', async () => {
     const user = userEvent.setup();
     window.localStorage.clear();
     useLocaleStore.setState({ locale: 'en' });
@@ -58,10 +58,14 @@ describe('Modal', () => {
 
     const dialog = screen.getByRole('dialog', { name: 'Confirm' });
     expect(dialog).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
+    // Opening lands on the dialog container itself — the X button must not grab focus.
+    expect(dialog).toHaveFocus();
 
     // DOM order of focusables: Close -> Field -> Cancel -> OK.
-    // Tab from OK wraps to the first; Shift+Tab from Close wraps to the last.
+    // Tab from the surface enters at Close; from OK wraps to the first;
+    // Shift+Tab from Close wraps to the last.
+    await user.tab();
+    expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
     await user.tab();
     expect(screen.getByLabelText('Field')).toHaveFocus();
     await user.tab();

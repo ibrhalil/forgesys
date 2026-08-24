@@ -122,4 +122,75 @@ describe('NotesPage', () => {
       expect(noteQuery?.get('pinned')).toBe('true');
     });
   });
+
+  // Two-page payload so the pager's Next button is enabled; extra filters must
+  // reset the page or page 2 + a narrow filter shows an empty table.
+  function stubPagedNotes() {
+    const paged = {
+      ...NOTES_PAYLOAD,
+      meta: { ...NOTES_PAYLOAD.meta, totalElements: 15, totalPages: 2 },
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        urls.push(url);
+        const payload = url.startsWith('/api/v1/notes?')
+          ? paged
+          : url.startsWith('/api/v1/note-categories')
+            ? CATEGORIES_PAYLOAD
+            : { data: [], meta: { page: 0, pageSize: 0, totalElements: 0, totalPages: 0, hasNext: false, hasPrevious: false } };
+        if (url.startsWith('/api/v1/notes?')) {
+          noteQuery = new URLSearchParams(url.split('?')[1]);
+        }
+        return new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }),
+    );
+  }
+
+  it('resets to page 0 when the category filter changes on a later page', async () => {
+    const user = userEvent.setup();
+    stubPagedNotes();
+    renderPage();
+    await screen.findByText('API design');
+
+    await user.click(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() => expect(noteQuery?.get('page')).toBe('1'));
+
+    await user.click(screen.getByText('All categories'));
+    await user.click(await screen.findByRole('option', { name: 'Work' }));
+
+    await waitFor(() => {
+      expect(noteQuery?.get('categoryId')).toBe('cat-1');
+      expect(noteQuery?.get('page')).toBe('0');
+    });
+  });
+
+  it('resets to page 0 when the pinned filter toggles on a later page', async () => {
+    const user = userEvent.setup();
+    stubPagedNotes();
+    renderPage();
+    await screen.findByText('API design');
+
+    await user.click(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() => expect(noteQuery?.get('page')).toBe('1'));
+
+    await user.click(screen.getByRole('button', { name: /Pinned/ }));
+
+    await waitFor(() => {
+      expect(noteQuery?.get('pinned')).toBe('true');
+      expect(noteQuery?.get('page')).toBe('0');
+    });
+  });
+
+  it('marks the pinned filter button as pressed', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText('API design');
+
+    const pinnedBtn = screen.getByRole('button', { name: /Pinned/ });
+    expect(pinnedBtn).toHaveAttribute('aria-pressed', 'false');
+    await user.click(pinnedBtn);
+    expect(pinnedBtn).toHaveAttribute('aria-pressed', 'true');
+  });
 });

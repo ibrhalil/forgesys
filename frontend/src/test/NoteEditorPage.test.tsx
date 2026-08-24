@@ -26,6 +26,10 @@ const CATEGORIES_PAYLOAD = {
 
 let calls: { url: string; method: string; body?: unknown }[];
 
+function json(payload: unknown, status = 200) {
+  return new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json' } });
+}
+
 function renderAt(path: string) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -135,6 +139,82 @@ describe('NoteEditorPage', () => {
       expect(post?.url).toBe('/api/v1/notes');
       expect(post?.body).toMatchObject({ title: 'Fresh note', content: '' });
     });
+  });
+
+  it('renders the pin switch in the form and Save in the editor footer', async () => {
+    const user = userEvent.setup();
+    renderAt(`/notes/${NOTE.id}`);
+    await screen.findByDisplayValue('API design');
+
+    // Pin is a boolean-setting Toggle in the meta row (part of the draft), not a RowMenu item.
+    const pinSwitch = screen.getByRole('switch', { name: 'Pinned' });
+    expect(pinSwitch).toHaveAttribute('aria-checked', 'false');
+    await user.click(pinSwitch);
+    expect(pinSwitch).toHaveAttribute('aria-checked', 'true');
+
+    // Save sits bottom-right of the editing surface (justify-end footer), not in the page head.
+    const save = screen.getByRole('button', { name: 'Save' });
+    expect(save.closest('div')).toHaveClass('justify-end');
+
+    // The toggle is part of the draft — it persists via Save.
+    await user.click(save);
+    await waitFor(() => {
+      const put = calls.find((c) => c.method === 'PUT');
+      expect(put?.body).toMatchObject({ pinned: true });
+    });
+  });
+
+  it('keeps the category labeled while options load late (fallback option)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.startsWith(`/api/v1/notes/${NOTE.id}`)) return json(NOTE);
+        if (url.startsWith('/api/v1/note-categories')) {
+          // Categories hang: the fallback keeps the note's categoryName selected
+          // instead of flashing the select as uncategorized.
+          return new Promise<Response>(() => {});
+        }
+        return new Response(JSON.stringify({ code: 'resource_not_found' }), { status: 404 });
+      }),
+    );
+
+    renderAt(`/notes/${NOTE.id}`);
+    await screen.findByDisplayValue('API design');
+
+    expect(screen.getByText('Work')).toBeInTheDocument();
+  });
+
+  it('shows the category creation failure inline under the select', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        calls.push({ url, method: init?.method ?? 'GET', body: init?.body ? JSON.parse(String(init.body)) : undefined });
+        if (url.startsWith(`/api/v1/notes/${NOTE.id}`)) return json(NOTE);
+        if (url.startsWith('/api/v1/note-categories') && init?.method === 'POST') {
+          // Field-level validation — the global onError stays silent for fields[],
+          // so the form must render it inline.
+          return json(
+            { code: 'validation_error', message: 'Invalid', fields: [{ field: 'name', message: 'Name already exists' }] },
+            400,
+          );
+        }
+        if (url.startsWith('/api/v1/note-categories')) return json(CATEGORIES_PAYLOAD);
+        return new Response(JSON.stringify({ code: 'resource_not_found' }), { status: 404 });
+      }),
+    );
+
+    renderAt(`/notes/${NOTE.id}`);
+    await screen.findByDisplayValue('API design');
+
+    const combo = screen.getByRole('combobox', { name: /category/i });
+    await user.click(combo);
+    await user.type(combo, 'Fresh');
+    await user.click(await screen.findByText('Create category: Fresh'));
+
+    expect(await screen.findByText('Name already exists')).toBeInTheDocument();
   });
 
   it('carries the ?projectId= param into the create POST (project panel entry)', async () => {

@@ -76,5 +76,26 @@ describe('AppsPage', () => {
     renderPage();
 
     expect(await screen.findByText('2 / 3 apps')).toBeInTheDocument();
+    expect(document.querySelector('.w-28')).toBeInTheDocument();
+  });
+
+  it('keeps the plan label but renders no usage bar when maxApps is 0', async () => {
+    // maxApps=0 would make usage/maxApps NaN/Infinity — the bar must not render.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        const body = url.includes('/plan-limits')
+          ? { ...PLAN_LIMITS, maxApps: 0 }
+          : /size=1(&|$)/.test(url)
+            ? USAGE_PAYLOAD
+            : APPS_PAYLOAD;
+        return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }),
+    );
+    renderPage();
+
+    expect(await screen.findByText('2 / 0 apps')).toBeInTheDocument();
+    expect(document.querySelector('.w-28')).not.toBeInTheDocument();
   });
 });
