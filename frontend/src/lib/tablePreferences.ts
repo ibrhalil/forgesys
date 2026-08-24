@@ -1,3 +1,5 @@
+export type TableViewMode = 'table' | 'card' | 'list';
+
 export interface TablePreferences {
   /** Column keys that the user has chosen to hide. */
   hiddenColumns?: string[];
@@ -9,6 +11,8 @@ export interface TablePreferences {
   density?: 'compact' | 'normal' | 'relaxed';
   /** Target search column/field keys for smart search. Empty or omitted indicates all searchable fields. */
   searchFields?: string[];
+  /** Active view mode (table, card grid, or compact list). */
+  viewMode?: TableViewMode;
   /** Extensible key-value dictionary for future table customization needs. */
   [key: string]: unknown;
 }

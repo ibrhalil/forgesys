@@ -1,12 +1,27 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { LuColumns3, LuDownload, LuRefreshCw, LuRows3, LuSlidersHorizontal } from 'react-icons/lu';
+import {
+  LuColumns3,
+  LuDownload,
+  LuLayoutGrid,
+  LuList,
+  LuRefreshCw,
+  LuRows3,
+  LuSlidersHorizontal,
+  LuTable2,
+} from 'react-icons/lu';
 import { cn } from '../../lib/cn';
 import { useT } from '../../lib/i18n';
-import { loadTablePreferences, saveTablePreferences } from '../../lib/tablePreferences';
+import {
+  loadTablePreferences,
+  saveTablePreferences,
+  type TableViewMode,
+} from '../../lib/tablePreferences';
 import type { SortState } from '../../types';
 import { Badge } from './Badge';
 import { EmptyState } from './EmptyState';
 import { Spinner } from './Spinner';
+
+export type { TableViewMode };
 
 export interface Column<T> {
   key: string;
@@ -59,7 +74,7 @@ interface DataTableProps<T> {
    */
   toolbar?: ReactNode;
   /**
-   * Storage key to persist table preferences (hidden columns, density, etc.) in localStorage.
+   * Storage key to persist table preferences (hidden columns, density, viewMode, etc.) in localStorage.
    */
   storageKey?: string;
   /**
@@ -78,12 +93,35 @@ interface DataTableProps<T> {
    * Additional custom toolbar action buttons rendered alongside table controls.
    */
   tableTools?: ReactNode;
+  /**
+   * Supported view modes for this table (e.g. ['table', 'card', 'list']).
+   * When > 1 options are provided, renders a view switcher toggle in the header.
+   */
+  viewModes?: TableViewMode[];
+  /**
+   * Current view mode (controlled). If omitted, managed internally and persisted via storageKey.
+   */
+  viewMode?: TableViewMode;
+  /**
+   * Callback when view mode changes.
+   */
+  onViewModeChange?: (mode: TableViewMode) => void;
+  /**
+   * Custom renderer for 'card' view mode.
+   * If omitted, a structured auto-card is generated from visible columns.
+   */
+  cardRender?: (row: T) => ReactNode;
+  /**
+   * Custom renderer for 'list' view mode.
+   */
+  listRender?: (row: T) => ReactNode;
 }
+
 
 /** Above this many choices the footer switches from segments to a compact select. */
 const MAX_SEGMENTS = 6;
 
-type SettingsTab = 'columns' | 'density' | 'export' | 'refresh';
+type SettingsTab = 'columns' | 'density' | 'viewMode' | 'export' | 'refresh';
 
 export function DataTable<T>({
   columns,
@@ -108,6 +146,11 @@ export function DataTable<T>({
   onExport,
   onRefresh,
   tableTools,
+  viewModes,
+  viewMode: controlledViewMode,
+  onViewModeChange,
+  cardRender,
+  listRender,
 }: DataTableProps<T>) {
   const { t } = useT();
 
@@ -119,6 +162,12 @@ export function DataTable<T>({
     if (!storageKey) return 'normal';
     return (loadTablePreferences(storageKey).density as TableDensity) ?? 'normal';
   });
+  const [internalViewMode, setInternalViewMode] = useState<TableViewMode>(() => {
+    if (!storageKey) return viewModes?.[0] ?? 'table';
+    return (loadTablePreferences(storageKey).viewMode as TableViewMode) ?? viewModes?.[0] ?? 'table';
+  });
+
+  const activeViewMode = controlledViewMode ?? internalViewMode;
 
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [activeTab, setActiveTab] = useState<SettingsTab>('columns');
@@ -160,7 +209,8 @@ export function DataTable<T>({
   const rangeEnd = Math.min((page + 1) * pageSize, totalElements);
 
   const isCustomizationEnabled = !!storageKey && customizableColumns;
-  const hasActivePreferences = hiddenColumns.length > 0 || density !== 'normal';
+  const hasActivePreferences =
+    hiddenColumns.length > 0 || density !== 'normal' || (viewModes && activeViewMode !== (viewModes[0] ?? 'table'));
 
   const toggleColumnVisibility = (colKey: string) => {
     const isHidden = hiddenColumns.includes(colKey);
@@ -190,6 +240,15 @@ export function DataTable<T>({
       saveTablePreferences(storageKey, { density: newDensity });
     }
   };
+
+  const handleViewModeChange = (newMode: TableViewMode) => {
+    setInternalViewMode(newMode);
+    if (storageKey) {
+      saveTablePreferences(storageKey, { viewMode: newMode });
+    }
+    onViewModeChange?.(newMode);
+  };
+
 
   const sortable = (col: Column<T>): boolean => !!col.sortKey && !!onSortChange;
 
@@ -239,6 +298,45 @@ export function DataTable<T>({
           </div>
 
           <div className="flex items-center gap-2">
+            {/* View Mode Switcher Toolbar Buttons */}
+            {viewModes && viewModes.length > 1 && (
+              <div
+                className="flex items-center rounded-lg border border-glass bg-bg/50 p-0.5"
+                role="group"
+                aria-label={t('table.viewMode')}
+              >
+                {viewModes.map((mode) => {
+                  const isSelected = activeViewMode === mode;
+                  const Icon = mode === 'table' ? LuTable2 : mode === 'card' ? LuLayoutGrid : LuList;
+                  const label =
+                    mode === 'table'
+                      ? t('table.viewModeTable')
+                      : mode === 'card'
+                      ? t('table.viewModeCard')
+                      : t('table.viewModeList');
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => handleViewModeChange(mode)}
+                      className={cn(
+                        'flex h-7 items-center gap-1.5 rounded-md px-2 text-xs font-medium transition-colors',
+                        isSelected
+                          ? 'bg-surface font-semibold text-accent shadow-xs'
+                          : 'text-muted hover:text-main',
+                      )}
+                      title={label}
+                      aria-label={label}
+                      aria-pressed={isSelected}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">{label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
             {tableTools}
 
             {isCustomizationEnabled && (
@@ -325,12 +423,12 @@ export function DataTable<T>({
                       </button>
                     </div>
 
-                    {/* Tab Content */}
+                    {/* Tab Body */}
                     <div className="p-3">
                       {/* 1. Columns Tab */}
                       {activeTab === 'columns' && (
-                        <div>
-                          <div className="mb-2 flex items-center justify-between border-b border-glass pb-1.5">
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between border-b border-glass pb-1.5">
                             <span className="text-xs font-semibold text-main">
                               {t('table.customizeColumns')}
                             </span>
@@ -344,30 +442,38 @@ export function DataTable<T>({
                               </button>
                             )}
                           </div>
-                          <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
+
+                          <div className="max-h-48 space-y-1 overflow-y-auto pr-1">
                             {columns.map((col) => {
                               const isHideable = col.hideable !== false;
-                              const isVisible = !hiddenColumns.includes(col.key);
-                              const isLastVisible = isVisible && visibleColumns.length === 1;
+                              const isChecked = !hiddenColumns.includes(col.key);
 
                               return (
                                 <label
                                   key={col.key}
                                   className={cn(
-                                    'flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors hover:bg-bg/60',
-                                    (!isHideable || isLastVisible) && 'cursor-not-allowed opacity-60',
+                                    'flex select-none items-center justify-between gap-2 rounded-md px-2 py-1 text-xs transition-colors',
+                                    isHideable
+                                      ? 'cursor-pointer hover:bg-bg/60'
+                                      : 'cursor-not-allowed opacity-60',
                                   )}
                                 >
-                                  <input
-                                    type="checkbox"
-                                    checked={isVisible}
-                                    disabled={!isHideable || isLastVisible}
-                                    onChange={() =>
-                                      isHideable && !isLastVisible && toggleColumnVisibility(col.key)
-                                    }
-                                    className="rounded border-glass text-accent focus:ring-accent"
-                                  />
-                                  <span className="truncate text-main">{col.header}</span>
+                                  <div className="flex min-w-0 items-center gap-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      disabled={!isHideable}
+                                      onChange={() => isHideable && toggleColumnVisibility(col.key)}
+                                      className="rounded border-glass text-accent focus:ring-accent"
+                                    />
+                                    <span className="truncate text-main">{col.header}</span>
+                                  </div>
+
+                                  {!isHideable && (
+                                    <Badge tone="muted" className="shrink-0 text-[10px]">
+                                      Primary
+                                    </Badge>
+                                  )}
                                 </label>
                               );
                             })}
@@ -377,30 +483,30 @@ export function DataTable<T>({
 
                       {/* 2. Density Tab */}
                       {activeTab === 'density' && (
-                        <div className="space-y-1.5">
-                          <span className="mb-2 block text-xs font-semibold text-main">
+                        <div className="space-y-2">
+                          <span className="mb-1 block text-xs font-semibold text-main">
                             {t('table.density')}
                           </span>
                           {(
                             [
-                              { key: 'compact', label: t('table.densityCompact') },
-                              { key: 'normal', label: t('table.densityNormal') },
-                              { key: 'relaxed', label: t('table.densityRelaxed') },
+                              { mode: 'compact', label: t('table.densityCompact') },
+                              { mode: 'normal', label: t('table.densityNormal') },
+                              { mode: 'relaxed', label: t('table.densityRelaxed') },
                             ] as const
                           ).map((item) => (
                             <button
-                              key={item.key}
+                              key={item.mode}
                               type="button"
-                              onClick={() => handleDensityChange(item.key)}
+                              onClick={() => handleDensityChange(item.mode)}
                               className={cn(
-                                'flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs transition-colors',
-                                density === item.key
-                                  ? 'bg-accent/10 font-semibold text-accent'
-                                  : 'text-main hover:bg-bg/60',
+                                'flex w-full items-center justify-between rounded-lg border border-glass px-2.5 py-1.5 text-xs transition-colors',
+                                density === item.mode
+                                  ? 'border-accent/40 bg-accent/10 font-semibold text-accent'
+                                  : 'bg-surface text-main hover:bg-bg/60',
                               )}
                             >
                               <span>{item.label}</span>
-                              {density === item.key && (
+                              {density === item.mode && (
                                 <span className="h-1.5 w-1.5 rounded-full bg-accent" />
                               )}
                             </button>
@@ -408,7 +514,7 @@ export function DataTable<T>({
                         </div>
                       )}
 
-                      {/* 3. Export Tab (Active if onExport provided, passive otherwise) */}
+                      {/* 3. Export Tab */}
                       {activeTab === 'export' && (
                         <div className="space-y-2">
                           <span className="mb-1 block text-xs font-semibold text-main">
@@ -440,7 +546,7 @@ export function DataTable<T>({
                         </div>
                       )}
 
-                      {/* 4. Auto Refresh Tab (Active if onRefresh provided, passive otherwise) */}
+                      {/* 4. Auto Refresh Tab */}
                       {activeTab === 'refresh' && (
                         <div className="space-y-2">
                           <span className="mb-1 block text-xs font-semibold text-main">
@@ -480,68 +586,163 @@ export function DataTable<T>({
         </div>
       )}
 
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="border-b border-glass bg-bg/40">
-              {visibleColumns.map((col) => (
-                <th
-                  key={col.key}
-                  aria-sort={ariaSort(col)}
-                  className={cn(
-                    'text-left font-semibold uppercase tracking-wide text-muted',
-                    thPadding,
-                    col.className,
-                  )}
-                >
-                  {headerContent(col)}
-                </th>
-              ))}
-              {actions && (
-                <th
-                  className={cn(
-                    'text-right font-semibold uppercase tracking-wide text-muted',
-                    thPadding,
-                  )}
-                >
-                  {actionsHeader}
-                </th>
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={colCount} className="px-4 py-16 text-center">
-                  <Spinner className="border-muted/40 border-t-accent" />
-                </td>
-              </tr>
-            ) : data.length === 0 ? (
-              <tr>
-                <td colSpan={colCount}>
-                  <EmptyState message={emptyMessage ?? t('table.noRecords')} />
-                </td>
-              </tr>
-            ) : (
-              data.map((row) => (
-                <tr
+      {/* Render Mode 1: Cards Grid */}
+      {activeViewMode === 'card' ? (
+        <div className="p-4">
+          {loading ? (
+            <div className="py-16 text-center">
+              <Spinner className="border-muted/40 border-t-accent" />
+            </div>
+          ) : data.length === 0 ? (
+            <EmptyState message={emptyMessage ?? t('table.noRecords')} />
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {data.map((row) => (
+                <div
                   key={rowKey(row)}
-                  className="border-b border-glass/60 transition-colors last:border-0 hover:bg-accent/[0.04]"
+                  className="rounded-xl border border-glass bg-surface p-4 shadow-sm hover:border-accent/30 transition-all flex flex-col justify-between"
                 >
-                  {visibleColumns.map((col) => (
-                    <td key={col.key} className={cn('text-main', tdPadding, col.className)}>
-                      {col.render
-                        ? col.render(row)
-                        : String((row as Record<string, unknown>)[col.key] ?? '')}
-                    </td>
-                  ))}
-                  {actions && <td className={cn('text-right', tdPadding)}>{actions(row)}</td>}
+                  {cardRender ? (
+                    cardRender(row)
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex items-start justify-between gap-2 border-b border-glass pb-2.5">
+                        <div className="min-w-0 font-semibold text-main text-sm truncate">
+                          {visibleColumns[0]?.render
+                            ? visibleColumns[0].render(row)
+                            : String((row as Record<string, unknown>)[visibleColumns[0]?.key] ?? '')}
+                        </div>
+                        {actions && <div className="shrink-0">{actions(row)}</div>}
+                      </div>
+
+                      <div className="space-y-1.5 text-xs">
+                        {visibleColumns.slice(1).map((col) => (
+                          <div key={col.key} className="flex items-center justify-between gap-2">
+                            <span className="text-muted/70">{col.header}:</span>
+                            <span className="text-main font-medium truncate">
+                              {col.render
+                                ? col.render(row)
+                                : String((row as Record<string, unknown>)[col.key] ?? '')}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : activeViewMode === 'list' ? (
+        /* Render Mode 2: Compact List */
+        <div className="p-2">
+          {loading ? (
+            <div className="py-16 text-center">
+              <Spinner className="border-muted/40 border-t-accent" />
+            </div>
+          ) : data.length === 0 ? (
+            <EmptyState message={emptyMessage ?? t('table.noRecords')} />
+          ) : (
+            <div className="divide-y divide-glass/60">
+              {data.map((row) => (
+                <div
+                  key={rowKey(row)}
+                  className="p-3 flex items-center justify-between gap-4 hover:bg-accent/[0.03] transition-colors rounded-lg"
+                >
+                  {listRender ? (
+                    listRender(row)
+                  ) : (
+                    <>
+                      <div className="flex flex-1 items-center gap-4 min-w-0 flex-wrap">
+                        {visibleColumns.map((col, idx) => (
+                          <div
+                            key={col.key}
+                            className={
+                              idx === 0
+                                ? 'min-w-[160px] font-semibold text-main text-sm'
+                                : 'text-xs text-muted'
+                            }
+                          >
+                            {col.render
+                              ? col.render(row)
+                              : String((row as Record<string, unknown>)[col.key] ?? '')}
+                          </div>
+                        ))}
+                      </div>
+                      {actions && <div className="shrink-0">{actions(row)}</div>}
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        /* Render Mode 3: Classic Table (Default) */
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="border-b border-glass bg-bg/40">
+                {visibleColumns.map((col) => (
+                  <th
+                    key={col.key}
+                    aria-sort={ariaSort(col)}
+                    className={cn(
+                      'text-left font-semibold uppercase tracking-wide text-muted',
+                      thPadding,
+                      col.className,
+                    )}
+                  >
+                    {headerContent(col)}
+                  </th>
+                ))}
+                {actions && (
+                  <th
+                    className={cn(
+                      'text-right font-semibold uppercase tracking-wide text-muted',
+                      thPadding,
+                    )}
+                  >
+                    {actionsHeader}
+                  </th>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={colCount} className="px-4 py-16 text-center">
+                    <Spinner className="border-muted/40 border-t-accent" />
+                  </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ) : data.length === 0 ? (
+                <tr>
+                  <td colSpan={colCount}>
+                    <EmptyState message={emptyMessage ?? t('table.noRecords')} />
+                  </td>
+                </tr>
+              ) : (
+                data.map((row) => (
+                  <tr
+                    key={rowKey(row)}
+                    className="border-b border-glass/60 transition-colors last:border-0 hover:bg-accent/[0.04]"
+                  >
+                    {visibleColumns.map((col) => (
+                      <td key={col.key} className={cn('text-main', tdPadding, col.className)}>
+                        {col.render
+                          ? col.render(row)
+                          : String((row as Record<string, unknown>)[col.key] ?? '')}
+                      </td>
+                    ))}
+                    {actions && <td className={cn('text-right', tdPadding)}>{actions(row)}</td>}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-4 border-t border-glass bg-bg/40 px-4 py-3">
         {/* Rows-per-page: minimal segments while few options; a ghost native select when
