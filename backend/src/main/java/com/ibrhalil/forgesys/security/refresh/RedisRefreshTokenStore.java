@@ -1,5 +1,6 @@
 package com.ibrhalil.forgesys.security.refresh;
 
+import com.ibrhalil.forgesys.security.TokenHasher;
 import com.ibrhalil.forgesys.security.jwt.JwtCookieProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,16 +13,12 @@ import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Component;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashSet;
-import java.util.HexFormat;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -375,12 +372,7 @@ public class RedisRefreshTokenStore implements RefreshTokenStore {
     }
 
     private static String sha256Hex(String input) {
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            return HexFormat.of().formatHex(md.digest(input.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 not available", e);
-        }
+        return TokenHasher.sha256Hex(input);
     }
 
     private static UUID parseUserId(Object raw) {

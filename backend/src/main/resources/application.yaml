@@ -50,6 +50,17 @@ forgesys:
     # seeding failure never breaks provisioning.
     sample-data:
       enabled: ${FORGESYS_SAMPLE_DATA:true}
+  mail:
+    # Outgoing mail (user lifecycle + mail epic). Prod sends via SMTP (SmtpMailSender,
+    # spring.mail.* in application-prod.yaml); dev logs (LogMailSender); test collects
+    # in memory (InMemoryMailSender). From must be RFC 822 ("Name <addr>").
+    from: ${MAIL_FROM:ForgeSys <no-reply@forgessy.local>}
+    # Template language for all recipients until per-user preferences exist (tr|en).
+    default-language: ${MAIL_DEFAULT_LANGUAGE:tr}
+    # Optional filesystem override for the classpath mail/*.html templates
+    # (infra/templates/ in prod — copy the template you want to change). Empty =
+    # classpath defaults.
+    templates-dir: ${MAIL_TEMPLATES_DIR:}
   security:
     # Global password pepper (K-23). HMAC-SHA256 pre-hash key combined with BCrypt
     # so a DB leak alone cannot brute-force password hashes. MUST be non-blank —
@@ -61,12 +72,20 @@ forgesys:
     # back to /api/v1/auth/company/verify). Token lifetime in hours.
     app-base-url: ${APP_BASE_URL:http://localhost:3000}
     verification-token-ttl-hours: ${VERIFICATION_TOKEN_TTL_HOURS:24}
+    # User lifecycle tokens (t_auth_tokens, tenant schema) — raw token lives only in
+    # the mailed link; the DB keeps its SHA-256 digest (RISK-30 conventions).
+    email-verify-ttl-hours: ${EMAIL_VERIFY_TTL_HOURS:24}
+    reset-token-ttl-minutes: ${RESET_TOKEN_TTL_MINUTES:30}
+    # RISK-30 stale-token retention (days): signup verification tokens consumed or
+    # expired longer than this ago are purged daily at 03:00 UTC (TokenPurgeJob).
+    verification-token-retention-days: ${VERIFICATION_TOKEN_RETENTION_DAYS:7}
     # Faz 5 concurrent-session limit per user. On login, if the user already holds
     # this many active sessions the oldest are evicted (login always succeeds). 0 =
     # unlimited (default). Caps the blast radius of a compromised account.
     max-sessions: ${MAX_SESSIONS:0}
     # Faz 3 token-bucket rate limit on the public auth endpoints (/auth/login,
-    # /auth/company/verify, /auth/refresh), keyed by scope + tenant + client IP.
+    # /auth/company/verify, /auth/verify-email, /auth/forgot-password,
+    # /auth/reset-password, /auth/refresh), keyed by scope + tenant + client IP.
     # Complements the per-account brute-force lockout (RISK-22) against credential
     # stuffing from one IP. Disabled in the test profile.
     rate-limit:

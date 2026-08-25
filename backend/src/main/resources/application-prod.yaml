@@ -20,6 +20,17 @@ spring:
   # Externalized config overlay is wired up via SPRING_CONFIG_ADDITIONAL_LOCATION
   # env var (see docker-compose-prod.yml + .env.example) — not via spring.config.import
   # here, to avoid duplicate resolution.
+  # SMTP for outgoing mail (SmtpMailSender, prod-only). Provider-agnostic: Brevo,
+  # SendGrid, SES SMTP or a plain relay — all speak these properties. SmtpMailSender
+  # fails startup fast when MAIL_HOST is unset (no silent mail loss in prod).
+  mail:
+    host: ${MAIL_HOST:}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${MAIL_SMTP_AUTH:true}
+      mail.smtp.starttls.enable: ${MAIL_SMTP_STARTTLS:true}
 
 # K-41: OpenAPI docs are a dev-only tool. Both the spec endpoint and the Swagger UI
 # are disabled in prod — no API surface disclosure in deployed environments.

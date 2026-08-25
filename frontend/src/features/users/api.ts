@@ -18,6 +18,8 @@ export const usersApi = {
   delete: (id: string) => api.delete<void>(`/api/v1/users/${id}`),
   /** Clears an active brute-force lockout ahead of expiry ([RISK-22] admin unlock, K-37: POST). */
   unlock: (id: string) => api.post<void>(`/api/v1/users/${id}/unlock`),
+  /** Re-sends the email-verification mail to an unverified user (409 when verified). */
+  resendVerification: (id: string) => api.post<void>(`/api/v1/users/${id}/resend-verification`),
   setRoles: (id: string, data: AssignRolesRequest) =>
     api.put<User>(`/api/v1/users/${id}/roles`, data),
   setGroups: (id: string, data: AssignGroupsRequest) =>

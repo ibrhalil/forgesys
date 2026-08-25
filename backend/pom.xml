@@ -68,6 +68,13 @@
             <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
         </dependency>
 
+        <!-- SMTP mail (user lifecycle + mail epic). Version from the BOM; consumed by
+             SmtpMailSender (prod profile only). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+
         <!-- OpenAPI 3 docs + Swagger UI (K-41). Dev-only: application-prod.yaml sets
              springdoc.api-docs.enabled/swagger-ui.enabled=false. -->
         <dependency>

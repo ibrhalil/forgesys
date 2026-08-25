@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { LuEllipsisVertical, LuKeyRound, LuListChecks, LuMonitor, LuPencil, LuTrash2, LuLockOpen } from 'react-icons/lu';
+import { LuEllipsisVertical, LuKeyRound, LuListChecks, LuMailCheck, LuMonitor, LuPencil, LuTrash2, LuLockOpen } from 'react-icons/lu';
 import {
   useUser, useUserEffectivePermissions, useUserActivity, useCreateUser, useUpdateUser,
-  useSetUserRoles, useSetUserGroups, useDeleteUser, useUnlockUser,
+  useSetUserRoles, useSetUserGroups, useDeleteUser, useUnlockUser, useResendVerification,
 } from './hooks';
 import { isLocked } from './types';
 import { formatDateTime } from '../../lib/format';
@@ -62,6 +62,7 @@ export function UserDetailPage() {
   const setGroups = useSetUserGroups();
   const del = useDeleteUser();
   const unlockUser = useUnlockUser();
+  const resendVerification = useResendVerification();
   const currentUserId = useAuthStore((s) => s.user?.id);
   const canWrite = useAuthStore((s) => s.hasAuthority(PERMISSIONS.USER_WRITE));
   const canDelete = useAuthStore((s) => s.hasAuthority(PERMISSIONS.USER_DELETE));
@@ -211,6 +212,19 @@ export function UserDetailPage() {
                   ? [
                       { label: t('users.passwordBtn'), onClick: () => setResetting(true), icon: LuKeyRound },
                       { label: t('nav.sessions'), onClick: () => navigate(`/admin/users/${user.id}/sessions`), icon: LuMonitor },
+                      // Optional-policy email verification: only meaningful pre-verification.
+                      ...(user.emailVerified ? [] : [{
+                        label: t('users.resendVerification'),
+                        onClick: async () => {
+                          try {
+                            await resendVerification.mutateAsync(user.id);
+                            notify.success(t('users.verificationResent'));
+                          } catch {
+                            /* rejection is reported by the global mutation toast */
+                          }
+                        },
+                        icon: LuMailCheck,
+                      }]),
                     ]
                   : []),
                 // Unlock only makes sense while an active lock window is running.

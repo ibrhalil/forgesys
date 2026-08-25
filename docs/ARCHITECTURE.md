@@ -127,11 +127,12 @@ flowchart TB
 | Şema             | Tablo               | Amaç                                 | Migration           |
 |------------------|---------------------|--------------------------------------|---------------------|
 | `public`         | `t_companies`       | Tenant kayıt (subdomain→schema map, status)  | `public/V1__tenant_registry.sql` |
-| `public`         | `t_tenant_verification_tokens` | K-21 signup token'ları (admin credential'lar gömülü) | `public/V1.1__signup_verification_tokens.sql` |
+| `public`         | `t_tenant_verification_tokens` | K-21 signup token'ları (SHA-256 digest; `admin_password_hash` provisioning sonrası null — RISK-30) | `public/V1.1` + `public/V3__token_hash_at_rest.sql` |
 | `public`         | `t_plans`           | Plan kataloğu (FREE/PRO/ENTERPRISE; `PlanSyncRunner` upsert — registry kodda, [K-16](DECISIONS.md#k-16)) | `public/V2__plans_subscriptions_modules.sql` |
 | `public`         | `t_subscriptions`   | Tenant→plan aboneliği (FREE default) | `public/V2__plans_subscriptions_modules.sql` |
 | `public`         | `t_tenant_modules`  | Tenant modül aktivasyon kayıtları   | `public/V2__plans_subscriptions_modules.sql` |
 | `tenant_<sub>`   | `t_users`           | Kullanıcı hesabı (credential'lar)    | `tenant/V1__iam_users.sql` |
+| `tenant_<sub>`   | `t_auth_tokens`     | Kullanıcı lifecycle token'ları (email verify / password reset — SHA-256 digest, single-use; [K-48](DECISIONS.md#k-48)) | `tenant/V4__user_auth_tokens.sql` |
 | `tenant_<sub>`   | `t_user_accounts`   | Security state (lock, failed login)  | `tenant/V1__iam_users.sql` |
 | `tenant_<sub>`   | `t_user_profiles`   | PII (isim, telefon, adres)           | `tenant/V1__iam_users.sql` |
 | `tenant_<sub>`   | `t_roles`           | RBAC rolleri (+ `all_permissions` flag, parent inheritance) | `tenant/V1.1__iam_rbac.sql` |
@@ -157,15 +158,15 @@ flowchart TB
 **Faz 1 — `createPendingCompany`** (`@Transactional`, hafif):
 1. `validateUnique` (subdomain + schemaName; `email_domain` K-32 ile kaldırıldı).
 2. `public.t_companies` satırı INSERT (status=`PROVISIONING`).
-3. `public.t_tenant_verification_tokens` INSERT (token + admin email/password-hash/first/last name + expiresAt).
-4. `VerificationSender.send(adminEmail, link)` — link: `${appBaseUrl}/verify-tenant?token=...`.
+3. `public.t_tenant_verification_tokens` INSERT (token SHA-256 digest — RISK-30 hash-at-rest; admin email/password-hash/first/last name + expiresAt).
+4. `MailSender.send(MailMessage)` ([K-48](DECISIONS.md#k-48)) — TENANT_VERIFY şablonu, link: `${appBaseUrl}/verify-tenant?token=...`.
 
 **Faz 2 — `verifyAndProvision(token)`** (`@Transactional`, senkron ağır — kullanıcı linki tıklar):
 1. Token valid mi? (`usedAt != null` → `TENANT_TOKEN_ALREADY_USED`, `expiresAt <= now` → `TENANT_TOKEN_EXPIRED`, yok → `TENANT_TOKEN_INVALID`). Company `PROVISIONING` değilse reject.
 2. `CREATE SCHEMA IF NOT EXISTS tenant_<subdomain>` (raw JDBC — PostgreSQL implicit commit, transaction dışına kaçar; DEBT-10 partial).
 3. Flyway programmatik: `db/migration/tenant/*.sql` yeni şemada migrate.
 4. `TenantContext.setCurrentTenant("tenant_<subdomain>")` set et.
-5. Admin user INSERT (email/password-hash token'dan, `emailVerified=true`) + `RbacSeeder.seedForCurrentTenant()` (Admin rolü + permission catalog).
+5. Admin user INSERT (email/password-hash token'dan, `emailVerified=true`) + `RbacSeeder.seedForCurrentTenant()` (Admin rolü + permission catalog); token'ın `adminPasswordHash`'i null'lanır (RISK-30 — rollback'te null da döner, DEBT-10 recovery bozulmaz).
 6. `TenantContext.clear()` `finally`'de.
 7. `Company.status = ACTIVE`, `token.usedAt = now`.
 8. Transaction commit'inden sonra (afterCommit senkronizasyonu) sample data seeding ([K-47](DECISIONS.md#k-47)): `TenantSampleDataService` config gate (`forgesys.provisioning.sample-data.enabled`) + iki katman fail-safe; seed'in REQUIRES_NEW tx'i aktivasyon/subscription satırlarını görmek zorunda olduğundan bilinçli post-commit.
@@ -272,6 +273,7 @@ classDiagram
     SoftDeleteAuditEntity <|-- UserAccount
     SoftDeleteAuditEntity <|-- UserProfile
     GeneratedIdAuditEntity <|-- TenantVerificationToken
+    GeneratedIdAuditEntity <|-- UserAuthToken
     GeneratedIdAuditEntity <|-- Plan
     GeneratedIdAuditEntity <|-- AuditLog
     GeneratedIdAuditEntity <|-- LoginHistory
@@ -303,6 +305,7 @@ Profile-based config. Aktif profil `SPRING_PROFILES_ACTIVE` (default: `dev`).
 - **Test profili istisnası:** `ddl-auto=create-drop` + `flyway.enabled=false`. Spring Boot 4.1 + Flyway 12'de `FlywayAutoConfiguration` H2 dialect algılamıyor (`flyway-database-h2` BOM'da yok), Flyway bean oluşturulmuyor. Test'ler Hibernate'in entity metadata'dan şema üretmesine güveniyor. Gerçek Flyway test'i [`ROADMAP.md`](ROADMAP.md) Testcontainers kapsamında (Faz 3.X).
 - H2 `MODE=PostgreSQL`'de çalışır → build Docker gerektirmez.
 - H2 sınırları: `JSONB`, partial index, `SET search_path` desteklenmez → multi-tenancy akışı H2'de test edilemez, sadece context yükü doğrulanır.
+- **Mail/SMTP ([K-48](DECISIONS.md#k-48)):** sender profil ile split — prod `SmtpMailSender` (`spring.mail.*` → `MAIL_HOST`/`MAIL_PORT`/`MAIL_USERNAME`/`MAIL_PASSWORD`; `MAIL_HOST` boşsa startup fail-fast), dev `LogMailSender` (log'a düşer), test `InMemoryMailSender`. Ortak config `forgesys.mail.*`: `from`, `default-language` (tr default), `templates-dir` (classpath `mail/*.html` override — `infra/templates/`). Şablonlar TR/EN: tenant-verify, email-verify, password-reset.
 - **Actuator/metrics ([K-43](DECISIONS.md#k-43)):** dev/test — same-port, `health,info,metrics,prometheus` (scrape auth'suz). Prod — ayrı management portu **8081** (compose'da `expose`-only, host'a publish edilmez; management child context'inde security zinciri uygulanmaz → internal ağdan auth'suz scrape) + daraltılmış exposure (`health,info,prometheus`). Custom gauge: `forgesys.tenants.active`.
 
 ## İlgili Dokümanlar

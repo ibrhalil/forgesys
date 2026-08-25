@@ -88,4 +88,28 @@ class RateLimitFilterTest {
         assertThat(response.getStatus()).isEqualTo(200);
         assertThat(chain.getRequest()).isNotNull();
     }
+
+    /**
+     * K-48 user-lifecycle endpoints join the rate-limited scopes — token-consuming
+     * public endpoints must be covered by the IP+tenant bucket against link guessing.
+     */
+    @Test
+    void userLifecycleEndpointsAreRateLimited() throws Exception {
+        for (String uri : new String[]{
+                "/api/v1/auth/verify-email", "/api/v1/auth/forgot-password", "/api/v1/auth/reset-password"}) {
+            RateLimitFilter filter = new RateLimitFilter(
+                    (key, cap, rate, period) -> new RateLimitResult(false, 30L),
+                    new RateLimitProperties(true, 1, 1, 60),
+                    objectMapper);
+
+            MockHttpServletRequest request = new MockHttpServletRequest("POST", uri);
+            MockHttpServletResponse response = new MockHttpServletResponse();
+            MockFilterChain chain = new MockFilterChain();
+
+            filter.doFilter(request, response, chain);
+
+            assertThat(response.getStatus()).as("blocked: %s", uri).isEqualTo(429);
+            assertThat(chain.getRequest()).as("short-circuited: %s", uri).isNull();
+        }
+    }
 }

@@ -115,6 +115,17 @@ public class UserController {
         return ResponseEntity.noContent().build();
     }
 
+    /**
+     * Re-sends the email-verification mail to an unverified user (optional-policy
+     * flow). 409 {@code user_already_verified} when the address is verified.
+     */
+    @PostMapping("/{id}/resend-verification")
+    @PreAuthorize("hasAuthority('iam:user:write')")
+    public ResponseEntity<Void> resendVerification(@PathVariable UUID id) {
+        userService.resendVerification(id);
+        return ResponseEntity.noContent().build();
+    }
+
     @PutMapping("/{id}/roles")
     @PreAuthorize("hasAuthority('iam:user:write')")
     public ResponseEntity<UserResponse> setRoles(@PathVariable UUID id,

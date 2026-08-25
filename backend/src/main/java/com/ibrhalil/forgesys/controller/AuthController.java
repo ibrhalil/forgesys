@@ -4,9 +4,13 @@ import com.ibrhalil.forgesys.dto.CompanyRegisterRequest;
 import com.ibrhalil.forgesys.dto.CompanyRegisterResponse;
 import com.ibrhalil.forgesys.dto.CompanyVerifyRequest;
 import com.ibrhalil.forgesys.dto.CompanyVerifyResponse;
+import com.ibrhalil.forgesys.dto.EmailVerificationResponse;
+import com.ibrhalil.forgesys.dto.EmailVerifyRequest;
+import com.ibrhalil.forgesys.dto.ForgotPasswordRequest;
 import com.ibrhalil.forgesys.dto.LoginRequest;
 import com.ibrhalil.forgesys.dto.LoginResponse;
 import com.ibrhalil.forgesys.dto.RefreshRequest;
+import com.ibrhalil.forgesys.dto.ResetPasswordRequest;
 import com.ibrhalil.forgesys.dto.SubdomainSuggestionRequest;
 import com.ibrhalil.forgesys.dto.SubdomainSuggestionResponse;
 import com.ibrhalil.forgesys.security.CustomUserDetails;
@@ -14,6 +18,7 @@ import com.ibrhalil.forgesys.security.jwt.JwtCookieProperties;
 import com.ibrhalil.forgesys.service.AuthService;
 import com.ibrhalil.forgesys.service.SubdomainSuggestionService;
 import com.ibrhalil.forgesys.service.TenantProvisioningService;
+import com.ibrhalil.forgesys.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -35,6 +40,7 @@ public class AuthController {
 
     private final TenantProvisioningService tenantProvisioningService;
     private final AuthService authService;
+    private final UserService userService;
     private final SubdomainSuggestionService subdomainSuggestionService;
     private final JwtCookieProperties cookieProperties;
 
@@ -59,6 +65,39 @@ public class AuthController {
     public ResponseEntity<SubdomainSuggestionResponse> suggestSubdomain(
             @Valid @RequestBody SubdomainSuggestionRequest request) {
         return ResponseEntity.ok(subdomainSuggestionService.suggest(request.name()));
+    }
+
+    /**
+     * Consumes an email-verification token (user lifecycle, optional policy). Public —
+     * the tenant is resolved by {@code TenantFilter} from the subdomain-anchored link
+     * host; the token itself is single-use and digest-stored.
+     */
+    @PostMapping("/verify-email")
+    public ResponseEntity<EmailVerificationResponse> verifyEmail(@Valid @RequestBody EmailVerifyRequest request) {
+        userService.verifyEmail(request.token());
+        return ResponseEntity.ok(new EmailVerificationResponse("E-posta adresiniz doğrulandı. Giriş yapabilirsiniz."));
+    }
+
+    /**
+     * Starts the self-service password reset. ALWAYS 200 — unknown addresses and
+     * mail failures are indistinguishable from success (no account enumeration).
+     */
+    @PostMapping("/forgot-password")
+    public ResponseEntity<EmailVerificationResponse> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        userService.requestPasswordReset(request.email());
+        return ResponseEntity.ok(new EmailVerificationResponse(
+                "E-posta adresi kayıtlıysa şifre sıfırlama bağlantısı gönderildi."));
+    }
+
+    /**
+     * Completes the self-service password reset: consumes the single-use token,
+     * applies the new password and kills all of the user's sessions.
+     */
+    @PostMapping("/reset-password")
+    public ResponseEntity<EmailVerificationResponse> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        userService.resetPasswordWithToken(request.token(), request.newPassword());
+        return ResponseEntity.ok(new EmailVerificationResponse(
+                "Şifreniz güncellendi. Yeni şifrenizle giriş yapabilirsiniz."));
     }
 
     @PostMapping("/login")

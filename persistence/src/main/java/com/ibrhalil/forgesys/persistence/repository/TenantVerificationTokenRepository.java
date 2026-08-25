@@ -13,9 +13,11 @@ import java.util.UUID;
 
 public interface TenantVerificationTokenRepository extends JpaRepository<TenantVerificationToken, UUID> {
 
-    Optional<TenantVerificationToken> findByToken(String token);
-
-    Optional<TenantVerificationToken> findByCompanyId(UUID companyId);
+    /**
+     * Looks up by the SHA-256 hex digest of the presented raw token ([RISK-30]
+     * hash-at-rest) — the caller hashes before querying.
+     */
+    Optional<TenantVerificationToken> findByToken(String tokenHash);
 
     /**
      * [RISK-25] Atomically claims a verification token by stamping {@code used_at} only
@@ -29,9 +31,19 @@ public interface TenantVerificationTokenRepository extends JpaRepository<TenantV
      * claim is a single-column write — no read-modify-write window. Expiry / validity are
      * validated by a separate SELECT before this call so the right
      * {@code TENANT_TOKEN_EXPIRED} / {@code TENANT_TOKEN_INVALID} code is preserved.
+     * The parameter is the token's SHA-256 digest ([RISK-30]), mirroring {@link #findByToken}.
      */
     @Modifying
     @Query("UPDATE TenantVerificationToken t SET t.usedAt = :now "
-            + "WHERE t.token = :token AND t.usedAt IS NULL")
-    int claimToken(@Param("token") String token, @Param("now") OffsetDateTime now);
+            + "WHERE t.token = :tokenHash AND t.usedAt IS NULL")
+    int claimToken(@Param("tokenHash") String tokenHash, @Param("now") OffsetDateTime now);
+
+    /**
+     * [RISK-30] Deletes stale tokens: rows consumed ({@code usedAt}) or expired
+     * ({@code expiresAt}) before the cutoff. Runs from {@code TokenPurgeJob} daily;
+     * keeps the table from growing unbounded. Returns the deleted row count.
+     */
+    @Modifying
+    @Query("DELETE FROM TenantVerificationToken t WHERE t.usedAt < :cutoff OR t.expiresAt < :cutoff")
+    int purgeStale(@Param("cutoff") OffsetDateTime cutoff);
 }

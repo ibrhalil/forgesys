@@ -14,16 +14,21 @@ import com.ibrhalil.forgesys.dto.UserProfileUpdateRequest;
 import com.ibrhalil.forgesys.dto.UserResponse;
 import com.ibrhalil.forgesys.dto.UserUpdateRequest;
 import com.ibrhalil.forgesys.config.PermissionCatalog;
+import com.ibrhalil.forgesys.entity.Company;
 import com.ibrhalil.forgesys.entity.Group;
 import com.ibrhalil.forgesys.entity.Role;
 import com.ibrhalil.forgesys.entity.User;
 import com.ibrhalil.forgesys.entity.UserAccount;
+import com.ibrhalil.forgesys.entity.UserAuthToken;
+import com.ibrhalil.forgesys.entity.UserAuthTokenPurpose;
 import com.ibrhalil.forgesys.entity.UserDirectoryView;
 import com.ibrhalil.forgesys.entity.UserDirectoryView_;
 import com.ibrhalil.forgesys.entity.UserProfile;
 import com.ibrhalil.forgesys.exception.BusinessException;
 import com.ibrhalil.forgesys.exception.ErrorCode;
 import com.ibrhalil.forgesys.exception.ResourceNotFoundException;
+import com.ibrhalil.forgesys.common.tenant.TenantContext;
+import com.ibrhalil.forgesys.persistence.repository.CompanyRepository;
 import com.ibrhalil.forgesys.persistence.repository.GroupRepository;
 import com.ibrhalil.forgesys.persistence.repository.LoginHistoryRepository;
 import com.ibrhalil.forgesys.persistence.repository.RoleRepository;
@@ -32,6 +37,10 @@ import com.ibrhalil.forgesys.persistence.repository.UserRepository;
 import com.ibrhalil.forgesys.security.CustomUserDetails;
 import com.ibrhalil.forgesys.security.SessionRevocationService;
 import com.ibrhalil.forgesys.security.CustomUserDetailsService;
+import com.ibrhalil.forgesys.service.mail.MailLinkBuilder;
+import com.ibrhalil.forgesys.service.mail.MailMessage;
+import com.ibrhalil.forgesys.service.mail.MailSender;
+import com.ibrhalil.forgesys.service.mail.MailTemplate;
 import com.ibrhalil.forgesys.audit.AuditDeltaContext;
 import com.ibrhalil.forgesys.audit.AuditLog;
 import com.ibrhalil.forgesys.security.LastAdminGuard;
@@ -39,6 +48,7 @@ import com.ibrhalil.forgesys.web.filter.FilterFieldSet;
 import com.ibrhalil.forgesys.web.filter.FilterFieldType;
 import com.ibrhalil.forgesys.web.filter.FilterSpecifications;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -48,6 +58,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 
 import java.time.OffsetDateTime;
@@ -59,6 +71,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class UserService {
@@ -90,6 +103,10 @@ public class UserService {
     private final SessionRevocationService sessionRevocationService;
     private final CustomUserDetailsService customUserDetailsService;
     private final LastAdminGuard lastAdminGuard;
+    private final UserTokenService userTokenService;
+    private final MailSender mailSender;
+    private final MailLinkBuilder mailLinkBuilder;
+    private final CompanyRepository companyRepository;
 
     @Transactional(readOnly = true)
     public Page<UserDirectoryViewResponse> search(String q, Pageable pageable) {
@@ -257,7 +274,179 @@ public class UserService {
         if (!roles.isEmpty() || !groups.isEmpty()) {
             userRepository.save(user);
         }
+        // Email verification is optional-policy: the user can log in immediately; the
+        // mail only verifies the address. Best-effort AFTER commit — user creation
+        // must never depend on SMTP (admin can resend from the detail page).
+        scheduleVerificationMail(saved);
         return toResponse(saved);
+    }
+
+    // ── email verification (optional policy) ──
+
+    /**
+     * Consumes an email-verification token and marks the user's address verified.
+     * Idempotent on the end state: a re-clicked link whose token is already consumed
+     * succeeds silently WHEN the user is already verified (the common case — the first
+     * click did the work); only a genuinely unusable token surfaces an error. Runs
+     * WITHOUT an authenticated caller (public endpoint) — tenant scope comes from
+     * {@code TenantFilter} (the link is subdomain-anchored).
+     */
+    @Transactional
+    public void verifyEmail(String rawToken) {
+        UserAuthToken token;
+        try {
+            token = userTokenService.consume(rawToken, UserAuthTokenPurpose.EMAIL_VERIFY);
+        } catch (BusinessException e) {
+            if (e.errorCode() != ErrorCode.USER_TOKEN_ALREADY_USED
+                    || !alreadyVerifiedWithoutConsuming(rawToken)) {
+                throw e;
+            }
+            // Used token + verified user → the first click already did the work.
+            return;
+        }
+        User user = userRepository.findById(token.getUser().getId())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found for verification token"));
+        if (!user.isEmailVerified()) {
+            user.setEmailVerified(true);
+            userRepository.save(user);
+            log.info("User email verified: userId={}", user.getId());
+        }
+    }
+
+    /**
+     * Idempotency probe for a re-clicked link: the token resolves (by digest) to a
+     * consumed EMAIL_VERIFY token whose user is already verified. Any other outcome
+     * (unknown token, wrong purpose, unverified user) means the caller deserves the
+     * original error.
+     */
+    private boolean alreadyVerifiedWithoutConsuming(String rawToken) {
+        return userTokenService.peek(rawToken)
+                .filter(t -> t.getPurpose() == UserAuthTokenPurpose.EMAIL_VERIFY && t.isUsed())
+                .map(t -> userRepository.findById(t.getUser().getId())
+                        .map(User::isEmailVerified)
+                        .orElse(false))
+                .orElse(false);
+    }
+
+    /**
+     * Admin-triggered resend of the verification mail. Fail-loud (unlike the
+     * best-effort send at creation): the caller explicitly asked for the mail, so an
+     * SMTP failure should surface — the transaction (and the fresh token) rolls back.
+     */
+    @Transactional
+    @AuditLog(action = "user_verification_resent", entityType = "User", entityId = "#id", entityName = "")
+    public void resendVerification(UUID id) {
+        User user = getUserOrThrow(id);
+        if (user.isEmailVerified()) {
+            throw new BusinessException(ErrorCode.USER_ALREADY_VERIFIED,
+                    "User's email is already verified: " + user.getEmail());
+        }
+        sendVerificationMail(user);
+    }
+
+    /** After-commit wrapper so creation never rolls back on a mail failure. */
+    private void scheduleVerificationMail(User user) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            sendVerificationMailSafe(user);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                sendVerificationMailSafe(user);
+            }
+        });
+    }
+
+    // ── self-service password reset (forgot-password / reset-password) ──
+
+    /**
+     * Handles a {@code forgot-password} request. ALWAYS returns normally — an unknown
+     * email, a disabled account and a failed mail send are indistinguishable to the
+     * caller (no account enumeration; the SMTP-down path must not leak existence via
+     * a 500-vs-200 difference either, so even mail errors are swallowed + logged).
+     * The mailed link is subdomain-anchored; the token is single-use with the
+     * configured short TTL.
+     */
+    @Transactional
+    public void requestPasswordReset(String email) {
+        User user = userRepository.findByEmail(email).orElse(null);
+        if (user == null || !user.getUserAccount().isEnabled()) {
+            log.debug("Password reset requested for unknown/disabled address");
+            return;
+        }
+        try {
+            String rawToken = userTokenService.issue(user.getId(), UserAuthTokenPurpose.PASSWORD_RESET);
+            Company company = currentCompany();
+            String link = mailLinkBuilder.tenantLink(company.getSchemaName(), "/reset-password", rawToken);
+            mailSender.send(new MailMessage(
+                    user.getEmail(),
+                    MailTemplate.PASSWORD_RESET,
+                    link,
+                    displayName(user),
+                    company.getName(),
+                    userTokenService.ttl(UserAuthTokenPurpose.PASSWORD_RESET)));
+        } catch (Exception e) {
+            log.error("Password reset mail failed — request returns silently", e);
+        }
+    }
+
+    /**
+     * Consumes a password-reset token and applies the new password. Kills every
+     * outstanding session of the user afterwards ([RISK-21]/K-34 — same revoke chain
+     * as admin reset): outstanding access tokens die via {@code tokenInvalidBefore},
+     * refresh tokens are dropped. Audited as {@code user_password_reset_self} (actor
+     * is unauthenticated → the "system" fallback).
+     */
+    @Transactional
+    @AuditLog(action = "user_password_reset_self", entityType = "User", entityId = "", entityName = "")
+    public void resetPasswordWithToken(String rawToken, String newPassword) {
+        UserAuthToken token = userTokenService.consume(rawToken, UserAuthTokenPurpose.PASSWORD_RESET);
+        User user = userRepository.findById(token.getUser().getId())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found for reset token"));
+        user.setPassword(passwordEncoder.encode(newPassword));
+        sessionRevocationService.revokeUser(user.getId());
+        userRepository.save(user);
+        log.info("Self-service password reset completed: userId={}", user.getId());
+    }
+
+    /** After-commit wrapper so creation never rolls back on a mail failure. */
+
+    private void sendVerificationMailSafe(User user) {
+        try {
+            sendVerificationMail(user);
+        } catch (Exception e) {
+            log.error("Verification mail failed for user {} — user creation continues; admin can resend",
+                    user.getId(), e);
+        }
+    }
+
+    private void sendVerificationMail(User user) {
+        String rawToken = userTokenService.issue(user.getId(), UserAuthTokenPurpose.EMAIL_VERIFY);
+        Company company = currentCompany();
+        String link = mailLinkBuilder.tenantLink(company.getSchemaName(), "/verify-email", rawToken);
+        mailSender.send(new MailMessage(
+                user.getEmail(),
+                MailTemplate.EMAIL_VERIFY,
+                link,
+                displayName(user),
+                company.getName(),
+                userTokenService.ttl(UserAuthTokenPurpose.EMAIL_VERIFY)));
+    }
+
+    /** First name when present; the template's greeting falls back gracefully. */
+    private String displayName(User user) {
+        UserProfile profile = user.getUserProfile();
+        return profile == null ? null : profile.getFirstName();
+    }
+
+    private Company currentCompany() {
+        String schemaName = TenantContext.getCurrentTenant().orElse(null);
+        if (schemaName == null || schemaName.isBlank() || "public".equals(schemaName)) {
+            throw new IllegalStateException("Verification mail requires an active tenant context");
+        }
+        return companyRepository.findBySchemaName(schemaName)
+                .orElseThrow(() -> new IllegalStateException("No company for tenant schema " + schemaName));
     }
 
     @Transactional
