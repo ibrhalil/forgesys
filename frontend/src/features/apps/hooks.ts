@@ -21,7 +21,7 @@ function toastMutationError(err: unknown): void {
 
 // ─── Apps ───
 export function useApps(params: AppListParams = {}) {
-  return useQuery({ queryKey: ['apps', params], queryFn: () => appsApi.list(params) });
+  return useQuery({ queryKey: ['apps', params], queryFn: () => appsApi.searchOrList(params) });
 }
 
 export function useApp(id?: string) {

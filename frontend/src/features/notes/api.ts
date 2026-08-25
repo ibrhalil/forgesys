@@ -1,5 +1,5 @@
-import { api, normalizePage, toQuery } from '../../lib/api';
-import type { PageParams, PageResponse } from '../../types';
+import { api, normalizePage, searchPost, toQuery } from '../../lib/api';
+import type { FilterCriteria, PageParams, PageResponse, SearchRequestBody } from '../../types';
 import type { Note, NoteCategory, NoteCategoryRequest, NoteRequest } from './types';
 
 export interface NoteListParams extends PageParams {
@@ -7,6 +7,8 @@ export interface NoteListParams extends PageParams {
   pinned?: boolean;
   /** Cross-container narrowing (flat list) — the nested panel also lands here. */
   projectId?: string;
+  /** K-49 structured column-filter clauses. */
+  filters?: FilterCriteria[];
 }
 
 export const notesApi = {
@@ -22,6 +24,29 @@ export const notesApi = {
     return api
       .get<PageResponse<Note>>(`/api/v1/notes${qs ? `?${qs}` : ''}`)
       .then(normalizePage);
+  },
+  /**
+   * Engine list read: structured column-filter clauses route through
+   * `POST /notes/search` (with the scoped toolbar params folded in as EQ clauses);
+   * without clauses everything stays on the plain GET — the legacy toolbar filters
+   * keep their bookmarkable query-param shape.
+   */
+  searchOrList: ({
+    filters,
+    categoryId,
+    pinned,
+    projectId,
+    ...params
+  }: NoteListParams = {}) => {
+    if (!filters?.length) {
+      return notesApi.list({ ...params, categoryId, pinned, projectId });
+    }
+    const clauses: FilterCriteria[] = [...filters];
+    if (categoryId) clauses.push({ field: 'categoryId', operator: 'EQ', values: [categoryId] });
+    if (pinned != null) clauses.push({ field: 'pinned', operator: 'EQ', values: [String(pinned)] });
+    if (projectId) clauses.push({ field: 'projectId', operator: 'EQ', values: [projectId] });
+    const body: SearchRequestBody = { ...params, filters: clauses };
+    return searchPost<Note>('/api/v1/notes/search', body);
   },
   get: (id: string) => api.get<Note>(`/api/v1/notes/${id}`),
   create: (data: NoteRequest) => api.post<Note>('/api/v1/notes', data),

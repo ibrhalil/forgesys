@@ -4,6 +4,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import type { UserDirectoryView } from './types';
 import { isLocked } from './types';
 import { useUsers, useDeleteUser, useUnlockUser } from './hooks';
+import { rolesApi } from '../roles/api';
+import { groupsApi } from '../groups/api';
 import { useAuthStore } from '../../store/authStore';
 import { useT } from '../../lib/i18n';
 import { useListPageState } from '../../lib/useListPageState';
@@ -35,9 +37,19 @@ export function UsersPage() {
     setSearch,
     searchFields,
     setSearchFields,
+    filters,
+    setFilters,
     q,
   } = useListPageState({ defaultSort: { field: 'email', dir: 'asc' }, storageKey: 'users' });
-  const { data, isLoading, isFetching } = useUsers({ page, size: pageSize, sorts: [sort], q: q || undefined });
+  const { data, isLoading, isFetching } = useUsers({
+    page,
+    size: pageSize,
+    sorts: [sort],
+    q: q || undefined,
+    // Smart-search targeting: only send when narrowed (empty = all searchable fields).
+    qFields: searchFields.length ? searchFields : undefined,
+    filters: filters.length ? filters : undefined,
+  });
   const delUser = useDeleteUser();
   const unlockUser = useUnlockUser();
   const navigate = useNavigate();
@@ -51,12 +63,26 @@ export function UsersPage() {
   const [unlocking, setUnlocking] = useState<UserDirectoryView | null>(null);
   const [deleting, setDeleting] = useState<UserDirectoryView | null>(null);
 
+  // Aligned 1:1 with the backend's searchable registrations (UserService.FILTER_FIELDS) —
+  // the keys double as the `qFields` wire values, so targeting must use exact field names.
   const userSearchFields = [
-    { key: 'name', label: t('common.user'), searchable: true },
-    { key: 'status', label: t('common.status'), searchable: false },
-    { key: 'roles', label: t('common.roles'), searchable: false },
-    { key: 'groups', label: t('common.groups'), searchable: false },
+    { key: 'email', label: t('common.email'), searchable: true },
+    { key: 'username', label: t('common.username'), searchable: true },
+    { key: 'firstName', label: t('common.firstName'), searchable: true },
+    { key: 'lastName', label: t('common.lastName'), searchable: true },
+    { key: 'enabled', label: t('common.status'), searchable: false },
+    { key: 'roleIds', label: t('common.roles'), searchable: false },
+    { key: 'groupIds', label: t('common.groups'), searchable: false },
   ];
+
+  const roleOptionsLoader = (input: string) =>
+    rolesApi.list({ q: input || undefined, size: 50 }).then((p) =>
+      p.items.map((r) => ({ value: r.id, label: r.name })),
+    );
+  const groupOptionsLoader = (input: string) =>
+    groupsApi.list({ q: input || undefined, size: 50 }).then((p) =>
+      p.items.map((g) => ({ value: g.id, label: g.name })),
+    );
 
   const columns: Column<UserDirectoryView>[] = [
     {
@@ -64,6 +90,7 @@ export function UsersPage() {
       header: t('common.user'),
       // Column key ≠ backend field: the composite name cell sorts by email.
       sortKey: 'email',
+      filter: { field: 'email', control: 'text' },
       hideable: false,
       render: (u) => (
         <div className="flex flex-col">
@@ -76,10 +103,18 @@ export function UsersPage() {
         </div>
       ),
     },
-    { key: 'username', header: t('common.username'), sortKey: 'username', render: (u) => <span className="text-muted">{u.username}</span> },
+    {
+      key: 'username',
+      header: t('common.username'),
+      sortKey: 'username',
+      filter: { field: 'username', control: 'text' },
+      render: (u) => <span className="text-muted">{u.username}</span>,
+    },
     {
       key: 'status',
       header: t('common.status'),
+      // The composite status cell filters on the account's enabled flag.
+      filter: { field: 'enabled', control: 'boolean' },
       render: (u) => (
         <div className="flex flex-wrap gap-1">
           <Badge tone={u.enabled ? 'green' : 'muted'}>{u.enabled ? t('common.active') : t('common.disabled')}</Badge>
@@ -92,7 +127,13 @@ export function UsersPage() {
     {
       key: 'roles',
       header: t('common.roles'),
-      // Count-only on purpose (detail page shows the full list).
+      // Count chip sorts by the count; filtering targets membership (K-49 option C).
+      sortKey: 'roleCount',
+      filter: {
+        field: 'roleIds',
+        control: 'multiselect',
+        optionsLoader: roleOptionsLoader,
+      },
       render: (u) =>
         u.roleCount ? (
           <span>
@@ -106,6 +147,12 @@ export function UsersPage() {
     {
       key: 'groups',
       header: t('common.groups'),
+      sortKey: 'groupCount',
+      filter: {
+        field: 'groupIds',
+        control: 'multiselect',
+        optionsLoader: groupOptionsLoader,
+      },
       render: (u) =>
         u.groupCount ? (
           <span>
@@ -143,6 +190,8 @@ export function UsersPage() {
         onPageChange={setPage}
         sort={sort}
         onSortChange={toggleSort}
+        filters={filters}
+        onFiltersChange={setFilters}
         toolbar={
           <SearchInput
             value={search}

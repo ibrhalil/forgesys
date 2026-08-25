@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Group } from './types';
 import { useGroups, useCreateGroup, useDeleteGroup, useSetGroupRoles } from './hooks';
+import { rolesApi } from '../roles/api';
+import { usersApi } from '../users/api';
 import { notify, extractFieldErrors } from '../../lib/notify';
 import { LuShield, LuTrash2, LuUsersRound } from 'react-icons/lu';
 import { DataTable, type Column } from '../../components/ui/DataTable';
@@ -35,9 +37,18 @@ export function GroupsPage() {
     setSearch,
     searchFields,
     setSearchFields,
+    filters,
+    setFilters,
     q,
   } = useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'groups' });
-  const { data, isLoading, isFetching } = useGroups({ page, size: pageSize, sorts: [sort], q: q || undefined });
+  const { data, isLoading, isFetching } = useGroups({
+    page,
+    size: pageSize,
+    sorts: [sort],
+    q: q || undefined,
+    qFields: searchFields.length ? searchFields : undefined,
+    filters: filters.length ? filters : undefined,
+  });
   const delGroup = useDeleteGroup();
   const canWrite = useAuthStore((s) => s.hasAuthority(PERMISSIONS.GROUP_WRITE));
   const canDelete = useAuthStore((s) => s.hasAuthority(PERMISSIONS.GROUP_DELETE));
@@ -46,31 +57,53 @@ export function GroupsPage() {
   const [assignRolesTo, setAssignRolesTo] = useState<Group | null>(null);
   const [deleting, setDeleting] = useState<Group | null>(null);
 
+  // Aligned with the backend's searchable registrations (GroupService.FILTER_FIELDS).
   const groupSearchFields = [
     { key: 'name', label: t('common.group'), searchable: true },
     { key: 'description', label: t('common.description'), searchable: true },
-    { key: 'status', label: t('common.status'), searchable: false },
-    { key: 'roles', label: t('common.roles'), searchable: false },
+    { key: 'active', label: t('common.status'), searchable: false },
+    { key: 'roleIds', label: t('common.roles'), searchable: false },
+    { key: 'memberIds', label: t('common.members'), searchable: false },
   ];
+
+  const roleOptionsLoader = (input: string) =>
+    rolesApi.list({ q: input || undefined, size: 50 }).then((p) =>
+      p.items.map((r) => ({ value: r.id, label: r.name })),
+    );
+  const memberOptionsLoader = (input: string) =>
+    usersApi.list({ q: input || undefined, size: 50 }).then((p) =>
+      p.items.map((u) => ({ value: u.id, label: u.email })),
+    );
 
   const columns: Column<Group>[] = [
     {
       key: 'name',
       header: t('common.group'),
       sortKey: 'name',
+      filter: { field: 'name', control: 'text' },
       hideable: false,
       render: (g) => <Link to={`/groups/${g.id}`} className="font-medium text-main transition-colors hover:text-accent">{g.name}</Link>,
     },
-    { key: 'description', header: t('common.description'), render: (g) => <span className="text-muted">{g.description ?? '—'}</span> },
+    {
+      key: 'description',
+      header: t('common.description'),
+      sortKey: 'description',
+      filter: { field: 'description', control: 'text' },
+      render: (g) => <span className="text-muted">{g.description ?? '—'}</span>,
+    },
     {
       key: 'active',
       header: t('common.status'),
+      sortKey: 'active',
+      filter: { field: 'active', control: 'boolean' },
       render: (g) => <Badge tone={g.active ? 'green' : 'muted'}>{g.active ? t('common.active') : t('common.inactive')}</Badge>,
     },
     {
       key: 'roles',
       header: t('common.roles'),
-      // Count-only on purpose (detail page shows the full list).
+      // Count chip sorts by the count; filtering targets membership (K-49 option C).
+      sortKey: 'roleCount',
+      filter: { field: 'roleIds', control: 'multiselect', optionsLoader: roleOptionsLoader },
       render: (g) =>
         g.roles.length ? (
           <span>
@@ -81,7 +114,17 @@ export function GroupsPage() {
           <span className="text-muted">—</span>
         ),
     },
-    { key: 'memberCount', header: t('common.members'), render: (g) => <span className="font-semibold text-accent-blue">{g.memberCount}</span> },
+    {
+      key: 'memberCount',
+      header: t('common.members'),
+      sortKey: 'memberCount',
+      filter: {
+        field: 'memberIds',
+        control: 'multiselect',
+        optionsLoader: memberOptionsLoader,
+      },
+      render: (g) => <span className="font-semibold text-accent-blue">{g.memberCount}</span>,
+    },
   ];
 
   return (
@@ -109,6 +152,8 @@ export function GroupsPage() {
         onPageChange={setPage}
         sort={sort}
         onSortChange={toggleSort}
+        filters={filters}
+        onFiltersChange={setFilters}
         toolbar={
           <SearchInput
             value={search}

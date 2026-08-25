@@ -2,7 +2,6 @@ import { useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient, useQueries } from '@tanstack/react-query';
 import { usersApi } from './api';
 import { useAuthStore } from '../../store/authStore';
-import type { PageParams } from '../../types';
 import type { AssignRolesRequest } from '../roles/types';
 import type {
   CreateUserRequest, UpdateUserRequest, UserProfileUpdateRequest,
@@ -11,8 +10,8 @@ import type {
 
 // ─── Users ───
 /** Flat directory list items (DB-side join + counts, visibility-scoped). */
-export function useUsers(params: PageParams = {}) {
-  return useQuery({ queryKey: ['users', params], queryFn: () => usersApi.list(params) });
+export function useUsers(params: Parameters<typeof usersApi.searchOrList>[0] = {}) {
+  return useQuery({ queryKey: ['users', params], queryFn: () => usersApi.searchOrList(params) });
 }
 
 export function useUser(id?: string) {

@@ -47,9 +47,18 @@ export function ProjectsPage() {
     setSearch,
     searchFields,
     setSearchFields,
+    filters,
+    setFilters,
     q,
   } = useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'projects' });
-  const { data, isLoading, isFetching } = useProjects({ page, size: pageSize, sorts: [sort], q: q || undefined });
+  const { data, isLoading, isFetching } = useProjects({
+    page,
+    size: pageSize,
+    sorts: [sort],
+    q: q || undefined,
+    qFields: searchFields.length ? searchFields : undefined,
+    filters: filters.length ? filters : undefined,
+  });
   const delProject = useDeleteProject();
   const canWrite = useAuthStore((s) => s.hasAuthority(PERMISSIONS.PROJECT_WRITE));
   const canDelete = useAuthStore((s) => s.hasAuthority(PERMISSIONS.PROJECT_DELETE));
@@ -58,10 +67,12 @@ export function ProjectsPage() {
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<Project | null>(null);
 
+  // Aligned with the backend's searchable registrations (ProjectService.FILTER_FIELDS).
   const projectSearchFields = [
     { key: 'name', label: t('projects.project'), searchable: true },
     { key: 'type', label: t('projects.type'), searchable: false },
     { key: 'description', label: t('common.description'), searchable: true },
+    { key: 'parentProjectName', label: t('projects.parentName'), searchable: true },
   ];
 
   const columns: Column<Project>[] = [
@@ -69,6 +80,7 @@ export function ProjectsPage() {
       key: 'name',
       header: t('projects.project'),
       sortKey: 'name',
+      filter: { field: 'name', control: 'text' },
       hideable: false,
       render: (p) => (
         <Link to={`/projects/${p.id}`} className="font-medium text-main transition-colors hover:text-accent">
@@ -80,6 +92,7 @@ export function ProjectsPage() {
       key: 'type',
       header: t('projects.type'),
       sortKey: 'type',
+      filter: { field: 'type', control: 'select', options: typeOptions },
       render: (p) => {
         const label = typeOptions.find((o) => o.value === p.type)?.label ?? p.type;
         const tone = p.type === 'TASKS' ? 'accent' : p.type === 'NOTES' ? 'blue' : 'green';
@@ -89,6 +102,8 @@ export function ProjectsPage() {
     {
       key: 'description',
       header: t('common.description'),
+      sortKey: 'description',
+      filter: { field: 'description', control: 'text' },
       render: (p) => <span className="text-muted">{p.description ?? '—'}</span>,
     },
   ];
@@ -117,6 +132,8 @@ export function ProjectsPage() {
         onPageChange={setPage}
         sort={sort}
         onSortChange={toggleSort}
+        filters={filters}
+        onFiltersChange={setFilters}
         toolbar={
           <SearchInput
             value={search}

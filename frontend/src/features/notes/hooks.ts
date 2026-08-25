@@ -4,7 +4,7 @@ import type { NoteCategoryRequest, NoteRequest } from './types';
 
 // ─── Notes ───
 export function useNotes(params: NoteListParams = {}) {
-  return useQuery({ queryKey: ['notes', params], queryFn: () => notesApi.list(params) });
+  return useQuery({ queryKey: ['notes', params], queryFn: () => notesApi.searchOrList(params) });
 }
 
 export function useNote(id: string | undefined) {

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Role } from './types';
 import { useRoles, useCreateRole, useDeleteRole, useSetRolePermissions } from './hooks';
+import { permissionsApi } from '../permissions/api';
 import { usePermissions } from '../permissions/hooks';
 import { notify, extractFieldErrors } from '../../lib/notify';
 import { LuShieldCheck, LuTrash2 } from 'react-icons/lu';
@@ -36,9 +37,18 @@ export function RolesPage() {
     setSearch,
     searchFields,
     setSearchFields,
+    filters,
+    setFilters,
     q,
   } = useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'roles' });
-  const { data, isLoading, isFetching } = useRoles({ page, size: pageSize, sorts: [sort], q: q || undefined });
+  const { data, isLoading, isFetching } = useRoles({
+    page,
+    size: pageSize,
+    sorts: [sort],
+    q: q || undefined,
+    qFields: searchFields.length ? searchFields : undefined,
+    filters: filters.length ? filters : undefined,
+  });
   const delRole = useDeleteRole();
   const canWrite = useAuthStore((s) => s.hasAuthority(PERMISSIONS.ROLE_WRITE));
   const canDelete = useAuthStore((s) => s.hasAuthority(PERMISSIONS.ROLE_DELETE));
@@ -47,26 +57,44 @@ export function RolesPage() {
   const [assignPermsTo, setAssignPermsTo] = useState<Role | null>(null);
   const [deleting, setDeleting] = useState<Role | null>(null);
 
+  // Aligned with the backend's searchable registrations (RoleService.FILTER_FIELDS).
   const roleSearchFields = [
     { key: 'name', label: t('common.role'), searchable: true },
     { key: 'description', label: t('common.description'), searchable: true },
-    { key: 'permissions', label: t('common.permissions'), searchable: false },
+    { key: 'permissionIds', label: t('common.permissions'), searchable: false },
   ];
+
+  const permissionOptionsLoader = (input: string) =>
+    permissionsApi.list().then((page) =>
+      page.items
+        .filter((p) => !input || p.name.toLowerCase().includes(input.toLowerCase()))
+        .slice(0, 50)
+        .map((p) => ({ value: p.id, label: p.name })),
+    );
 
   const columns: Column<Role>[] = [
     {
       key: 'name',
       header: t('common.role'),
       sortKey: 'name',
+      filter: { field: 'name', control: 'text' },
       hideable: false,
       render: (r) => <Link to={`/roles/${r.id}`} className="font-medium text-main transition-colors hover:text-accent">{r.name}</Link>,
     },
-    { key: 'description', header: t('common.description'), render: (r) => <span className="text-muted">{r.description ?? '—'}</span> },
+    {
+      key: 'description',
+      header: t('common.description'),
+      sortKey: 'description',
+      filter: { field: 'description', control: 'text' },
+      render: (r) => <span className="text-muted">{r.description ?? '—'}</span>,
+    },
     {
       key: 'permissions',
       header: t('common.permissions'),
-      // Count-only on purpose: a role can hold dozens of permissions and the full
-      // list bloats the row — the detail page shows them all.
+      // Count chip sorts by the count; filtering targets membership (K-49 option C).
+      // The ALL badge sorts as permissionCount=0 (the flag carries no explicit grants).
+      sortKey: 'permissionCount',
+      filter: { field: 'permissionIds', control: 'multiselect', optionsLoader: permissionOptionsLoader },
       render: (r) =>
         r.allPermissions ? (
           <Badge tone="accent">ALL</Badge>
@@ -106,6 +134,8 @@ export function RolesPage() {
         onPageChange={setPage}
         sort={sort}
         onSortChange={toggleSort}
+        filters={filters}
+        onFiltersChange={setFilters}
         toolbar={
           <SearchInput
             value={search}

@@ -18,6 +18,11 @@ export interface ColumnFilterSpec {
   operators?: FilterOperator[];
   /** Fixed options for `select`/`multiselect` controls. */
   options?: SelectOption<string>[];
+  /**
+   * Async option loader for `select`/`multiselect` (e.g. role/group membership
+   * pickers) — ignored when `options` is provided.
+   */
+  optionsLoader?: (input: string) => Promise<SelectOption<string>[]>;
 }
 
 const TEXT_OPS: FilterOperator[] = ['CONTAINS', 'EQ', 'NOT_EQ', 'STARTS_WITH', 'ENDS_WITH', 'IS_NULL', 'IS_NOT_NULL'];
@@ -154,7 +159,9 @@ export function ColumnFilterButton({ spec, header, active, onChange }: ColumnFil
         <SelectInput<string>
           id={`filter-multi-${spec.field}`}
           size="sm"
-          options={spec.options ?? []}
+          loadOptions={spec.options ? undefined : spec.optionsLoader}
+          defaultOptions={!!spec.optionsLoader}
+          options={spec.options}
           value={multiValue}
           onChange={(v) => setMultiValue(((v as SelectOption<string>[]) ?? []).filter((o) => o != null))}
           isMulti
@@ -163,7 +170,22 @@ export function ColumnFilterButton({ spec, header, active, onChange }: ColumnFil
       );
     }
     if (spec.control === 'select' || spec.control === 'boolean') {
-      const options = spec.control === 'boolean' ? booleanOptions : spec.options ?? [];
+      const options = spec.control === 'boolean'
+        ? booleanOptions
+        : spec.options ?? [];
+      if (!options.length && spec.optionsLoader) {
+        return (
+          <SelectInput<string>
+            id={`filter-value-${spec.field}`}
+            size="sm"
+            loadOptions={spec.optionsLoader}
+            defaultOptions
+            value={value ? { value, label: value } : null}
+            onChange={(o) => setValue((o as SelectOption<string> | null)?.value ?? '')}
+            isClearable
+          />
+        );
+      }
       return (
         <SelectInput<string>
           id={`filter-value-${spec.field}`}

@@ -1,12 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { groupsApi } from './api';
-import type { PageParams } from '../../types';
 import type { AssignRolesRequest } from '../roles/types';
 import type { CreateGroupRequest, AssignMembersRequest } from './types';
 
 // ─── Groups ───
-export function useGroups(params: PageParams = {}) {
-  return useQuery({ queryKey: ['groups', params], queryFn: () => groupsApi.list(params) });
+export function useGroups(params: Parameters<typeof groupsApi.searchOrList>[0] = {}) {
+  return useQuery({ queryKey: ['groups', params], queryFn: () => groupsApi.searchOrList(params) });
 }
 
 export function useCreateGroup() {
