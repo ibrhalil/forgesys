@@ -20,12 +20,12 @@ AuditEntity (@MappedSuperclass — createdDate/updatedDate+by, OffsetDateTime, t
 
 > Java field is `createdDate` (column `created_at`). The K-21 entity (`TenantVerificationToken`) lives in the `public` schema. (`OrganizationDomain` was removed with the K-38 dead-code cleanup — returns with the email-domain self-register flow, Epic 2.9.)
 
-> **Read model (Faz: user directory):** `UserDirectoryView` is a `@Immutable @Subselect` entity — the profile/account joins and role/group counts run in the DB as a derived table (portable SQL, generates no schema, works on both PG tenant schemas and the H2 test profile). No associations, read-only. Backs the user list/search endpoints; a real `CREATE VIEW` may replace the subselect later for BI needs (same column names).
+> **Read models moved in-process ([K-49](../docs/DECISIONS.md#k-49)):** the former `UserDirectoryView` `@Immutable @Subselect` read model was REMOVED — list reads are now backend-side Criteria DTO projections (`web/projection/ProjectionListQuery`, per-feature executors). This module carries no read-model entities; a `@Subselect`/`CREATE VIEW` entity returns only if a genuinely complex/dense table demands one (exception, not the default).
 
 > Faz 4a: `Role.parentRoles` is a self-M2M (`t_role_parents`) modeling role inheritance — a role transitively inherits its parent roles' permissions (resolved recursively in `CustomUserDetailsService`). `RoleService.setParents` enforces acyclicity. (The Faz 4b ABAC template — `Ownable` + backend `OwnershipGuard` — was removed by [K-38](../docs/DECISIONS.md#k-38) as unused; it returns with the first ownership-based module, Notes/Warehouse/Logistics.)
 
 Rules:
-- **Read-model (view) entities carry the `View` suffix** — any `@Immutable @Subselect` (or future `CREATE VIEW`-backed) entity is named `<Entity>View` (e.g. `UserDirectoryView`), its repository `<Entity>ViewRepository`. Makes the read-only projection role obvious at a glance and keeps it distinct from the writable entity / DTO names.
+- **Read-model (view) entities carry the `View` suffix** — IF one ever returns (K-49 made them exception-only; lists use backend Criteria DTO projections), any `@Immutable @Subselect` (or `CREATE VIEW`-backed) entity is named `<Entity>View`, its repository `<Entity>ViewRepository`. Makes the read-only projection role obvious at a glance and keeps it distinct from the writable entity / DTO names.
 - All IDs are `UUID` (`@GeneratedValue(strategy = GenerationType.UUID)`, `columnDefinition="uuid"`).
 - Table names use the `t_` prefix (`t_users`, `t_roles`, ...). Constraint names: `idx_*`, `uk_*`, `fk_*`.
 - `@SQLDelete` is separate on each concrete entity (table-specific SQL, `version = version + 1`).
@@ -71,7 +71,6 @@ Package `com.ibrhalil.forgesys.persistence.repository`. Extends `JpaRepository` 
 - `PlanRepository` (`findByKey`), `SubscriptionRepository` (`findByCompanyId`), `TenantModuleRepository` (`findByCompanyId`, `findByCompanyIdAndModuleKey`) — public şema (K-16)
 - `UserRepository` (`findByEmail`, `findByUsername`, `findGroupMembers`, `findTokenInvalidBefore` [RISK-21 single-col projection], `findUserIdsByRole`/`findUserIdsByGroup`/`findGroupIdsByUserId`/`findUserIdsByGroupIds`/`bulkSetTokenInvalidBefore` [Faz 1 revoke + group-member visibility scope]) — tenant şeması
 - `UserAuthTokenRepository` (`findByTokenHash` — SHA-256 digest lookup, `claimToken` atomic claim, `invalidateOutstanding` supersede-on-reissue, `purgeStale` daily purge) — tenant şeması (user lifecycle, V4)
-- `UserDirectoryViewRepository` (`JpaSpecificationExecutor` — flat directory read model, no EntityGraph by design) — tenant şeması
 - `RoleRepository` (`findByName`, `existsByIdInAndAllPermissionsTrue`, `findAllByAllPermissionsTrue` [all-permissions flag]) — tenant şeması
 - `PermissionRepository` (`findByName`, `findAllNames` [JPQL name projection], `JpaSpecificationExecutor` — K-37 paged list + `q`) — tenant şeması
 - `GroupRepository` (`findByName`) — tenant şeması

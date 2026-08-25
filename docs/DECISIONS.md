@@ -248,6 +248,20 @@ Standart haline gelmiş kararlar. Yeni gereksinim bunlardan biriyle çelişirse 
 - **Purge:** `TokenPurgeJob` (ilk `@EnableScheduling`; `@Profile("!test")`) günlük 03:00 UTC iki aileyi süpürür: public signup tokenları + her tenant şemasındaki `t_auth_tokens` (set-and-restore TenantContext iterasyonu, per-tenant try/catch; tenant tx'i `UserTokenService.purgeStaleForCurrentTenant`). Retention default 7 gün.
 - **Durum:** UYGULANDI (2026-08-25).
 
+### K-49
+**Projection-First Liste Okuma Yolu + "Gösterilen Her Kolon Filtrelenebilir/Sıralanabilir"**
+- **Bağlam:** User directory `@Immutable @Subselect` read model'i (`UserDirectoryView`) Specification tabanlı filtre motoruyla buluşabilen tek çözümdü — ama bu, join'li kolonların (`projectName`, `categoryName`), koleksiyon verisinin (`roleCount`, üyelik) ve `q` alan hedeflemesinin motorun dışında kalması demekti; "tabloda gösterilen her kolon filtrelenebilir ve sıralanabilir olmalı" hedefi yapısal olarak karşılanamıyordu. Ayrıca frontend'in smart-search alan seçimi yalnızca localStorage'a yazılıyor, sunucuya asla gitmiyordu.
+- **Karar:**
+  1. **Okuma yolu konvansiyonu:** DB-backed tüm listeler paylaşımlı `web/projection/ProjectionListQuery` executor'ından geçer — EntityManager + Criteria + `cb.construct(DTO)` (entity hydration yok, N+1 yapısal olarak imkânsız) + aynı predicate ile count query + sort çevirisi. **Düzlük kuralı:** to-many join yasak (satır çoğaltır, paging/count bozar); koleksiyon verisi yalnızca skaler subquery / EXISTS ile. Feature başına küçük executor sınıfı (`UserDirectoryQueryExecutor`, `GroupListQueryExecutor`, ... — `AppRecordSearchExecutor` deseninin genelleştirilmesi). `UserDirectoryView` + repository silindi; `@Immutable @Subselect` view entity artık **istisna**dır (yalnızca çok daha karmaşık/yoğun tablolar için).
+  2. **Motor alan kind'leri:** `FilterFieldSet` dört kayıt türü kazandı — DIRECT (kök attribute), JOINED (to-one LEFT join yaprağı; `@SQLRestriction` ON'a uygulanır), SUBQUERY (correlated skaler: count, FK-kolon üzerinden isim çözümü), MEMBERSHIP (koleksiyon üyeliği: `IN`/`NOT_IN`/`IS_NULL`=boş/`IS_NOT_NULL` → correlated EXISTS; **inverse form** join tablosu diğer tarafta sahipliğiyken — grup üyeleri `User.groups`'ta). MEMBERSHIP sıralanamaz/s aranamaz; `sortable` bayrağı alan bazınaindi. Yeni tipler: `DATE` (LocalDate), `INT`. Wire adları düz kalır — nested `a.b` path yasağı değişmedi (SortGuard).
+  3. **Koleksiyon gösteren kolonlar (Notion/Jira/Odoo sentezi):** count çipi kolonu `roleCount`/`memberCount` NUMERIC filtre+sort alır; üyelik filtresi (`roleIds IN [...]` / `IS_EMPTY`) çoklu kayıt seçiciyle gelir — ikisi birden ("option C").
+  4. **qFields (smart search gerçek oldu):** `SearchRequest.qFields[]` + GET `?qFields=` — `q` OR-CONTAINS araması yalnızca seçilen searchable alanlara daralır; unknown/non-searchable alan 400. SearchInput popover'ındaki alan listeleri backend searchable kayıtlarıyla birebir hizalanır (anahtarlar = wire değerleri).
+  5. **POST /{resource}/search her liste yüzeyinde** (additive): frontend konvansiyonu — feature api'sinde tek entry point (`searchOrList`); legacy toolbar parametreleri (categoryId, pinned, projectId, success...) filtre yokken bookmarkable GET olarak kalır, kolon filtresi devreye girince hepsi EQ clause olarak POST gövdesine katlanır.
+  6. **platform companies** sayfalama+motora alındı (son K-37 ihlali kapandı; `List`→`PageResponse` breaking — frontend tüketicisi yoktu).
+- **Reddedilen alternatifler:** Spring Data interface projection + sabit `@Query` — dinamik filtre/sort motorunu devre dışı bırakır; Querydsl/Blaze-Persistence — yeni bağımlılık (#21); JOIN-bazlı to-many filtreleme — distinct + satır çoğaltma sorunları; `searchFields`'in localStorage-only kalması — ölü UI.
+- **Etki:** `GroupService` N+1 öldü (satır başına 2N+1 → sayfa başına sabit 3 sorgu); notes/apps isim çözümü batch'ten DB subquery'sine indi (filtrelenebilir de oldu); request-log `status` STRING→INT tip hatası düzeldi (sayısal karşılaştırma); role/group/app count'ları artık soft-deleted üyeleri dışlar (entity-path `@SQLRestriction` — eski native count ham join satırını sayıyordu; bilinçli semantik iyileştirme). Frontend: DataTable opt-in kolon filtresi popover'ı (`ColumnFilterButton`), tip bazlı değer kontrolleri, `filter.*` i18n namespace. Audit üçlüsünde `ipAddress`/`traceId`/`reason`/`userAgent` ilk kez filtrelenebilir.
+- **Durum:** UYGULANDI (2026-08-26; Faz 1 engine + executor, Faz 2 pilotlar users/groups/notes, Faz 3 kalan listeler + platform companies, Faz 4 frontend altyapısı, Faz 5 sayfa wiring).
+
 ---
 
 ## Risk Kayıtları (RISK-XX)
@@ -321,7 +335,7 @@ Standart haline gelmiş kararlar. Yeni gereksinim bunlardan biriyle çelişirse 
 
 ### RISK-27
 **N+1 (`findAll` profile/account) (P1)**
-- **Durum:** ÇÖZÜLDÜ. EntityGraph setleri (liste + `findById`'lar) — user listesi artık `UserDirectoryView` read model üzerinden (N+1 yapısal olarak yok).
+- **Durum:** ÇÖZÜLDÜ. EntityGraph setleri (liste + `findById`'lar) — user listesi K-49 Criteria DTO projection üzerinden (N+1 yapısal olarak yok).
 
 ### RISK-28
 **TOCTOU uniqueness → 500 (P2)**

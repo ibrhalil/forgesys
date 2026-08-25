@@ -73,7 +73,7 @@ src/
                            #   (debounce + stale-response guard). Reference-data selects use these —
                            #   never capped one-page list fetches.
     ui/                    #   design system: Badge, Button, CheckboxList, ConfirmDialog,
-                           #   DataTable (sortable headers + `toolbar` filter slot + SearchInput),
+                           #   DataTable (sortable headers + per-column filter popovers + `toolbar` slot + SearchInput),
                            #   EmptyState, Field, Modal, RowMenu (row/page-head overflow menu —
                            #   callers filter items by permission; empty items = no trigger),
                            #   SelectInput, TextArea, Spinner (single animate-spin source),
@@ -84,7 +84,7 @@ src/
                            #   user lifecycle: email verification + password reset flows live here)
     users/                 #   Users/UserDetail/Profile pages + 5 modal components (assign
                            #   modals fetch the user detail themselves — list rows are the
-                           #   flat UserDirectoryView projection: counts, no role/group arrays)
+                           #   flat user-directory projection: counts, no role/group arrays)
     roles/  groups/  permissions/
     projects/              #   Typed project containers (K-45): ProjectsPage (create modal's type
                            #   options derive from the ACTIVE-module catalog — useProjectTypes), the
@@ -121,7 +121,7 @@ src/
 
 - `features/X/api.ts` — plain fetch wrappers per endpoint group (uses `api` from `lib/api`).
 - `features/X/hooks.ts` — TanStack Query hooks; **query keys are the collection name** (`['users', params]`, `['roles', id]`, `['users', id, 'effective-permissions']`); mutations invalidate their collection prefix.
-- **Server-side list search/sort:** pages get the whole scaffold from `lib/useListPageState` (`{page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, q}` — debounced search + the page-reset contracts) and pass `sorts: [sort]` and `q` inside `PageParams`. `Column.sortKey` marks a DataTable column sortable (may differ from `key` — the users "name" column sorts by `email`); the value MUST be in the backend feature's sort whitelist or the request 400s. `PageResponse` is the API-owned wire shape (`data[] + meta`), normalized by `normalizePage` (legacy Spring Data layout tolerated).
+- **Server-side list search/sort/filter (K-49):** pages get the whole scaffold from `lib/useListPageState` (`{page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, searchFields, setSearchFields, filters, setFilters, q}` — debounced search + the page-reset contracts) and pass `sorts: [sort]`, `q`, `qFields: searchFields` and `filters` through. `Column.sortKey` marks a DataTable column sortable (may differ from `key` — the users "name" column sorts by `email`); the value MUST be in the backend feature's sort whitelist or the request 400s. `Column.filter` (`ColumnFilterSpec`: engine field + control `text|number|date|boolean|select|multiselect` + static options or async `optionsLoader`) renders a per-column filter popover when the table receives `filters`/`onFiltersChange`; clauses are wire `FilterCriteria` (membership fields = multi-select pickers fed by option loaders). Feature apis expose ONE list entry point, `searchOrList(params)`: without clauses everything stays on GET (`?q=&qFields=&sort=` — legacy toolbar params keep their bookmarkable shape); with clauses the request routes through `POST /{resource}/search` with the scoped GET params folded in as EQ clauses (`lib/api.searchPost`). The SearchInput picker's keys MUST mirror the backend searchable registrations 1:1 (they serialize as repeated `qFields` params — smart-search targeting).
 - **Rows-per-page:** choices live in `lib/pagination.ts` (`PAGE_SIZE_OPTIONS`, backend cap 1000); pages hold `pageSize` state and reset to page 0 on change. DataTable renders minimal segment buttons up to 6 options, then a ghost native `<select>` — extending the list never crowds the footer. Pages whose backend returns the full list in one response (e.g. permissions) paginate locally via `lib/useClientPagination` and wire the footer identically.
 - `features/X/types.ts` — request/response types for that domain. Shared summaries (`RoleSummary` etc.) stay in `src/types/index.ts`.
 - Cross-feature imports are allowed (e.g. groups pages use `useRoles`); keep them at hook/type level, not page level.

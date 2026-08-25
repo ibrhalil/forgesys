@@ -438,7 +438,7 @@ class UserControllerTest extends AbstractRbacWebTest {
         entityManager.flush();
 
         // Directory projection carries the raw expiry; clients derive "currently
-        // locked" by comparing against now (expiry is lazy — see UserDirectoryView).
+        // locked" by comparing against now (expiry is lazy — see the directory projection).
         mockMvc.perform(get("/api/v1/users").param("q", "locked")
                         .cookie(auth("reader@tenant.test", "iam:user:read")))
                 .andExpect(status().isOk())

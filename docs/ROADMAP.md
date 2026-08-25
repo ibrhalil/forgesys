@@ -21,6 +21,7 @@ Platform çekirdeği kullanımda: schema-per-tenant multi-tenancy, iki fazlı te
 | Observability + CI/CD | Prometheus expose, CI 3-job + gated IT'ler + GHCR publish | K-43 |
 | Audit genişletme | `@AuditLog` AOP, delta kaydı, `t_request_logs` + endpoint + UI, high-risk body masking | K-19, K-27 |
 | **K-48 — user lifecycle + mail** | SMTP kanalı (`MailSender` port + Smtp/Log/InMemory sender'lar, TR/EN şablonlar), `t_auth_tokens` (digest-at-rest + supersede-on-reissue + atomic claim), opsiyonel email doğrulama (verify-email/resend), self-service password reset (forgot/reset, uniform-200 no-enumeration, session kill), `TokenPurgeJob` (ilk `@EnableScheduling`) | K-48 (+RISK-30) |
+| **K-49 — projection-first liste okuma yolu** | Tüm DB-backed listeler Criteria DTO projection executor'ından (`ProjectionListQuery`; `UserDirectoryView` @Subselect kaldırıldı), filtre motoruna JOINED/SUBQUERY/MEMBERSHIP alan türleri (+inverse) + DATE/INT tipleri + `qFields` akıllı arama hedefleme, her liste yüzeyinde `POST /search`, frontend DataTable kolon filtreleri + smart search'in sunucuya bağlanması, groups N+1 ölümü, platform companies paging'i | K-49 |
 
 ## Kalan İşler
 
