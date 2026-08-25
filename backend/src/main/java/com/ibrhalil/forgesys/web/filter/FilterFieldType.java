@@ -1,5 +1,6 @@
 package com.ibrhalil.forgesys.web.filter;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.EnumSet;
 import java.util.Set;
@@ -8,8 +9,9 @@ import java.util.UUID;
 /**
  * Coarse value type of a filterable/sortable field. Determines the set of supported
  * {@link FilterOperator}s and how wire values are parsed. Kept intentionally small —
- * the first numeric entity attribute ({@code RequestLog.durationMs}) brought the
- * {@code NUMERIC} kind with it.
+ * new kinds arrive with the first attribute that needs them ({@code NUMERIC} with
+ * {@code RequestLog.durationMs}, {@code DATE} with {@code Task.dueDate},
+ * {@code INT} with {@code RequestLog.status}).
  */
 public enum FilterFieldType {
 
@@ -27,9 +29,17 @@ public enum FilterFieldType {
             FilterOperator.GT, FilterOperator.GTE, FilterOperator.LT, FilterOperator.LTE,
             FilterOperator.BETWEEN, FilterOperator.IS_NULL, FilterOperator.IS_NOT_NULL), OffsetDateTime.class),
 
+    DATE(EnumSet.of(FilterOperator.EQ, FilterOperator.NOT_EQ,
+            FilterOperator.GT, FilterOperator.GTE, FilterOperator.LT, FilterOperator.LTE,
+            FilterOperator.BETWEEN, FilterOperator.IS_NULL, FilterOperator.IS_NOT_NULL), LocalDate.class),
+
     NUMERIC(EnumSet.of(FilterOperator.EQ, FilterOperator.NOT_EQ,
             FilterOperator.GT, FilterOperator.GTE, FilterOperator.LT, FilterOperator.LTE,
             FilterOperator.BETWEEN, FilterOperator.IS_NULL, FilterOperator.IS_NOT_NULL), Long.class),
+
+    INT(EnumSet.of(FilterOperator.EQ, FilterOperator.NOT_EQ,
+            FilterOperator.GT, FilterOperator.GTE, FilterOperator.LT, FilterOperator.LTE,
+            FilterOperator.BETWEEN, FilterOperator.IS_NULL, FilterOperator.IS_NOT_NULL), Integer.class),
 
     ENUM(EnumSet.of(FilterOperator.EQ, FilterOperator.NOT_EQ, FilterOperator.IN, FilterOperator.NOT_IN,
             FilterOperator.IS_NULL, FilterOperator.IS_NOT_NULL), null);
