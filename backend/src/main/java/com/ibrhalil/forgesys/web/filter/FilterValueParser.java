@@ -3,6 +3,7 @@ package com.ibrhalil.forgesys.web.filter;
 import com.ibrhalil.forgesys.exception.BusinessException;
 import com.ibrhalil.forgesys.exception.ErrorCode;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.Locale;
@@ -26,7 +27,9 @@ final class FilterValueParser {
                 case UUID -> UUID.fromString(raw.trim());
                 case BOOLEAN -> parseBoolean(field, raw);
                 case TEMPORAL -> OffsetDateTime.parse(raw.trim());
+                case DATE -> LocalDate.parse(raw.trim());
                 case NUMERIC -> Long.parseLong(raw.trim());
+                case INT -> Integer.parseInt(raw.trim());
                 case ENUM -> parseEnum(field, raw);
             };
         } catch (IllegalArgumentException | DateTimeParseException e) {

@@ -6,9 +6,10 @@ import com.ibrhalil.forgesys.exception.ErrorCode;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Expression;
-import jakarta.persistence.criteria.Path;
+import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.util.StringUtils;
 
@@ -17,11 +18,15 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Translates a global {@code q} plus {@link FilterCriteria} clauses into a combined
- * {@link Specification} (filters AND-joined; {@code q} OR-CONTAINS over the registered
- * searchable fields). All validation happens here, eagerly at build time — an invalid
- * request fails with 400 {@code validation_error} before any query runs, never as a
- * mid-execution 500. Value parsing goes through {@link FilterValueParser}.
+ * Translates a global {@code q} (optionally narrowed to {@code qFields}) plus
+ * {@link FilterCriteria} clauses into a combined {@link Specification} (filters
+ * AND-joined; {@code q} OR-CONTAINS over the registered searchable fields, or over
+ * the selected subset when {@code qFields} is given). All validation happens here,
+ * eagerly at build time — an invalid request fails with 400 {@code validation_error}
+ * before any query runs, never as a mid-execution 500. Value parsing goes through
+ * {@link FilterValueParser}; expression resolution through {@link FilterFieldSet#resolve}
+ * (direct / to-one-joined / subquery fields) and EXISTS predicates for membership
+ * fields.
  */
 public final class FilterSpecifications {
 
@@ -32,6 +37,16 @@ public final class FilterSpecifications {
     }
 
     public static <T> Specification<T> from(FilterFieldSet fields, String q, List<FilterCriteria> filters) {
+        return from(fields, q, null, filters);
+    }
+
+    /**
+     * @param qFields optional subset of searchable field names the {@code q} term is
+     *                matched against (smart-search field targeting); unknown or
+     *                non-searchable names fail with 400
+     */
+    public static <T> Specification<T> from(FilterFieldSet fields, String q, List<String> qFields,
+            List<FilterCriteria> filters) {
         List<Specification<T>> parts = new ArrayList<>();
         if (filters != null) {
             for (FilterCriteria criteria : filters) {
@@ -39,27 +54,47 @@ public final class FilterSpecifications {
             }
         }
         if (StringUtils.hasText(q)) {
-            parts.add(search(fields, q.trim()));
+            parts.add(search(fields, qFields, q.trim()));
         }
         return parts.isEmpty() ? Specification.unrestricted() : Specification.allOf(parts);
     }
 
     // ── q: OR over searchable fields, case-insensitive containment ──
 
-    private static <T> Specification<T> search(FilterFieldSet fields, String q) {
+    private static <T> Specification<T> search(FilterFieldSet fields, List<String> qFields, String q) {
         List<FilterFieldSet.RegisteredField> searchable = fields.searchableFields();
+        if (qFields != null && !qFields.isEmpty()) {
+            searchable = selectedSearchable(fields, searchable, qFields);
+        }
         if (searchable.isEmpty()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR,
                     "Search ('q') is not supported on this resource");
         }
+        List<FilterFieldSet.RegisteredField> targets = searchable;
         String needle = "%" + escapeLike(q.toLowerCase(Locale.ROOT)) + "%";
         return (Root<T> root, CriteriaQuery<?> query, CriteriaBuilder cb) -> {
-            List<Predicate> likes = new ArrayList<>(searchable.size());
-            for (FilterFieldSet.RegisteredField field : searchable) {
-                likes.add(likeIgnoreCase(cb, stringPath(root.get(field.name())), needle));
+            List<Predicate> likes = new ArrayList<>(targets.size());
+            for (FilterFieldSet.RegisteredField field : targets) {
+                Expression<?> expression = fields.resolve(field.name(), root, query, cb);
+                likes.add(likeIgnoreCase(cb, stringExpression(expression), needle));
             }
             return cb.or(likes.toArray(Predicate[]::new));
         };
+    }
+
+    private static List<FilterFieldSet.RegisteredField> selectedSearchable(
+            FilterFieldSet fields, List<FilterFieldSet.RegisteredField> searchable, List<String> qFields) {
+        List<FilterFieldSet.RegisteredField> selected = new ArrayList<>(qFields.size());
+        List<String> allowed = searchable.stream().map(FilterFieldSet.RegisteredField::name).sorted().toList();
+        for (String name : qFields) {
+            FilterFieldSet.RegisteredField field = fields.get(name);
+            if (field == null || !field.searchable()) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                        "Unknown or non-searchable search field: '" + name + "'. Allowed: " + allowed);
+            }
+            selected.add(field);
+        }
+        return selected;
     }
 
     // ── single clause ──
@@ -71,32 +106,63 @@ public final class FilterSpecifications {
                     "Unknown filter field: '" + criteria.field() + "'. Allowed: " + fields.names().stream().sorted().toList());
         }
         FilterOperator operator = criteria.operator();
-        if (!field.type().supports(operator)) {
+        if (!field.supports(operator)) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR,
-                    "Operator '" + operator + "' is not supported for field '" + field.name()
-                            + "' (" + field.type() + ")");
+                    "Operator '" + operator + "' is not supported for field '" + field.name() + "' ("
+                            + (field.kind() == FilterFieldSet.FieldKind.MEMBERSHIP
+                            ? "MEMBERSHIP — supported: IN, NOT_IN, IS_NULL, IS_NOT_NULL"
+                            : field.type().toString()) + ")");
         }
         List<String> raw = criteria.values() == null ? List.of() : criteria.values();
         validateArity(field, operator, raw);
         List<Object> values = raw.stream().map(v -> FilterValueParser.parse(field, v)).toList();
 
         return (Root<T> root, CriteriaQuery<?> query, CriteriaBuilder cb) -> {
-            Path<?> path = root.get(field.name());
+            if (field.kind() == FilterFieldSet.FieldKind.MEMBERSHIP) {
+                return membershipPredicate(field, operator, values, root, query, cb);
+            }
+            Expression<?> path = fields.resolve(field.name(), root, query, cb);
             return switch (operator) {
                 case EQ -> cb.equal(path, values.get(0));
                 case NOT_EQ -> cb.notEqual(path, values.get(0));
                 case IN -> path.in(values);
                 case NOT_IN -> cb.not(path.in(values));
-                case CONTAINS -> likeIgnoreCase(cb, stringPath(path),
+                case CONTAINS -> likeIgnoreCase(cb, stringExpression(path),
                         "%" + escapeLike(lower(values.get(0))) + "%");
-                case STARTS_WITH -> likeIgnoreCase(cb, stringPath(path),
+                case STARTS_WITH -> likeIgnoreCase(cb, stringExpression(path),
                         escapeLike(lower(values.get(0))) + "%");
-                case ENDS_WITH -> likeIgnoreCase(cb, stringPath(path),
+                case ENDS_WITH -> likeIgnoreCase(cb, stringExpression(path),
                         "%" + escapeLike(lower(values.get(0))));
                 case GT, GTE, LT, LTE, BETWEEN -> comparablePredicate(cb, path, operator, values);
                 case IS_NULL -> cb.isNull(path);
                 case IS_NOT_NULL -> cb.isNotNull(path);
             };
+        };
+    }
+
+    // ── membership (collection contains / is empty) — correlated EXISTS ──
+
+    /**
+     * Membership predicates over a plural association of the root: {@code IN} /
+     * {@code NOT_IN} restrict the EXISTS to members whose id is in the values;
+     * {@code IS_NULL} / {@code IS_NOT_NULL} run it unrestricted (empty / non-empty
+     * collection). The correlated join applies the member entity's
+     * {@code @SQLRestriction} (soft-deleted members are excluded), so the semantics
+     * match what the association resolves to elsewhere.
+     */
+    private static Predicate membershipPredicate(FilterFieldSet.RegisteredField field, FilterOperator operator,
+            List<Object> values, Root<?> root, CriteriaQuery<?> query, CriteriaBuilder cb) {
+        boolean restrictToValues = operator == FilterOperator.IN || operator == FilterOperator.NOT_IN;
+        Subquery<Integer> memberExists = query.subquery(Integer.class);
+        Join<?, ?> member = memberExists.correlate(root).join(field.memberAssociation());
+        memberExists.select(cb.literal(1));
+        if (restrictToValues) {
+            memberExists.where(member.get(field.memberIdAttribute()).in(values));
+        }
+        return switch (operator) {
+            case IN, IS_NOT_NULL -> cb.exists(memberExists);
+            case NOT_IN, IS_NULL -> cb.not(cb.exists(memberExists));
+            default -> throw new IllegalStateException("Not a membership operator: " + operator);
         };
     }
 
@@ -145,22 +211,22 @@ public final class FilterSpecifications {
         return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }
 
-    private static Expression<String> stringPath(Path<?> path) {
+    private static Expression<String> stringExpression(Expression<?> expression) {
         @SuppressWarnings("unchecked")
-        Expression<String> cast = (Expression<String>) path;
+        Expression<String> cast = (Expression<String>) expression;
         return cast;
     }
 
     /**
-     * Comparison predicates for {@code Comparable}-typed fields (TEMPORAL today). The
-     * unchecked casts pin one {@code Y} for the whole expression/value pair, which
-     * resolves the {@code CriteriaBuilder} overload ambiguity — values were parsed to
-     * the field's declared type by {@link FilterValueParser}, so erasure keeps them
-     * type-correct at runtime.
+     * Comparison predicates for {@code Comparable}-typed fields (TEMPORAL, DATE,
+     * NUMERIC, INT). The unchecked casts pin one {@code Y} for the whole
+     * expression/value pair, which resolves the {@code CriteriaBuilder} overload
+     * ambiguity — values were parsed to the field's declared type by
+     * {@link FilterValueParser}, so erasure keeps them type-correct at runtime.
      */
     @SuppressWarnings("unchecked")
     private static <Y extends Comparable<? super Y>> Predicate comparablePredicate(
-            CriteriaBuilder cb, Path<?> path, FilterOperator operator, List<Object> values) {
+            CriteriaBuilder cb, Expression<?> path, FilterOperator operator, List<Object> values) {
         Expression<Y> expression = (Expression<Y>) path;
         return switch (operator) {
             case GT -> cb.greaterThan(expression, (Y) values.get(0));

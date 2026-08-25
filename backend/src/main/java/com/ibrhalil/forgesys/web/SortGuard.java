@@ -6,6 +6,7 @@ import com.ibrhalil.forgesys.web.filter.FilterFieldSet;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 
+import java.util.Collection;
 import java.util.Set;
 
 /**
@@ -44,13 +45,14 @@ public final class SortGuard {
             return;
         }
         for (Sort.Order order : pageable.getSort()) {
-            if (!fields.contains(order.getProperty())) {
-                throw unsupported(order.getProperty(), fields.names());
+            FilterFieldSet.RegisteredField field = fields.get(order.getProperty());
+            if (field == null || !field.sortable()) {
+                throw unsupported(order.getProperty(), fields.sortableNames());
             }
         }
     }
 
-    private static BusinessException unsupported(String property, Set<String> allowed) {
+    private static BusinessException unsupported(String property, Collection<String> allowed) {
         return new BusinessException(ErrorCode.VALIDATION_ERROR,
                 "Unsupported sort property: '" + property + "'. Allowed: "
                         + allowed.stream().sorted().toList());
