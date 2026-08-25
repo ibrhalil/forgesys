@@ -56,6 +56,44 @@ export interface PageParams {
   sorts?: SortState[];
   /** Server-side global search (OR-CONTAINS over the feature's searchable fields). */
   q?: string;
+  /** Smart-search field targeting: narrows `q` to these backend searchable fields. */
+  qFields?: string[];
+}
+
+// ─── Structured list filtering (backend filter engine, K-49) ───
+
+/** Wire operators of the backend filter engine (FilterOperator enum name). */
+export type FilterOperator =
+  | 'EQ'
+  | 'NOT_EQ'
+  | 'IN'
+  | 'NOT_IN'
+  | 'CONTAINS'
+  | 'STARTS_WITH'
+  | 'ENDS_WITH'
+  | 'GT'
+  | 'GTE'
+  | 'LT'
+  | 'LTE'
+  | 'BETWEEN'
+  | 'IS_NULL'
+  | 'IS_NOT_NULL';
+
+/** One structured filter clause (backend FilterCriteria — values are wire strings). */
+export interface FilterCriteria {
+  field: string;
+  operator: FilterOperator;
+  values: string[];
+}
+
+/** Body of the `POST /{resource}/search` filter-engine endpoints. */
+export interface SearchRequestBody {
+  page?: number;
+  size?: number;
+  sorts?: SortState[];
+  filters?: FilterCriteria[];
+  q?: string;
+  qFields?: string[];
 }
 
 /**

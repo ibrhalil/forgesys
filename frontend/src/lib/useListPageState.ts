@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useDebouncedValue } from './useDebouncedValue';
 import { loadTablePreferences, saveTablePreferences } from './tablePreferences';
-import type { SortState } from '../types';
+import type { FilterCriteria, SortState } from '../types';
 
 export interface UseListPageStateOptions {
   /**
@@ -20,18 +20,22 @@ export interface UseListPageStateOptions {
 }
 
 /**
- * The list-page scaffold (K-39): page/pageSize/sort/search state with the shared
- * contracts every server-side list page repeated inline before this hook:
+ * The list-page scaffold (K-39): page/pageSize/sort/search/filter state with the
+ * shared contracts every server-side list page repeated inline before this hook:
  *
  * - search is debounced (`q`), and a new term resets the page to 0;
  * - sorting toggles asc/desc on the same field, switches to asc on a new field,
  *   and resets the page to 0;
- * - changing the rows-per-page resets the page to 0 and persists preference if storageKey is given.
+ * - changing the rows-per-page resets the page to 0 and persists preference if storageKey is given;
+ * - changing the structured filters (K-49 column filters) resets the page to 0.
  *
  * Pages wire DataTable directly: `onPageSizeChange={setPageSize}`,
  * `onSortChange={toggleSort}`, `onPageChange={setPage}`,
+ * `filters={filters}` / `onFiltersChange={setFilters}`,
  * `toolbar={<SearchInput value={search} onChange={setSearch} …/>}` and query with
- * `page`/`size: pageSize`/`sorts: [sort]` (or the legacy `sort` string)/`q`.
+ * `page`/`size: pageSize`/`sorts: [sort]` (or the legacy `sort` string)/`q`/
+ * `qFields: searchFields` — or the filter-engine `POST /search` body carrying
+ * `filters` when any is active.
  *
  * Client-paginated pages (full list in one response, e.g. permissions) manage
  * their own page state via `useClientPagination` — they may still use this hook
@@ -55,6 +59,7 @@ export function useListPageState({
     if (!storageKey) return [];
     return loadTablePreferences(storageKey).searchFields ?? [];
   });
+  const [filters, setFiltersState] = useState<FilterCriteria[]>([]);
   const q = useDebouncedValue(search, debounceMs);
 
   // A new search term invalidates the current page position.
@@ -78,6 +83,11 @@ export function useListPageState({
     setPage(0);
   };
 
+  const setFilters = (next: FilterCriteria[]) => {
+    setFiltersState(next);
+    setPage(0);
+  };
+
   const toggleSort = (field: string) => {
     setSort((prev) =>
       prev.field === field
@@ -98,6 +108,8 @@ export function useListPageState({
     setSearch,
     searchFields,
     setSearchFields,
+    filters,
+    setFilters,
     q,
   };
 }

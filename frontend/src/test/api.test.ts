@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { api, ApiError, setSessionExpiredHandler } from '../lib/api';
+import { api, ApiError, searchPost, setSessionExpiredHandler, toQuery } from '../lib/api';
 
 /**
  * Unit tests for the transparent refresh-on-401 in `lib/api.ts` (K-39 first tests):
@@ -93,5 +93,66 @@ describe('apiFetch transparent refresh-on-401', () => {
       .rejects.toBeInstanceOf(ApiError);
     expect(fetchMock).toHaveBeenCalledTimes(1); // only the login call itself
     expect(expired).not.toHaveBeenCalled();
+  });
+});
+
+describe('toQuery (K-49 smart-search targeting)', () => {
+  it('serializes qFields as repeated params alongside page/sort/q', () => {
+    const qs = toQuery({
+      page: 0,
+      size: 20,
+      sorts: [{ field: 'email', dir: 'asc' }],
+      q: 'ali',
+      qFields: ['firstName', 'email'],
+    });
+    const sp = new URLSearchParams(qs);
+    expect(sp.get('q')).toBe('ali');
+    expect(sp.getAll('qFields')).toEqual(['firstName', 'email']);
+    expect(sp.getAll('sort')).toEqual(['email,asc']);
+  });
+
+  it('omits empty qFields', () => {
+    const qs = toQuery({ q: 'x', qFields: [] });
+    expect(qs).toBe('?q=x');
+  });
+});
+
+describe('searchPost (filter-engine helper)', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    setSessionExpiredHandler(() => {});
+  });
+
+  it('posts the SearchRequestBody and normalizes the PageResponse', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      expect(init?.method).toBe('POST');
+      const body = JSON.parse(String(init?.body));
+      expect(body.filters).toEqual([{ field: 'enabled', operator: 'EQ', values: ['true'] }]);
+      expect(body.qFields).toEqual(['firstName']);
+      return json(
+        {
+          data: [{ id: 'u1' }],
+          meta: { page: 0, pageSize: 10, totalElements: 1, totalPages: 1, hasNext: false, hasPrevious: false },
+        },
+        200,
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await searchPost<{ id: string }>('/api/v1/users/search', {
+      page: 0,
+      size: 10,
+      filters: [{ field: 'enabled', operator: 'EQ', values: ['true'] }],
+      q: 'ali',
+      qFields: ['firstName'],
+    });
+
+    expect(result.items).toEqual([{ id: 'u1' }]);
+    expect(result.totalElements).toBe(1);
+    expect(result.page).toBe(0);
   });
 });
