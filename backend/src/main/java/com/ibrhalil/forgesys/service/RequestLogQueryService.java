@@ -31,15 +31,22 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class RequestLogQueryService {
 
-    /** Filterable/sortable direct attributes of the request log; {@code q} matches {@code path}, {@code traceId}, {@code username}. */
+    /**
+     * Filterable/sortable attributes of the request log (K-49 — every displayed
+     * column); {@code q} matches {@code path}, {@code traceId}, {@code username},
+     * {@code userAgent}. {@code status} is INT-typed (HTTP status code — numeric
+     * compare, e.g. GTE 400); {@code requestBody} stays deliberately unregistered
+     * (masked high-risk payload, not a filter target).
+     */
     public static final FilterFieldSet REQUEST_LOG_FIELDS = FilterFieldSet.builder()
             .field(RequestLog_.TRACE_ID, FilterFieldType.STRING, true)
             .field(RequestLog_.METHOD, FilterFieldType.STRING, false)
             .field(RequestLog_.PATH, FilterFieldType.STRING, true)
-            .field(RequestLog_.STATUS, FilterFieldType.STRING, false)
+            .field(RequestLog_.STATUS, FilterFieldType.INT, false)
             .field(RequestLog_.USER_ID, FilterFieldType.UUID, false)
             .field(RequestLog_.USERNAME, FilterFieldType.STRING, true)
-            .field(RequestLog_.IP_ADDRESS, FilterFieldType.STRING, false)
+            .field(RequestLog_.IP_ADDRESS, FilterFieldType.STRING, true)
+            .field(RequestLog_.USER_AGENT, FilterFieldType.STRING, true)
             .field(RequestLog_.DURATION_MS, FilterFieldType.NUMERIC, false)
             .field(AuditEntity_.CREATED_DATE, FilterFieldType.TEMPORAL, false)
             .field(AuditEntity_.UPDATED_AT, FilterFieldType.TEMPORAL, false)
@@ -48,8 +55,8 @@ public class RequestLogQueryService {
     private final RequestLogRepository requestLogRepository;
 
     @Transactional(readOnly = true)
-    public Page<RequestLogResponse> findAll(Pageable pageable, String q, String traceId, String method,
-                                            Integer status, UUID userId, String username) {
+    public Page<RequestLogResponse> findAll(Pageable pageable, String q, List<String> qFields, String traceId,
+            String method, Integer status, UUID userId, String username) {
         List<FilterCriteria> filters = new ArrayList<>();
         if (StringUtils.hasText(traceId)) {
             filters.add(new FilterCriteria(RequestLog_.TRACE_ID, FilterOperator.EQ, List.of(traceId.trim())));
@@ -66,12 +73,13 @@ public class RequestLogQueryService {
         if (StringUtils.hasText(username)) {
             filters.add(new FilterCriteria(RequestLog_.USERNAME, FilterOperator.EQ, List.of(username.trim())));
         }
-        return search(pageable, StringUtils.hasText(q) ? q.trim() : null, filters);
+        return search(pageable, StringUtils.hasText(q) ? q.trim() : null, qFields, filters);
     }
 
     @Transactional(readOnly = true)
-    public Page<RequestLogResponse> search(Pageable pageable, String q, List<FilterCriteria> filters) {
-        Specification<RequestLog> spec = FilterSpecifications.from(REQUEST_LOG_FIELDS, q, filters);
+    public Page<RequestLogResponse> search(Pageable pageable, String q, List<String> qFields,
+            List<FilterCriteria> filters) {
+        Specification<RequestLog> spec = FilterSpecifications.from(REQUEST_LOG_FIELDS, q, qFields, filters);
         return requestLogRepository.findAll(spec, pageable).map(this::toResponse);
     }
 

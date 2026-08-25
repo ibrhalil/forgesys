@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -40,9 +41,11 @@ public class ProjectNoteCategoryController {
     public ResponseEntity<PageResponse<NoteCategoryResponse>> list(
             @PathVariable UUID projectId,
             @PageableDefault(sort = "name") Pageable pageable,
-            @RequestParam(required = false) String q) {
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) List<String> qFields) {
         SortGuard.require(pageable, NoteCategoryService.FILTER_FIELDS);
-        return ResponseEntity.ok(PageResponse.of(noteCategoryService.searchInProject(projectId, q, pageable)));
+        return ResponseEntity.ok(PageResponse.of(
+                noteCategoryService.searchInProject(projectId, q, qFields, pageable)));
     }
 
     @PostMapping

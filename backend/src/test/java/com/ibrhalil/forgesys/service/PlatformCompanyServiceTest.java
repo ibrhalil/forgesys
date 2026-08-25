@@ -28,6 +28,8 @@ class PlatformCompanyServiceTest {
     @Mock
     private CompanyRepository companyRepository;
     @Mock
+    private PlatformCompanyListQueryExecutor platformCompanyListQueryExecutor;
+    @Mock
     private AuditService auditService;
 
     private PlatformCompanyService platformCompanyService;
@@ -35,7 +37,8 @@ class PlatformCompanyServiceTest {
 
     @BeforeEach
     void setUp() {
-        platformCompanyService = new PlatformCompanyService(companyRepository, auditService);
+        platformCompanyService = new PlatformCompanyService(companyRepository,
+                platformCompanyListQueryExecutor, auditService);
         AuditLogAspect.setTestHook(auditCapture::set);
     }
 

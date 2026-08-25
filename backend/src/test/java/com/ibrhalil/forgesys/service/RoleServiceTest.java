@@ -37,6 +37,8 @@ class RoleServiceTest {
     @Mock
     private RoleRepository roleRepository;
     @Mock
+    private RoleListQueryExecutor roleListQueryExecutor;
+    @Mock
     private PermissionRepository permissionRepository;
     @Mock
     private com.ibrhalil.forgesys.persistence.repository.UserRepository userRepository;
@@ -54,7 +56,7 @@ class RoleServiceTest {
 
     @BeforeEach
     void setUp() {
-        roleService = new RoleService(roleRepository, permissionRepository, userRepository, groupRepository, auditService, sessionRevocationService, lastAdminGuard);
+        roleService = new RoleService(roleRepository, roleListQueryExecutor, permissionRepository, userRepository, groupRepository, auditService, sessionRevocationService, lastAdminGuard);
         AuditLogAspect.setTestHook(auditCapture::set);
     }
 

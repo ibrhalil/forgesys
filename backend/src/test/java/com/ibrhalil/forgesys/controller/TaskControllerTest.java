@@ -159,6 +159,58 @@ class TaskControllerTest extends AbstractRbacWebTest {
                 .andExpect(status().isNoContent());
     }
 
+    /* ── K-49: engine-wired list — q, structured filters, dueDate (DATE) ── */
+
+    @Test
+    void listWithQMatchesTitleAndDescription() throws Exception {
+        Project project = seedProject();
+        seedTask(project.getId(), "Refactor auth", TaskStatus.TODO, TaskPriority.HIGH);
+        Task docs = seedTask(project.getId(), "Write docs", TaskStatus.DONE, TaskPriority.LOW);
+        docs.setDescription("explain the refactor steps");
+        entityManager.merge(docs);
+        seedTask(project.getId(), "Unrelated", TaskStatus.TODO, TaskPriority.LOW);
+        entityManager.flush();
+
+        mockMvc.perform(get("/api/v1/projects/" + project.getId() + "/tasks")
+                        .param("q", "refactor")
+                        .cookie(auth("reader@tenant.test", "pm:task:read")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.meta.totalElements").value(2));
+    }
+
+    @Test
+    void searchFiltersByStatusAndDueDate() throws Exception {
+        Project project = seedProject();
+        Task overdue = seedTask(project.getId(), "Overdue", TaskStatus.TODO, TaskPriority.HIGH);
+        overdue.setDueDate(java.time.LocalDate.parse("2026-01-10"));
+        Task scheduled = seedTask(project.getId(), "Scheduled", TaskStatus.TODO, TaskPriority.LOW);
+        scheduled.setDueDate(java.time.LocalDate.parse("2026-09-01"));
+        Task doneEarly = seedTask(project.getId(), "Done early", TaskStatus.DONE, TaskPriority.LOW);
+        doneEarly.setDueDate(java.time.LocalDate.parse("2026-01-05"));
+        entityManager.flush();
+
+        mockMvc.perform(post("/api/v1/projects/" + project.getId() + "/tasks/search")
+                        .contentType(JSON)
+                        .cookie(auth("reader@tenant.test", "pm:task:read"))
+                        .content("""
+                                {"filters":[
+                                    {"field":"status","operator":"EQ","values":["TODO"]},
+                                    {"field":"dueDate","operator":"GTE","values":["2026-08-01"]}
+                                 ]}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.meta.totalElements").value(1))
+                .andExpect(jsonPath("$.data[0].title").value("Scheduled"));
+
+        // unparseable date -> 400, not 500
+        mockMvc.perform(post("/api/v1/projects/" + project.getId() + "/tasks/search")
+                        .contentType(JSON)
+                        .cookie(auth("reader@tenant.test", "pm:task:read"))
+                        .content("""
+                                {"filters":[{"field":"dueDate","operator":"GTE","values":["tomorrow"]}]}"""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("validation_error"));
+    }
+
     private Project seedProject() {
         Project project = new Project();
         project.setName("proj-" + UUID.randomUUID());

@@ -50,6 +50,7 @@ class AppBuilderServiceTest {
     private static final ObjectMapper JSON = new ObjectMapper();
 
     @Mock private AppRepository appRepository;
+    @Mock private AppListQueryExecutor appListQueryExecutor;
     @Mock private AppPropertyRepository propertyRepository;
     @Mock private AppViewRepository viewRepository;
     @Mock private PlanLimitService planLimitService;
@@ -64,7 +65,7 @@ class AppBuilderServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new AppBuilderService(appRepository, propertyRepository, viewRepository,
+        service = new AppBuilderService(appRepository, appListQueryExecutor, propertyRepository, viewRepository,
                 new AppViewConfigValidator(new AppQueryValidator(), JSON),
                 planLimitService, projectContainerSupport, projectRepository, auditService, JSON);
         appId = UUID.randomUUID();

@@ -6,7 +6,9 @@ import com.ibrhalil.forgesys.dto.PermissionResponse;
 import com.ibrhalil.forgesys.dto.RoleRequest;
 import com.ibrhalil.forgesys.dto.RoleResponse;
 import com.ibrhalil.forgesys.dto.RoleSummary;
+import com.ibrhalil.forgesys.dto.SearchRequest;
 import com.ibrhalil.forgesys.entity.AuditEntity_;
+import com.ibrhalil.forgesys.entity.BaseEntity_;
 import com.ibrhalil.forgesys.entity.Group;
 import com.ibrhalil.forgesys.entity.Permission;
 import com.ibrhalil.forgesys.entity.Role;
@@ -44,16 +46,26 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class RoleService {
 
-    /** Filterable/sortable direct attributes of the role list; {@code q} matches {@code name}. */
+    /**
+     * Filterable/sortable attributes of the role list (K-49); {@code q} matches
+     * {@code name} and {@code description}. {@code permissionCount} is a subquery
+     * scalar (filter + sort — explicit grants only, 0 for all-permissions roles);
+     * {@code permissionIds}/{@code parentIds} are collection-membership filters.
+     */
     public static final FilterFieldSet FILTER_FIELDS = FilterFieldSet.builder()
             .field(Role_.NAME, FilterFieldType.STRING, true)
-            .field(Role_.DESCRIPTION, FilterFieldType.STRING, false)
+            .field(Role_.DESCRIPTION, FilterFieldType.STRING, true)
             .field(Role_.ALL_PERMISSIONS, FilterFieldType.BOOLEAN, false)
             .field(AuditEntity_.CREATED_DATE, FilterFieldType.TEMPORAL, false)
             .field(AuditEntity_.UPDATED_AT, FilterFieldType.TEMPORAL, false)
+            .subqueryField("permissionCount", FilterFieldType.NUMERIC, false,
+                    UserDirectoryQueryExecutor.countMembers(Role_.PERMISSIONS))
+            .membershipField("permissionIds", Role_.PERMISSIONS, BaseEntity_.ID)
+            .membershipField("parentIds", Role_.PARENT_ROLES, BaseEntity_.ID)
             .build();
 
     private final RoleRepository roleRepository;
+    private final RoleListQueryExecutor roleListQueryExecutor;
     private final PermissionRepository permissionRepository;
     private final UserRepository userRepository;
     private final GroupRepository groupRepository;
@@ -65,9 +77,18 @@ public class RoleService {
     private static final String ALL_PERMISSIONS_SENTINEL = "ALL_PERMISSIONS";
 
     @Transactional(readOnly = true)
-    public Page<RoleResponse> search(String q, Pageable pageable) {
-        Specification<Role> spec = FilterSpecifications.from(FILTER_FIELDS, StringUtils.hasText(q) ? q.trim() : null, List.of());
-        return roleRepository.findAll(spec, pageable).map(this::toResponse);
+    public Page<RoleResponse> search(String q, List<String> qFields, Pageable pageable) {
+        Specification<Role> spec = FilterSpecifications.from(FILTER_FIELDS,
+                StringUtils.hasText(q) ? q.trim() : null, qFields, List.of());
+        return roleListQueryExecutor.search(spec, pageable);
+    }
+
+    /** Full {@link SearchRequest} variant backing {@code POST /roles/search}. */
+    @Transactional(readOnly = true)
+    public Page<RoleResponse> search(SearchRequest request, Pageable pageable) {
+        Specification<Role> spec = FilterSpecifications.from(FILTER_FIELDS, request.q(), request.qFields(),
+                request.filters());
+        return roleListQueryExecutor.search(spec, pageable);
     }
 
     @Transactional(readOnly = true)

@@ -4,9 +4,11 @@ import com.ibrhalil.forgesys.dto.PageResponse;
 import com.ibrhalil.forgesys.dto.ProjectRequest;
 import com.ibrhalil.forgesys.dto.ProjectResponse;
 import com.ibrhalil.forgesys.dto.ProjectTypeResponse;
+import com.ibrhalil.forgesys.dto.SearchRequest;
 import com.ibrhalil.forgesys.entity.ProjectType;
 import com.ibrhalil.forgesys.service.ProjectService;
 import com.ibrhalil.forgesys.web.SortGuard;
+import com.ibrhalil.forgesys.web.filter.SearchRequests;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
@@ -39,10 +41,23 @@ public class ProjectController {
     public ResponseEntity<PageResponse<ProjectResponse>> list(
             @PageableDefault(sort = "name") Pageable pageable,
             @RequestParam(required = false) String q,
+            @RequestParam(required = false) List<String> qFields,
             @RequestParam(required = false) UUID parentProjectId,
             @RequestParam(required = false) ProjectType type) {
         SortGuard.require(pageable, ProjectService.FILTER_FIELDS);
-        return ResponseEntity.ok(PageResponse.of(projectService.search(q, parentProjectId, type, pageable)));
+        return ResponseEntity.ok(PageResponse.of(
+                projectService.search(q, qFields, parentProjectId, type, pageable)));
+    }
+
+    /**
+     * Filter-engine variant of the list: paging + multi-sort + structured filters +
+     * global {@code q} (optionally narrowed via {@code qFields}) in one POST body.
+     */
+    @PostMapping("/search")
+    @PreAuthorize("hasAuthority('pm:project:read')")
+    public ResponseEntity<PageResponse<ProjectResponse>> search(@Valid @RequestBody SearchRequest request) {
+        Pageable pageable = SearchRequests.toPageable(request, ProjectService.FILTER_FIELDS);
+        return ResponseEntity.ok(PageResponse.of(projectService.search(request, pageable)));
     }
 
     /**

@@ -53,8 +53,9 @@ public class NoteListQueryExecutor {
         };
     }
 
-    static FilterFieldSet.SubqueryExpression projectName() {
-        return referencedName(Project.class, Note_.PROJECT_ID, BaseEntity_.ID, Project_.NAME);
+    /** Project-name subquery anchored at an arbitrary project-id column. */
+    static FilterFieldSet.SubqueryExpression projectNameOf(String linkIdAttribute) {
+        return referencedName(Project.class, linkIdAttribute, BaseEntity_.ID, Project_.NAME);
     }
 
     static FilterFieldSet.SubqueryExpression categoryName() {
@@ -69,7 +70,7 @@ public class NoteListQueryExecutor {
                         root.get(Note_.TITLE),
                         root.get(Note_.CONTENT),
                         root.get(Note_.PROJECT_ID),
-                        projectName().apply(root, query, cb),
+                        projectNameOf(Note_.PROJECT_ID).apply(root, query, cb),
                         root.get(Note_.CATEGORY_ID),
                         categoryName().apply(root, query, cb),
                         root.get(Note_.PINNED),

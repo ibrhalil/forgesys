@@ -5,10 +5,12 @@ import com.ibrhalil.forgesys.dto.AppPlanLimitsResponse;
 import com.ibrhalil.forgesys.dto.AppRequest;
 import com.ibrhalil.forgesys.dto.AppResponse;
 import com.ibrhalil.forgesys.dto.PageResponse;
+import com.ibrhalil.forgesys.dto.SearchRequest;
 import com.ibrhalil.forgesys.config.PlanDefinition;
 import com.ibrhalil.forgesys.service.AppBuilderService;
 import com.ibrhalil.forgesys.service.PlanLimitService;
 import com.ibrhalil.forgesys.web.SortGuard;
+import com.ibrhalil.forgesys.web.filter.SearchRequests;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
@@ -26,6 +28,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -62,9 +65,21 @@ public class AppController {
     public ResponseEntity<PageResponse<AppResponse>> list(
             @PageableDefault(sort = "name") Pageable pageable,
             @RequestParam(required = false) String q,
+            @RequestParam(required = false) List<String> qFields,
             @RequestParam(required = false) UUID projectId) {
         SortGuard.require(pageable, AppBuilderService.FILTER_FIELDS);
-        return ResponseEntity.ok(PageResponse.of(appBuilderService.search(q, projectId, pageable)));
+        return ResponseEntity.ok(PageResponse.of(appBuilderService.search(q, qFields, projectId, pageable)));
+    }
+
+    /**
+     * Filter-engine variant of the list: paging + multi-sort + structured filters +
+     * global {@code q} (optionally narrowed via {@code qFields}) in one POST body.
+     */
+    @PostMapping("/search")
+    @PreAuthorize("hasAuthority('apps:app:read')")
+    public ResponseEntity<PageResponse<AppResponse>> search(@Valid @RequestBody SearchRequest request) {
+        Pageable pageable = SearchRequests.toPageable(request, AppBuilderService.FILTER_FIELDS);
+        return ResponseEntity.ok(PageResponse.of(appBuilderService.search(request, pageable)));
     }
 
     @GetMapping("/{id}")

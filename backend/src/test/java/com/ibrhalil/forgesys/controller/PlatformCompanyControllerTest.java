@@ -13,6 +13,7 @@ import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -58,8 +59,25 @@ class PlatformCompanyControllerTest extends AbstractRbacWebTest {
         mockMvc.perform(get("/api/v1/platform/companies")
                         .cookie(auth("platform_reader@tenant.test", "platform:company:read")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[?(@.id == '" + company.getId() + "')].name").value("testcompany"))
-                .andExpect(jsonPath("$[?(@.id == '" + company.getId() + "')].status").value("ACTIVE"));
+                .andExpect(jsonPath("$.meta.totalElements").value(1))
+                .andExpect(jsonPath("$.data[?(@.id == '" + company.getId() + "')].name").value("testcompany"))
+                .andExpect(jsonPath("$.data[?(@.id == '" + company.getId() + "')].status").value("ACTIVE"));
+    }
+
+    /** K-49: the platform list is engine-wired — status filter + subdomain q targeting. */
+    @Test
+    void searchFiltersByStatus() throws Exception {
+        seedCompany("activeco", CompanyStatus.ACTIVE);
+        seedCompany("suspendedco", CompanyStatus.SUSPENDED);
+
+        mockMvc.perform(post("/api/v1/platform/companies/search")
+                        .contentType(JSON)
+                        .cookie(auth("platform_reader@tenant.test", "platform:company:read"))
+                        .content("""
+                                {"filters":[{"field":"status","operator":"EQ","values":["SUSPENDED"]}]}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.meta.totalElements").value(1))
+                .andExpect(jsonPath("$.data[0].name").value("suspendedco"));
     }
 
     @Test
@@ -152,7 +170,7 @@ class PlatformCompanyControllerTest extends AbstractRbacWebTest {
             mockMvc.perform(get("/api/v1/platform/companies")
                             .cookie(authTenant(tenant, "platform_reader@tenant.test", "platform:company:read")))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$[?(@.id == '" + company.getId() + "')].name").value("ctxtest"));
+                    .andExpect(jsonPath("$.data[?(@.id == '" + company.getId() + "')].name").value("ctxtest"));
         } finally {
             TenantContext.clear();
         }

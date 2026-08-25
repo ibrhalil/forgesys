@@ -5,8 +5,10 @@ import com.ibrhalil.forgesys.dto.AssignRolesRequest;
 import com.ibrhalil.forgesys.dto.PageResponse;
 import com.ibrhalil.forgesys.dto.RoleRequest;
 import com.ibrhalil.forgesys.dto.RoleResponse;
+import com.ibrhalil.forgesys.dto.SearchRequest;
 import com.ibrhalil.forgesys.service.RoleService;
 import com.ibrhalil.forgesys.web.SortGuard;
+import com.ibrhalil.forgesys.web.filter.SearchRequests;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
@@ -24,6 +26,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -37,9 +40,21 @@ public class RoleController {
     @PreAuthorize("hasAuthority('iam:role:read')")
     public ResponseEntity<PageResponse<RoleResponse>> list(
             @PageableDefault(sort = "name") Pageable pageable,
-            @RequestParam(required = false) String q) {
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) List<String> qFields) {
         SortGuard.require(pageable, RoleService.FILTER_FIELDS);
-        return ResponseEntity.ok(PageResponse.of(roleService.search(q, pageable)));
+        return ResponseEntity.ok(PageResponse.of(roleService.search(q, qFields, pageable)));
+    }
+
+    /**
+     * Filter-engine variant of the list: paging + multi-sort + structured filters +
+     * global {@code q} (optionally narrowed via {@code qFields}) in one POST body.
+     */
+    @PostMapping("/search")
+    @PreAuthorize("hasAuthority('iam:role:read')")
+    public ResponseEntity<PageResponse<RoleResponse>> search(@Valid @RequestBody SearchRequest request) {
+        Pageable pageable = SearchRequests.toPageable(request, RoleService.FILTER_FIELDS);
+        return ResponseEntity.ok(PageResponse.of(roleService.search(request, pageable)));
     }
 
     @GetMapping("/{id}")
