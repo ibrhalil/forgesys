@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { LuListFilter, LuX } from 'react-icons/lu';
 import { cn } from '../../lib/cn';
 import { useT } from '../../lib/i18n';
@@ -54,6 +55,10 @@ const INPUT_CLASS =
   'w-full rounded-md border border-glass bg-main/5 px-2 py-1.5 text-sm text-main ' +
   'placeholder:text-muted/50 focus:outline-none focus:ring-2 focus:ring-accent/50';
 
+const PANEL_WIDTH = 256; // w-64
+/** Flip decision fallback when layout measurement is unavailable (e.g. jsdom). */
+const PANEL_FALLBACK_HEIGHT = 240;
+
 interface ColumnFilterButtonProps {
   spec: ColumnFilterSpec;
   header: string;
@@ -66,12 +71,28 @@ interface ColumnFilterButtonProps {
  * Per-column structured-filter trigger for DataTable headers (K-49): a small popover
  * with an operator select plus a type-appropriate value control, producing a backend
  * {@link FilterCriteria}. The state is controlled by the page (via
- * `useListPageState.filters`); clearing removes the clause.
+ * `useListPageState.filters`); clearing removes the clause. The popover renders as a
+ * fixed-position body portal (like RowMenu/SelectInput menus) so container overflow
+ * cannot clip it on short tables, and flips above the trigger near the viewport bottom.
  */
 export function ColumnFilterButton({ spec, header, active, onChange }: ColumnFilterButtonProps) {
   const { t } = useT();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const height = panelRef.current?.offsetHeight || PANEL_FALLBACK_HEIGHT;
+    const openUp = rect.bottom + height + 12 > window.innerHeight;
+    const top = openUp ? Math.max(8, rect.top - height - 6) : rect.bottom + 6;
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - PANEL_WIDTH - 8));
+    setPos({ top, left });
+  }, [open]);
 
   const operators = spec.operators ?? defaultOperators(spec.control);
   const [operator, setOperator] = useState<FilterOperator>(active?.operator ?? operators[0]);
@@ -94,22 +115,43 @@ export function ColumnFilterButton({ spec, header, active, onChange }: ColumnFil
 
   useEffect(() => {
     if (!open) return;
+    const insideFilterSurface = (target: EventTarget | null): boolean => {
+      const el = target as HTMLElement | null;
+      return (
+        !!el &&
+        (!!containerRef.current?.contains(el) ||
+          !!panelRef.current?.contains(el) ||
+          !!el.closest?.('[role="listbox"]'))
+      );
+    };
     const onPointerDown = (e: MouseEvent | TouchEvent) => {
-      const target = e.target as Node;
-      if (containerRef.current && !containerRef.current.contains(target)) {
-        setOpen(false);
-      }
+      if (!insideFilterSurface(e.target)) setOpen(false);
     };
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key === 'Escape') {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
     };
+    // Any scroll outside the popover (incl. the table's overflow-x container) closes
+    // it — simpler and more predictable than repositioning a fixed portal (same
+    // trade-off as RowMenu). Scrolls inside the panel or a SelectInput option menu
+    // keep the draft intact.
+    const onScroll = (e: Event) => {
+      if (!(e.target instanceof HTMLElement) || !insideFilterSurface(e.target)) setOpen(false);
+    };
+    const onResize = () => setOpen(false);
     document.addEventListener('mousedown', onPointerDown);
     document.addEventListener('touchstart', onPointerDown);
     document.addEventListener('keydown', onKeyDown);
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onResize);
     return () => {
       document.removeEventListener('mousedown', onPointerDown);
       document.removeEventListener('touchstart', onPointerDown);
       document.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onResize);
     };
   }, [open]);
 
@@ -212,6 +254,7 @@ export function ColumnFilterButton({ spec, header, active, onChange }: ColumnFil
   return (
     <div ref={containerRef} className="relative inline-flex">
       <button
+        ref={triggerRef}
         type="button"
         onClick={(e) => {
           e.stopPropagation();
@@ -220,6 +263,7 @@ export function ColumnFilterButton({ spec, header, active, onChange }: ColumnFil
         title={t('filter.title', { field: header })}
         aria-label={t('filter.title', { field: header })}
         aria-expanded={open}
+        aria-haspopup="dialog"
         className={cn(
           'inline-flex h-4 w-4 items-center justify-center rounded text-muted/60 transition-colors hover:text-main focus:outline-none focus-visible:ring-1 focus-visible:ring-accent',
           active && 'text-accent',
@@ -229,51 +273,65 @@ export function ColumnFilterButton({ spec, header, active, onChange }: ColumnFil
         <LuListFilter className="h-3 w-3" aria-hidden />
       </button>
 
-      {open && (
-        <div className="absolute left-0 top-full z-60 mt-2 w-64 rounded-xl border border-glass bg-surface p-3 text-left shadow-xl shadow-black/15">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <span className="truncate text-xs font-semibold text-main">{header}</span>
-            {active && (
-              <button
-                type="button"
-                onClick={clear}
-                className="inline-flex items-center gap-1 text-[11px] font-medium text-accent hover:underline"
-              >
-                <LuX className="h-3 w-3" aria-hidden />
-                {t('filter.clear')}
-              </button>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <SelectInput<FilterOperator>
-              id={`filter-op-${spec.field}`}
-              size="sm"
-              options={opOptions}
-              value={opOptions.find((o) => o.value === operator) ?? null}
-              onChange={(o) => setOperator((o as SelectOption<FilterOperator> | null)?.value ?? operator)}
-            />
-            {valueControl()}
-            {operator === 'BETWEEN' && !operatorNeedsNoValue(operator) && (
-              <input
-                aria-label={t('filter.valueTo')}
-                type={spec.control === 'number' ? 'number' : spec.control === 'date' ? 'date' : 'text'}
-                className={cn(INPUT_CLASS, incomplete && secondValue === '' && 'border-danger/60')}
-                value={secondValue}
-                onChange={(e) => setSecondValue(e.target.value)}
-              />
-            )}
-            <div className="flex justify-end gap-2 pt-1">
-              <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
-                {t('common.cancel')}
-              </Button>
-              <Button variant="secondary" size="sm" disabled={incomplete} onClick={apply}>
-                {t('filter.apply')}
-              </Button>
+      {open &&
+        createPortal(
+          <div
+            ref={panelRef}
+            role="dialog"
+            aria-label={t('filter.title', { field: header })}
+            style={{
+              position: 'fixed',
+              top: pos?.top,
+              left: pos?.left,
+              width: PANEL_WIDTH,
+              zIndex: 60,
+            }}
+            className="rounded-xl border border-glass bg-surface p-3 text-left shadow-xl shadow-black/15"
+          >
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="truncate text-xs font-semibold text-main">{header}</span>
+              {active && (
+                <button
+                  type="button"
+                  onClick={clear}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-accent hover:underline"
+                >
+                  <LuX className="h-3 w-3" aria-hidden />
+                  {t('filter.clear')}
+                </button>
+              )}
             </div>
-          </div>
-        </div>
-      )}
+
+            <div className="space-y-2">
+              <SelectInput<FilterOperator>
+                id={`filter-op-${spec.field}`}
+                size="sm"
+                options={opOptions}
+                value={opOptions.find((o) => o.value === operator) ?? null}
+                onChange={(o) => setOperator((o as SelectOption<FilterOperator> | null)?.value ?? operator)}
+              />
+              {valueControl()}
+              {operator === 'BETWEEN' && !operatorNeedsNoValue(operator) && (
+                <input
+                  aria-label={t('filter.valueTo')}
+                  type={spec.control === 'number' ? 'number' : spec.control === 'date' ? 'date' : 'text'}
+                  className={cn(INPUT_CLASS, incomplete && secondValue === '' && 'border-danger/60')}
+                  value={secondValue}
+                  onChange={(e) => setSecondValue(e.target.value)}
+                />
+              )}
+              <div className="flex justify-end gap-2 pt-1">
+                <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
+                  {t('common.cancel')}
+                </Button>
+                <Button variant="secondary" size="sm" disabled={incomplete} onClick={apply}>
+                  {t('filter.apply')}
+                </Button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
