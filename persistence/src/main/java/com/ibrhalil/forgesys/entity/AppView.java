@@ -20,9 +20,10 @@ import java.util.UUID;
  * property ids — validated against the app's property set; deliberately NOT a free-text
  * expression language, so the injection surface is structural, see ROADMAP 3.0.B spike).
  *
- * <p>NOTE on naming: the read-model {@code <Entity>View} suffix convention (e.g.
- * {@code UserDirectoryView}) refers to {@code @Immutable @Subselect} projections; this
- * entity is a writable domain entity named after its K-15 table {@code t_app_views}.
+ * <p>NOTE on naming: this is a writable domain entity named after its K-15 table
+ * {@code t_app_views} — not a read-model projection (the former
+ * {@code @Immutable @Subselect} {@code UserDirectoryView} read model moved to an
+ * in-code Criteria DTO projection, K-49).
  */
 @Entity
 @Getter

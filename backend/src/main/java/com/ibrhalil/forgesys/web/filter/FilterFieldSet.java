@@ -59,6 +59,36 @@ public final class FilterFieldSet {
         Expression<?> apply(Root<?> root, CriteriaQuery<?> query, CriteriaBuilder cb);
     }
 
+    /**
+     * Collection-membership configuration. Direct form ({@link #direct}) correlates a
+     * plural association of the root row; inverse form ({@link #inverse}) exists when
+     * the join table is owned by the OTHER side (e.g. a group's members live in
+     * {@code User.groups}) — the EXISTS starts from the member entity and correlates
+     * through its association back to the root row.
+     */
+    public record Membership(
+            String rootAssociation,
+            String memberIdAttribute,
+            Class<?> inverseEntity,
+            String inverseAssociation,
+            String inverseLinkIdAttribute,
+            String rootIdAttribute) {
+
+        static Membership direct(String rootAssociation, String memberIdAttribute) {
+            return new Membership(rootAssociation, memberIdAttribute, null, null, null, null);
+        }
+
+        static Membership inverse(Class<?> inverseEntity, String inverseAssociation,
+                String inverseLinkIdAttribute, String rootIdAttribute) {
+            return new Membership(null, "id", inverseEntity, inverseAssociation, inverseLinkIdAttribute,
+                    rootIdAttribute);
+        }
+
+        boolean inverse() {
+            return inverseEntity != null;
+        }
+    }
+
     /** One registered field: wire name, coarse type, kind and its resolution data. */
     public record RegisteredField(
             String name,
@@ -70,8 +100,7 @@ public final class FilterFieldSet {
             String joinAttribute,
             String leafAttribute,
             SubqueryExpression expression,
-            String memberAssociation,
-            String memberIdAttribute) {
+            Membership membership) {
 
         static RegisteredField direct(String name, FilterFieldType type, boolean searchable) {
             return direct(name, type, type.javaType(), searchable);
@@ -79,24 +108,24 @@ public final class FilterFieldSet {
 
         static RegisteredField direct(String name, FilterFieldType type, Class<?> javaType, boolean searchable) {
             return new RegisteredField(name, type, javaType, searchable, FieldKind.DIRECT, true,
-                    null, null, null, null, null);
+                    null, null, null, null);
         }
 
         static RegisteredField joined(String name, FilterFieldType type, boolean searchable,
                 String joinAttribute, String leafAttribute) {
             return new RegisteredField(name, type, type.javaType(), searchable, FieldKind.JOINED, true,
-                    joinAttribute, leafAttribute, null, null, null);
+                    joinAttribute, leafAttribute, null, null);
         }
 
         static RegisteredField subquery(String name, FilterFieldType type, boolean searchable,
                 SubqueryExpression expression) {
             return new RegisteredField(name, type, type.javaType(), searchable, FieldKind.SUBQUERY, true,
-                    null, null, expression, null, null);
+                    null, null, expression, null);
         }
 
-        static RegisteredField membership(String name, String memberAssociation, String memberIdAttribute) {
+        static RegisteredField membership(String name, Membership membership) {
             return new RegisteredField(name, FilterFieldType.UUID, UUID.class, false, FieldKind.MEMBERSHIP, false,
-                    null, null, null, memberAssociation, memberIdAttribute);
+                    null, null, null, membership);
         }
 
         /** Operator support is kind-aware: MEMBERSHIP accepts only the set operators. */
@@ -197,12 +226,24 @@ public final class FilterFieldSet {
         }
 
         /**
-         * Registers a collection-membership filter ({@code IN} = contains any of the
-         * member ids, {@code IS_NULL} = empty collection). Not sortable, not
-         * {@code q}-searchable.
+         * Registers a collection-membership filter over a plural association of the
+         * root entity ({@code IN} = contains any of the member ids, {@code IS_NULL} =
+         * empty collection). Not sortable, not {@code q}-searchable.
          */
         public Builder membershipField(String name, String memberAssociation, String memberIdAttribute) {
-            return register(RegisteredField.membership(name, memberAssociation, memberIdAttribute));
+            return register(RegisteredField.membership(name, Membership.direct(memberAssociation, memberIdAttribute)));
+        }
+
+        /**
+         * Inverse-membership variant for join tables owned by the other side (e.g. a
+         * group's members live in {@code User.groups}): the EXISTS starts from
+         * {@code inverseEntity}, correlates through {@code inverseAssociation} by link
+         * id and filters on the member's own id.
+         */
+        public Builder inverseMembershipField(String name, Class<?> inverseEntity, String inverseAssociation,
+                String inverseLinkIdAttribute, String rootIdAttribute) {
+            return register(RegisteredField.membership(name,
+                    Membership.inverse(inverseEntity, inverseAssociation, inverseLinkIdAttribute, rootIdAttribute)));
         }
 
         private Builder register(RegisteredField field) {

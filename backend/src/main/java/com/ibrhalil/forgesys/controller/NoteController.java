@@ -3,8 +3,10 @@ package com.ibrhalil.forgesys.controller;
 import com.ibrhalil.forgesys.dto.NoteRequest;
 import com.ibrhalil.forgesys.dto.NoteResponse;
 import com.ibrhalil.forgesys.dto.PageResponse;
+import com.ibrhalil.forgesys.dto.SearchRequest;
 import com.ibrhalil.forgesys.service.NoteService;
 import com.ibrhalil.forgesys.web.SortGuard;
+import com.ibrhalil.forgesys.web.filter.SearchRequests;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -43,11 +46,24 @@ public class NoteController {
     public ResponseEntity<PageResponse<NoteResponse>> list(
             @PageableDefault(sort = "updatedAt", direction = Sort.Direction.DESC) Pageable pageable,
             @RequestParam(required = false) String q,
+            @RequestParam(required = false) List<String> qFields,
             @RequestParam(required = false) UUID categoryId,
             @RequestParam(required = false) Boolean pinned,
             @RequestParam(required = false) UUID projectId) {
         SortGuard.require(pageable, NoteService.FILTER_FIELDS);
-        return ResponseEntity.ok(PageResponse.of(noteService.search(q, categoryId, pinned, projectId, pageable)));
+        return ResponseEntity.ok(PageResponse.of(
+                noteService.search(q, qFields, categoryId, pinned, projectId, pageable)));
+    }
+
+    /**
+     * Filter-engine variant of the list: paging + multi-sort + structured filters +
+     * global {@code q} (optionally narrowed via {@code qFields}) in one POST body.
+     */
+    @PostMapping("/search")
+    @PreAuthorize("hasAuthority('notes:note:read')")
+    public ResponseEntity<PageResponse<NoteResponse>> search(@Valid @RequestBody SearchRequest request) {
+        Pageable pageable = SearchRequests.toPageable(request, NoteService.FILTER_FIELDS);
+        return ResponseEntity.ok(PageResponse.of(noteService.search(request, pageable)));
     }
 
     @GetMapping("/{id}")

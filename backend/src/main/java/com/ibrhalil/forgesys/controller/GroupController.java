@@ -5,8 +5,10 @@ import com.ibrhalil.forgesys.dto.AssignRolesRequest;
 import com.ibrhalil.forgesys.dto.GroupRequest;
 import com.ibrhalil.forgesys.dto.GroupResponse;
 import com.ibrhalil.forgesys.dto.PageResponse;
+import com.ibrhalil.forgesys.dto.SearchRequest;
 import com.ibrhalil.forgesys.service.GroupService;
 import com.ibrhalil.forgesys.web.SortGuard;
+import com.ibrhalil.forgesys.web.filter.SearchRequests;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
@@ -38,9 +40,21 @@ public class GroupController {
     @PreAuthorize("hasAuthority('iam:group:read')")
     public ResponseEntity<PageResponse<GroupResponse>> list(
             @PageableDefault(sort = "name") Pageable pageable,
-            @RequestParam(required = false) String q) {
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) List<String> qFields) {
         SortGuard.require(pageable, GroupService.FILTER_FIELDS);
-        return ResponseEntity.ok(PageResponse.of(groupService.search(q, pageable)));
+        return ResponseEntity.ok(PageResponse.of(groupService.search(q, qFields, pageable)));
+    }
+
+    /**
+     * Filter-engine variant of the list: paging + multi-sort + structured filters +
+     * global {@code q} (optionally narrowed via {@code qFields}) in one POST body.
+     */
+    @PostMapping("/search")
+    @PreAuthorize("hasAuthority('iam:group:read')")
+    public ResponseEntity<PageResponse<GroupResponse>> search(@Valid @RequestBody SearchRequest request) {
+        Pageable pageable = SearchRequests.toPageable(request, GroupService.FILTER_FIELDS);
+        return ResponseEntity.ok(PageResponse.of(groupService.search(request, pageable)));
     }
 
     @GetMapping("/{id}")

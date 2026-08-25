@@ -300,4 +300,139 @@ class GroupControllerTest extends AbstractRbacWebTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("last_admin_required"));
     }
+
+    /* ── K-49: count subqueries, direct + inverse membership, qFields ── */
+
+    @Test
+    void searchFiltersAndSortsByMemberCount() throws Exception {
+        Group empty = new Group();
+        empty.setName("a-empty");
+        entityManager.persist(empty);
+        Group busy = new Group();
+        busy.setName("b-busy");
+        entityManager.persist(busy);
+        Group loaded = new Group();
+        loaded.setName("c-loaded");
+        entityManager.persist(loaded);
+        User u1 = seedRbacUser("m1@tenant.test", "m1");
+        u1.getGroups().add(busy);
+        User u2 = seedRbacUser("m2@tenant.test", "m2");
+        u2.getGroups().add(loaded);
+        User u3 = seedRbacUser("m3@tenant.test", "m3");
+        u3.getGroups().add(loaded);
+        entityManager.merge(u1);
+        entityManager.merge(u2);
+        entityManager.merge(u3);
+        entityManager.flush();
+
+        mockMvc.perform(post("/api/v1/groups/search")
+                        .contentType(JSON)
+                        .cookie(auth("reader@tenant.test", "iam:group:read"))
+                        .content("""
+                                {"filters":[{"field":"memberCount","operator":"GTE","values":["1"]}],
+                                 "sorts":[{"field":"memberCount","direction":"desc"}]}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.meta.totalElements").value(2))
+                .andExpect(jsonPath("$.data[0].name").value("c-loaded"))
+                .andExpect(jsonPath("$.data[0].memberCount").value(2))
+                .andExpect(jsonPath("$.data[0].members[*].email").value(hasItem("m2@tenant.test")))
+                .andExpect(jsonPath("$.data[1].name").value("b-busy"))
+                .andExpect(jsonPath("$.data[1].memberCount").value(1));
+    }
+
+    @Test
+    void searchFiltersByInverseMemberMembership() throws Exception {
+        Group engineering = new Group();
+        engineering.setName("engineering");
+        entityManager.persist(engineering);
+        Group sales = new Group();
+        sales.setName("sales");
+        entityManager.persist(sales);
+        User alice = seedRbacUser("inv-alice@tenant.test", "ialice");
+        alice.getGroups().add(engineering);
+        entityManager.merge(alice);
+        entityManager.flush();
+
+        mockMvc.perform(post("/api/v1/groups/search")
+                        .contentType(JSON)
+                        .cookie(auth("reader@tenant.test", "iam:group:read"))
+                        .content("""
+                                {"filters":[{"field":"memberIds","operator":"IN","values":["%s"]}]}"""
+                                .formatted(alice.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.meta.totalElements").value(1))
+                .andExpect(jsonPath("$.data[0].name").value("engineering"));
+
+        // IS_NULL = group has no members at all
+        mockMvc.perform(post("/api/v1/groups/search")
+                        .contentType(JSON)
+                        .cookie(auth("reader@tenant.test", "iam:group:read"))
+                        .content("""
+                                {"filters":[{"field":"memberIds","operator":"IS_NULL","values":[]}]}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[*].name").value(hasItem("sales")))
+                .andExpect(jsonPath("$.data[*].name").value(not(hasItem("engineering"))));
+    }
+
+    @Test
+    void searchFiltersByRoleMembershipAndRejectsMembershipSort() throws Exception {
+        Role viewer = new Role();
+        viewer.setName("viewer");
+        entityManager.persist(viewer);
+        Group carriers = new Group();
+        carriers.setName("carriers");
+        carriers.getRoles().add(viewer);
+        entityManager.persist(carriers);
+        Group plain = new Group();
+        plain.setName("plain");
+        entityManager.persist(plain);
+        entityManager.flush();
+
+        mockMvc.perform(post("/api/v1/groups/search")
+                        .contentType(JSON)
+                        .cookie(auth("reader@tenant.test", "iam:group:read"))
+                        .content("""
+                                {"filters":[{"field":"roleIds","operator":"IN","values":["%s"]}]}"""
+                                .formatted(viewer.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.meta.totalElements").value(1))
+                .andExpect(jsonPath("$.data[0].name").value("carriers"));
+
+        mockMvc.perform(post("/api/v1/groups/search")
+                        .contentType(JSON)
+                        .cookie(auth("reader@tenant.test", "iam:group:read"))
+                        .content("""
+                                {"sorts":[{"field":"memberIds","direction":"asc"}]}"""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("validation_error"));
+    }
+
+    @Test
+    void getQNarrowedToSelectedQFieldsOnly() throws Exception {
+        Group engineering = new Group();
+        engineering.setName("engineering");
+        engineering.setDescription("night crew");
+        entityManager.persist(engineering);
+        Group nightOwls = new Group();
+        nightOwls.setName("dayshift");
+        nightOwls.setDescription("engineering day crew");
+        entityManager.persist(nightOwls);
+        entityManager.flush();
+
+        // plain q searches name OR description -> both match
+        mockMvc.perform(get("/api/v1/groups")
+                        .cookie(auth("reader@tenant.test", "iam:group:read"))
+                        .param("q", "engineering"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.meta.totalElements").value(2));
+
+        // qFields=name -> only the one whose NAME contains the term
+        mockMvc.perform(get("/api/v1/groups")
+                        .cookie(auth("reader@tenant.test", "iam:group:read"))
+                        .param("q", "engineering")
+                        .param("qFields", "name"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.meta.totalElements").value(1))
+                .andExpect(jsonPath("$.data[0].name").value("engineering"));
+    }
 }

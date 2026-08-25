@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 
+import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -221,6 +222,53 @@ class NoteControllerTest extends AbstractRbacWebTest {
         mockMvc.perform(delete("/api/v1/notes/" + note.getId())
                         .cookie(auth("deleter@tenant.test", "notes:note:delete")))
                 .andExpect(status().isNoContent());
+    }
+
+    /* ── K-49: referenced-name subquery columns (filter + sort + q) ── */
+
+    @Test
+    void searchFiltersSortsAndSearchesByProjectName() throws Exception {
+        Project archive = seedNotesProject("Archive");
+        seedNoteIn(defaultNotesProject.getId(), "Daily plan", "todo", null, false);
+        seedNoteIn(archive.getId(), "Old spec", "v1", null, false);
+        seedNoteIn(archive.getId(), "Older spec", "v0", null, false);
+
+        mockMvc.perform(post("/api/v1/notes/search")
+                        .contentType(JSON)
+                        .cookie(auth("reader@tenant.test", "notes:note:read"))
+                        .content("""
+                                {"filters":[{"field":"projectName","operator":"EQ","values":["Archive"]}]}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.meta.totalElements").value(2))
+                .andExpect(jsonPath("$.data[*].projectName").value(hasItem("Archive")));
+
+        // q over the resolved project name, narrowed by qFields
+        mockMvc.perform(get("/api/v1/notes")
+                        .cookie(auth("reader@tenant.test", "notes:note:read"))
+                        .param("q", "archive")
+                        .param("qFields", "projectName"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.meta.totalElements").value(2));
+    }
+
+    @Test
+    void searchFiltersAndSortsByCategoryName() throws Exception {
+        NoteCategory work = seedCategory("Work", null);
+        NoteCategory urgent = seedCategory("Urgent", null);
+        seedNote("API design", "spec", work.getId(), false);
+        seedNote("Fire", "now", urgent.getId(), false);
+        seedNote("No category", "-", null, false);
+
+        mockMvc.perform(post("/api/v1/notes/search")
+                        .contentType(JSON)
+                        .cookie(auth("reader@tenant.test", "notes:note:read"))
+                        .content("""
+                                {"filters":[{"field":"categoryName","operator":"CONTAINS","values":["urgen"]}],
+                                 "sorts":[{"field":"categoryName","direction":"desc"}]}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.meta.totalElements").value(1))
+                .andExpect(jsonPath("$.data[0].title").value("Fire"))
+                .andExpect(jsonPath("$.data[0].categoryName").value("Urgent"));
     }
 
     private Project seedNotesProject(String name) {

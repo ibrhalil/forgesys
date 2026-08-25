@@ -146,18 +146,31 @@ public final class FilterSpecifications {
      * Membership predicates over a plural association of the root: {@code IN} /
      * {@code NOT_IN} restrict the EXISTS to members whose id is in the values;
      * {@code IS_NULL} / {@code IS_NOT_NULL} run it unrestricted (empty / non-empty
-     * collection). The correlated join applies the member entity's
-     * {@code @SQLRestriction} (soft-deleted members are excluded), so the semantics
-     * match what the association resolves to elsewhere.
+     * collection). Direct form correlates the association on the root; inverse form
+     * starts from the member entity and correlates back through its association
+     * (join tables owned by the other side). Correlated joins apply the member
+     * entity's {@code @SQLRestriction} (soft-deleted members are excluded), so the
+     * semantics match what the associations resolve to elsewhere.
      */
     private static Predicate membershipPredicate(FilterFieldSet.RegisteredField field, FilterOperator operator,
             List<Object> values, Root<?> root, CriteriaQuery<?> query, CriteriaBuilder cb) {
+        FilterFieldSet.Membership membership = field.membership();
         boolean restrictToValues = operator == FilterOperator.IN || operator == FilterOperator.NOT_IN;
         Subquery<Integer> memberExists = query.subquery(Integer.class);
-        Join<?, ?> member = memberExists.correlate(root).join(field.memberAssociation());
         memberExists.select(cb.literal(1));
-        if (restrictToValues) {
-            memberExists.where(member.get(field.memberIdAttribute()).in(values));
+        if (!membership.inverse()) {
+            Join<?, ?> member = memberExists.correlate(root).join(membership.rootAssociation());
+            if (restrictToValues) {
+                memberExists.where(member.get(membership.memberIdAttribute()).in(values));
+            }
+        } else {
+            Root<?> member = memberExists.from(membership.inverseEntity());
+            Join<?, ?> link = member.join(membership.inverseAssociation());
+            jakarta.persistence.criteria.Predicate correlation = cb.equal(
+                    link.get(membership.inverseLinkIdAttribute()), root.get(membership.rootIdAttribute()));
+            memberExists.where(restrictToValues
+                    ? cb.and(correlation, member.get(membership.memberIdAttribute()).in(values))
+                    : correlation);
         }
         return switch (operator) {
             case IN, IS_NOT_NULL -> cb.exists(memberExists);

@@ -53,9 +53,9 @@ import static org.mockito.Mockito.when;
 class UserServiceTest {
 
     @Mock
-    private UserRepository userRepository;
+    private com.ibrhalil.forgesys.persistence.repository.UserRepository userRepository;
     @Mock
-    private com.ibrhalil.forgesys.persistence.repository.UserDirectoryViewRepository userDirectoryViewRepository;
+    private com.ibrhalil.forgesys.service.UserDirectoryQueryExecutor userDirectoryQueryExecutor;
     @Mock
     private com.ibrhalil.forgesys.persistence.repository.LoginHistoryRepository loginHistoryRepository;
     @Mock
@@ -86,7 +86,7 @@ class UserServiceTest {
 
     @BeforeEach
     void setUp() {
-        userService = new UserService(userRepository, userDirectoryViewRepository, loginHistoryRepository,
+        userService = new UserService(userRepository, userDirectoryQueryExecutor, loginHistoryRepository,
                 roleRepository, groupRepository, passwordEncoder, auditService, sessionRevocationService,
                 customUserDetailsService, lastAdminGuard, userTokenService, mailSender, mailLinkBuilder,
                 companyRepository);
