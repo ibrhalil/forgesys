@@ -39,6 +39,8 @@ class GroupServiceTest {
     @Mock
     private GroupRepository groupRepository;
     @Mock
+    private GroupListQueryExecutor groupListQueryExecutor;
+    @Mock
     private RoleRepository roleRepository;
     @Mock
     private UserRepository userRepository;
@@ -56,7 +58,7 @@ class GroupServiceTest {
 
     @BeforeEach
     void setUp() {
-        groupService = new GroupService(groupRepository, roleRepository, userRepository, auditService, sessionRevocationService, customUserDetailsService, lastAdminGuard);
+        groupService = new GroupService(groupRepository, groupListQueryExecutor, roleRepository, userRepository, auditService, sessionRevocationService, customUserDetailsService, lastAdminGuard);
         AuditLogAspect.setTestHook(auditCapture::set);
     }
 

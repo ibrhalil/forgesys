@@ -14,16 +14,19 @@ import com.ibrhalil.forgesys.dto.UserProfileUpdateRequest;
 import com.ibrhalil.forgesys.dto.UserResponse;
 import com.ibrhalil.forgesys.dto.UserUpdateRequest;
 import com.ibrhalil.forgesys.config.PermissionCatalog;
+import com.ibrhalil.forgesys.entity.AuditEntity_;
+import com.ibrhalil.forgesys.entity.BaseEntity_;
 import com.ibrhalil.forgesys.entity.Company;
 import com.ibrhalil.forgesys.entity.Group;
 import com.ibrhalil.forgesys.entity.Role;
 import com.ibrhalil.forgesys.entity.User;
+import com.ibrhalil.forgesys.entity.User_;
 import com.ibrhalil.forgesys.entity.UserAccount;
+import com.ibrhalil.forgesys.entity.UserAccount_;
 import com.ibrhalil.forgesys.entity.UserAuthToken;
 import com.ibrhalil.forgesys.entity.UserAuthTokenPurpose;
-import com.ibrhalil.forgesys.entity.UserDirectoryView;
-import com.ibrhalil.forgesys.entity.UserDirectoryView_;
 import com.ibrhalil.forgesys.entity.UserProfile;
+import com.ibrhalil.forgesys.entity.UserProfile_;
 import com.ibrhalil.forgesys.exception.BusinessException;
 import com.ibrhalil.forgesys.exception.ErrorCode;
 import com.ibrhalil.forgesys.exception.ResourceNotFoundException;
@@ -32,7 +35,6 @@ import com.ibrhalil.forgesys.persistence.repository.CompanyRepository;
 import com.ibrhalil.forgesys.persistence.repository.GroupRepository;
 import com.ibrhalil.forgesys.persistence.repository.LoginHistoryRepository;
 import com.ibrhalil.forgesys.persistence.repository.RoleRepository;
-import com.ibrhalil.forgesys.persistence.repository.UserDirectoryViewRepository;
 import com.ibrhalil.forgesys.persistence.repository.UserRepository;
 import com.ibrhalil.forgesys.security.CustomUserDetails;
 import com.ibrhalil.forgesys.security.SessionRevocationService;
@@ -77,24 +79,31 @@ import java.util.UUID;
 public class UserService {
 
     /**
-     * Filterable/sortable attributes of the user directory list. {@code q} matches
-     * email, username, first and last name (the profile join in the directory subselect
-     * finally makes name search possible). Also the sort whitelist for both
-     * {@code GET /users} and {@code POST /users/search}.
+     * Filterable/sortable attributes of the user directory list (K-49). {@code q}
+     * matches email, username, first and last name; {@code qFields} can narrow it.
+     * Joined columns (profile/account) resolve through to-one LEFT joins, counts
+     * through correlated subqueries, and {@code roleIds}/{@code groupIds} are
+     * collection-membership filters (IN = has any of these, IS_NULL = none at all).
+     * Also the sort whitelist for both {@code GET /users} and {@code POST /users/search}.
      */
     public static final FilterFieldSet FILTER_FIELDS = FilterFieldSet.builder()
-            .field(UserDirectoryView_.EMAIL, FilterFieldType.STRING, true)
-            .field(UserDirectoryView_.USERNAME, FilterFieldType.STRING, true)
-            .field(UserDirectoryView_.FIRST_NAME, FilterFieldType.STRING, true)
-            .field(UserDirectoryView_.LAST_NAME, FilterFieldType.STRING, true)
-            .field(UserDirectoryView_.EMAIL_VERIFIED, FilterFieldType.BOOLEAN, false)
-            .field(UserDirectoryView_.ENABLED, FilterFieldType.BOOLEAN, false)
-            .field(UserDirectoryView_.LOCKED_UNTIL, FilterFieldType.TEMPORAL, false)
-            .field(UserDirectoryView_.CREATED_DATE, FilterFieldType.TEMPORAL, false)
+            .field(User_.EMAIL, FilterFieldType.STRING, true)
+            .field(User_.USERNAME, FilterFieldType.STRING, true)
+            .joinedField("firstName", FilterFieldType.STRING, true, User_.USER_PROFILE, UserProfile_.FIRST_NAME)
+            .joinedField("lastName", FilterFieldType.STRING, true, User_.USER_PROFILE, UserProfile_.LAST_NAME)
+            .field(User_.EMAIL_VERIFIED, FilterFieldType.BOOLEAN, false)
+            .joinedField("enabled", FilterFieldType.BOOLEAN, false, User_.USER_ACCOUNT, UserAccount_.ENABLED)
+            .joinedField("lockedUntil", FilterFieldType.TEMPORAL, false, User_.USER_ACCOUNT, UserAccount_.LOCKED_UNTIL)
+            .joinedField("lastLoginAt", FilterFieldType.TEMPORAL, false, User_.USER_ACCOUNT, UserAccount_.LAST_LOGIN_AT)
+            .field(AuditEntity_.CREATED_DATE, FilterFieldType.TEMPORAL, false)
+            .subqueryField("roleCount", FilterFieldType.NUMERIC, false, UserDirectoryQueryExecutor.countMembers(User_.ROLES))
+            .subqueryField("groupCount", FilterFieldType.NUMERIC, false, UserDirectoryQueryExecutor.countMembers(User_.GROUPS))
+            .membershipField("roleIds", User_.ROLES, BaseEntity_.ID)
+            .membershipField("groupIds", User_.GROUPS, BaseEntity_.ID)
             .build();
 
     private final UserRepository userRepository;
-    private final UserDirectoryViewRepository userDirectoryViewRepository;
+    private final UserDirectoryQueryExecutor userDirectoryQueryExecutor;
     private final LoginHistoryRepository loginHistoryRepository;
     private final RoleRepository roleRepository;
     private final GroupRepository groupRepository;
@@ -109,16 +118,18 @@ public class UserService {
     private final CompanyRepository companyRepository;
 
     @Transactional(readOnly = true)
-    public Page<UserDirectoryViewResponse> search(String q, Pageable pageable) {
-        Specification<UserDirectoryView> spec = FilterSpecifications.from(FILTER_FIELDS, StringUtils.hasText(q) ? q.trim() : null, List.of());
-        return userDirectoryViewRepository.findAll(applyVisibilityScope(spec), pageable).map(this::toDirectoryResponse);
+    public Page<UserDirectoryViewResponse> search(String q, List<String> qFields, Pageable pageable) {
+        Specification<User> spec = FilterSpecifications.from(FILTER_FIELDS,
+                StringUtils.hasText(q) ? q.trim() : null, qFields, List.of());
+        return userDirectoryQueryExecutor.search(applyVisibilityScope(spec), pageable);
     }
 
     /** Full {@link SearchRequest} variant backing {@code POST /users/search}. */
     @Transactional(readOnly = true)
     public Page<UserDirectoryViewResponse> search(SearchRequest request, Pageable pageable) {
-        Specification<UserDirectoryView> spec = FilterSpecifications.from(FILTER_FIELDS, request.q(), request.filters());
-        return userDirectoryViewRepository.findAll(applyVisibilityScope(spec), pageable).map(this::toDirectoryResponse);
+        Specification<User> spec = FilterSpecifications.from(FILTER_FIELDS, request.q(), request.qFields(),
+                request.filters());
+        return userDirectoryQueryExecutor.search(applyVisibilityScope(spec), pageable);
     }
 
     // ── visibility scope (iam:user:read vs iam:group-member:read) ──
@@ -130,7 +141,7 @@ public class UserService {
      * themselves. Tenant-schema isolation is untouched — this is row-level visibility
      * inside the tenant, resolved as one extra {@code IN} predicate in the same query.
      */
-    private Specification<UserDirectoryView> applyVisibilityScope(Specification<UserDirectoryView> spec) {
+    private Specification<User> applyVisibilityScope(Specification<User> spec) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null) {
             return spec;
@@ -141,8 +152,8 @@ public class UserService {
         UUID callerId = callerId(authentication);
         Set<UUID> visible = new HashSet<>(visibleUserIds(callerId));
         return spec.and((root, query, cb) ->
-                cb.or(cb.equal(root.get(UserDirectoryView_.ID), callerId),
-                        visible.isEmpty() ? cb.disjunction() : root.get(UserDirectoryView_.ID).in(visible)));
+                cb.or(cb.equal(root.get(BaseEntity_.ID), callerId),
+                        visible.isEmpty() ? cb.disjunction() : root.get(BaseEntity_.ID).in(visible)));
     }
 
     /**
@@ -672,22 +683,6 @@ public class UserService {
     private User getUserOrThrow(UUID id) {
         return userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + id));
-    }
-
-    private UserDirectoryViewResponse toDirectoryResponse(UserDirectoryView d) {
-        return new UserDirectoryViewResponse(
-                d.getId(),
-                d.getUsername(),
-                d.getEmail(),
-                d.isEmailVerified(),
-                d.getFirstName(),
-                d.getLastName(),
-                d.isEnabled(),
-                d.getLockedUntil(),
-                d.getLastLoginAt(),
-                d.getCreatedDate(),
-                d.getRoleCount(),
-                d.getGroupCount());
     }
 
     private String resolveUsername(String username, String email) {

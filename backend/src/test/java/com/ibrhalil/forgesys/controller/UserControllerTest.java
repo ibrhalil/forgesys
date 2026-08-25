@@ -11,6 +11,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.hasItem;
@@ -958,6 +959,136 @@ class UserControllerTest extends AbstractRbacWebTest {
                                 {"newPassword":"BrandNew123!"}"""))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("auth_access_denied"));
+    }
+
+    /* ── K-49: directory projection filter/sort on joined, count and membership columns ── */
+
+    @Test
+    void searchFiltersByCountSubqueryAndSortsByIt() throws Exception {
+        Role admin = new Role();
+        admin.setName("admin");
+        entityManager.persist(admin);
+        Role dev = new Role();
+        dev.setName("dev");
+        entityManager.persist(dev);
+        User alice = seedRbacUser("count-alice@tenant.test", "calice");
+        User bob = seedRbacUser("count-bob@tenant.test", "cbob");
+        seedRbacUser("count-none@tenant.test", "cnone");
+        alice.getRoles().add(admin);
+        alice.getRoles().add(dev);
+        bob.getRoles().add(dev);
+        entityManager.merge(alice);
+        entityManager.flush();
+
+        // roleCount GTE 1, sorted by roleCount desc -> alice (2) before bob (1), cnone filtered out
+        mockMvc.perform(post("/api/v1/users/search")
+                        .contentType(JSON)
+                        .cookie(auth("reader@tenant.test", "iam:user:read"))
+                        .content("""
+                                {"filters":[{"field":"roleCount","operator":"GTE","values":["1"]}],
+                                 "sorts":[{"field":"roleCount","direction":"desc"}]}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.meta.totalElements").value(2))
+                .andExpect(jsonPath("$.data[0].email").value("count-alice@tenant.test"))
+                .andExpect(jsonPath("$.data[0].roleCount").value(2))
+                .andExpect(jsonPath("$.data[1].email").value("count-bob@tenant.test"))
+                .andExpect(jsonPath("$.data[1].roleCount").value(1));
+    }
+
+    @Test
+    void searchFiltersByRoleMembership() throws Exception {
+        Role admin = new Role();
+        admin.setName("admin");
+        entityManager.persist(admin);
+        User alice = seedRbacUser("member-alice@tenant.test", "malice");
+        seedRbacUser("member-bob@tenant.test", "mbob");
+        alice.getRoles().add(admin);
+        entityManager.merge(alice);
+        entityManager.flush();
+
+        mockMvc.perform(post("/api/v1/users/search")
+                        .contentType(JSON)
+                        .cookie(auth("reader@tenant.test", "iam:user:read"))
+                        .content("""
+                                {"filters":[{"field":"roleIds","operator":"IN","values":["%s"]}]}"""
+                                .formatted(admin.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.meta.totalElements").value(1))
+                .andExpect(jsonPath("$.data[0].email").value("member-alice@tenant.test"));
+
+        // IS_NULL = no roles at all
+        mockMvc.perform(post("/api/v1/users/search")
+                        .contentType(JSON)
+                        .cookie(auth("reader@tenant.test", "iam:user:read"))
+                        .content("""
+                                {"filters":[{"field":"roleIds","operator":"IS_NULL","values":[]}]}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[*].email").value(hasItem("member-bob@tenant.test")))
+                .andExpect(jsonPath("$.data[*].email").value(not(hasItem("member-alice@tenant.test"))));
+    }
+
+    @Test
+    void searchRejectsSortOnMembershipField() throws Exception {
+        mockMvc.perform(post("/api/v1/users/search")
+                        .contentType(JSON)
+                        .cookie(auth("reader@tenant.test", "iam:user:read"))
+                        .content("""
+                                {"sorts":[{"field":"roleIds","direction":"asc"}]}"""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("validation_error"));
+    }
+
+    @Test
+    void searchFiltersByJoinedLastLoginAt() throws Exception {
+        User recent = seedRbacUser("recent@tenant.test", "recent");
+        seedRbacUser("never@tenant.test", "never");
+        recent.getUserAccount().setLastLoginAt(OffsetDateTime.parse("2026-08-20T10:00:00Z"));
+        entityManager.merge(recent);
+        entityManager.flush();
+
+        mockMvc.perform(post("/api/v1/users/search")
+                        .contentType(JSON)
+                        .cookie(auth("reader@tenant.test", "iam:user:read"))
+                        .content("""
+                                {"filters":[{"field":"lastLoginAt","operator":"GTE","values":["2026-08-19T00:00:00Z"]}]}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.meta.totalElements").value(1))
+                .andExpect(jsonPath("$.data[0].email").value("recent@tenant.test"));
+    }
+
+    @Test
+    void searchQNarrowedToSelectedQFieldsOnly() throws Exception {
+        // email contains "ali"; firstName is "Test" for both — targeting firstName must miss the email match
+        seedRbacUser("ali@tenant.test", "aliuser");
+        seedRbacUser("other@tenant.test", "otheruser");
+        entityManager.flush();
+
+        mockMvc.perform(post("/api/v1/users/search")
+                        .contentType(JSON)
+                        .cookie(auth("reader@tenant.test", "iam:user:read"))
+                        .content("""
+                                {"q":"ali","qFields":["firstName"]}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.meta.totalElements").value(0));
+
+        mockMvc.perform(get("/api/v1/users")
+                        .cookie(auth("reader@tenant.test", "iam:user:read"))
+                        .param("q", "ali")
+                        .param("qFields", "email"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.meta.totalElements").value(1))
+                .andExpect(jsonPath("$.data[0].email").value("ali@tenant.test"));
+    }
+
+    @Test
+    void searchRejectsNonSearchableQField() throws Exception {
+        mockMvc.perform(post("/api/v1/users/search")
+                        .contentType(JSON)
+                        .cookie(auth("reader@tenant.test", "iam:user:read"))
+                        .content("""
+                                {"q":"ali","qFields":["enabled"]}"""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("validation_error"));
     }
 
     /* ── helpers ── */

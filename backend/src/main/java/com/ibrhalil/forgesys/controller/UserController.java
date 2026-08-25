@@ -48,9 +48,10 @@ public class UserController {
     @PreAuthorize(READ_USERS)
     public ResponseEntity<PageResponse<UserDirectoryViewResponse>> list(
             @PageableDefault(sort = "email") Pageable pageable,
-            @RequestParam(required = false) String q) {
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) List<String> qFields) {
         SortGuard.require(pageable, UserService.FILTER_FIELDS);
-        return ResponseEntity.ok(PageResponse.of(userService.search(q, pageable)));
+        return ResponseEntity.ok(PageResponse.of(userService.search(q, qFields, pageable)));
     }
 
     /**

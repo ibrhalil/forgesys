@@ -4,6 +4,7 @@ import com.ibrhalil.forgesys.audit.AuditLog;
 import com.ibrhalil.forgesys.dto.FilterCriteria;
 import com.ibrhalil.forgesys.dto.NoteRequest;
 import com.ibrhalil.forgesys.dto.NoteResponse;
+import com.ibrhalil.forgesys.dto.SearchRequest;
 import com.ibrhalil.forgesys.entity.AuditEntity_;
 import com.ibrhalil.forgesys.entity.Note;
 import com.ibrhalil.forgesys.entity.NoteCategory;
@@ -29,12 +30,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 /**
  * Note CRUD anchored to NOTES-type project containers (K-44, re-scoped by K-45).
@@ -49,13 +47,20 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class NoteService {
 
-    /** Filterable/sortable direct attributes of the note list; {@code q} matches title + content. */
+    /**
+     * Filterable/sortable attributes of the note list (K-49); {@code q} matches title,
+     * content, project name and category name. {@code projectName}/{@code categoryName}
+     * are correlated scalar subqueries over the plain FK columns — referenced rows are
+     * resolved and filtered in the database, soft-deleted references yield null.
+     */
     public static final FilterFieldSet FILTER_FIELDS = FilterFieldSet.builder()
             .field(Note_.TITLE, FilterFieldType.STRING, true)
             .field(Note_.CONTENT, FilterFieldType.STRING, true)
             .field(Note_.PINNED, FilterFieldType.BOOLEAN, false)
             .field(Note_.CATEGORY_ID, FilterFieldType.UUID, false)
             .field(Note_.PROJECT_ID, FilterFieldType.UUID, false)
+            .subqueryField("categoryName", FilterFieldType.STRING, true, NoteListQueryExecutor.categoryName())
+            .subqueryField("projectName", FilterFieldType.STRING, true, NoteListQueryExecutor.projectName())
             .field(AuditEntity_.CREATED_DATE, FilterFieldType.TEMPORAL, false)
             .field(AuditEntity_.UPDATED_AT, FilterFieldType.TEMPORAL, false)
             .build();
@@ -64,9 +69,11 @@ public class NoteService {
     private final NoteCategoryRepository noteCategoryRepository;
     private final ProjectRepository projectRepository;
     private final ProjectContainerSupport projectContainerSupport;
+    private final NoteListQueryExecutor noteListQueryExecutor;
 
     @Transactional(readOnly = true)
-    public Page<NoteResponse> search(String q, UUID categoryId, Boolean pinned, UUID projectId, Pageable pageable) {
+    public Page<NoteResponse> search(String q, List<String> qFields, UUID categoryId, Boolean pinned,
+            UUID projectId, Pageable pageable) {
         List<FilterCriteria> filters = new ArrayList<>();
         if (categoryId != null) {
             filters.add(new FilterCriteria(Note_.CATEGORY_ID, FilterOperator.EQ, List.of(categoryId.toString())));
@@ -77,25 +84,28 @@ public class NoteService {
         if (projectId != null) {
             filters.add(new FilterCriteria(Note_.PROJECT_ID, FilterOperator.EQ, List.of(projectId.toString())));
         }
+        return doSearch(q, qFields, filters, pageable);
+    }
+
+    /** Full {@link SearchRequest} variant backing {@code POST /notes/search}. */
+    @Transactional(readOnly = true)
+    public Page<NoteResponse> search(SearchRequest request, Pageable pageable) {
+        return doSearch(request.q(), request.qFields(), request.filters(), pageable);
+    }
+
+    private Page<NoteResponse> doSearch(String q, List<String> qFields, List<FilterCriteria> filters,
+            Pageable pageable) {
         Specification<Note> spec = FilterSpecifications.from(FILTER_FIELDS,
-                StringUtils.hasText(q) ? q.trim() : null, filters);
-        Page<Note> page = noteRepository.findAll(spec, pageable);
-        Map<UUID, String> categoryNames = resolveNames(
-                page.map(Note::getCategoryId).stream().collect(Collectors.toSet()), noteCategoryRepository::findAllById,
-                NoteCategory::getId, NoteCategory::getName);
-        Map<UUID, String> projectNames = resolveNames(
-                page.map(Note::getProjectId).stream().collect(Collectors.toSet()), projectRepository::findAllById,
-                Project::getId, Project::getName);
-        return page.map(note -> toResponse(note,
-                categoryNames.get(note.getCategoryId()), projectNames.get(note.getProjectId())));
+                StringUtils.hasText(q) ? q.trim() : null, qFields, filters);
+        return noteListQueryExecutor.search(spec, pageable);
     }
 
     /** Cross-container list narrowed to one container (nested endpoint, K-45). */
     @Transactional(readOnly = true)
-    public Page<NoteResponse> searchInProject(UUID projectId, String q, UUID categoryId, Boolean pinned,
-            Pageable pageable) {
+    public Page<NoteResponse> searchInProject(UUID projectId, String q, List<String> qFields, UUID categoryId,
+            Boolean pinned, Pageable pageable) {
         projectContainerSupport.assertProject(ProjectType.NOTES, projectId);
-        return search(q, categoryId, pinned, projectId, pageable);
+        return search(q, qFields, categoryId, pinned, projectId, pageable);
     }
 
     @Transactional(readOnly = true)
@@ -193,19 +203,5 @@ public class NoteService {
         return new NoteResponse(note.getId(), note.getTitle(), note.getContent(),
                 note.getProjectId(), projectName, note.getCategoryId(), categoryName,
                 note.isPinned(), note.getUpdatedAt());
-    }
-
-    /** Batch id→name resolution for a page of rows (two queries per page, no per-row lookups). */
-    private <T> Map<UUID, String> resolveNames(java.util.Set<UUID> ids,
-            java.util.function.Function<java.util.Set<UUID>, java.util.List<T>> loader,
-            java.util.function.Function<T, UUID> idGetter, java.util.function.Function<T, String> nameGetter) {
-        if (ids.isEmpty()) {
-            return Map.of();
-        }
-        Map<UUID, String> names = new HashMap<>();
-        for (T entity : loader.apply(ids)) {
-            names.put(idGetter.apply(entity), nameGetter.apply(entity));
-        }
-        return names;
     }
 }

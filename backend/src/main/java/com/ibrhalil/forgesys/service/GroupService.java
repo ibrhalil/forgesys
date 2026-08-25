@@ -5,12 +5,15 @@ import com.ibrhalil.forgesys.dto.AssignRolesRequest;
 import com.ibrhalil.forgesys.dto.GroupRequest;
 import com.ibrhalil.forgesys.dto.GroupResponse;
 import com.ibrhalil.forgesys.dto.RoleSummary;
+import com.ibrhalil.forgesys.dto.SearchRequest;
 import com.ibrhalil.forgesys.dto.UserSummary;
 import com.ibrhalil.forgesys.entity.AuditEntity_;
+import com.ibrhalil.forgesys.entity.BaseEntity_;
 import com.ibrhalil.forgesys.entity.Group;
 import com.ibrhalil.forgesys.entity.Group_;
 import com.ibrhalil.forgesys.entity.Role;
 import com.ibrhalil.forgesys.entity.User;
+import com.ibrhalil.forgesys.entity.User_;
 import com.ibrhalil.forgesys.exception.BusinessException;
 import com.ibrhalil.forgesys.exception.ErrorCode;
 import com.ibrhalil.forgesys.exception.ResourceNotFoundException;
@@ -43,16 +46,27 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class GroupService {
 
-    /** Filterable/sortable direct attributes of the group list; {@code q} matches {@code name}. */
+    /**
+     * Filterable/sortable attributes of the group list (K-49); {@code q} matches
+     * {@code name} and {@code description}. {@code roleCount}/{@code memberCount} are
+     * subquery scalars (filter + sort); {@code roleIds}/{@code memberIds} are
+     * collection-membership filters (memberIds through the inverse {@code User.groups}
+     * side — the join table is owned by User).
+     */
     public static final FilterFieldSet FILTER_FIELDS = FilterFieldSet.builder()
             .field(Group_.NAME, FilterFieldType.STRING, true)
-            .field(Group_.DESCRIPTION, FilterFieldType.STRING, false)
+            .field(Group_.DESCRIPTION, FilterFieldType.STRING, true)
             .field(Group_.ACTIVE, FilterFieldType.BOOLEAN, false)
             .field(AuditEntity_.CREATED_DATE, FilterFieldType.TEMPORAL, false)
             .field(AuditEntity_.UPDATED_AT, FilterFieldType.TEMPORAL, false)
+            .subqueryField("roleCount", FilterFieldType.NUMERIC, false, GroupListQueryExecutor.countRoles())
+            .membershipField("roleIds", Group_.ROLES, BaseEntity_.ID)
+            .subqueryField("memberCount", FilterFieldType.NUMERIC, false, GroupListQueryExecutor.countMembers())
+            .inverseMembershipField("memberIds", User.class, User_.GROUPS, BaseEntity_.ID, BaseEntity_.ID)
             .build();
 
     private final GroupRepository groupRepository;
+    private final GroupListQueryExecutor groupListQueryExecutor;
     private final RoleRepository roleRepository;
     private final UserRepository userRepository;
     private final AuditService auditService;
@@ -61,9 +75,18 @@ public class GroupService {
     private final LastAdminGuard lastAdminGuard;
 
     @Transactional(readOnly = true)
-    public Page<GroupResponse> search(String q, Pageable pageable) {
-        Specification<Group> spec = FilterSpecifications.from(FILTER_FIELDS, StringUtils.hasText(q) ? q.trim() : null, List.of());
-        return groupRepository.findAll(spec, pageable).map(this::toResponse);
+    public Page<GroupResponse> search(String q, List<String> qFields, Pageable pageable) {
+        Specification<Group> spec = FilterSpecifications.from(FILTER_FIELDS,
+                StringUtils.hasText(q) ? q.trim() : null, qFields, List.of());
+        return groupListQueryExecutor.search(spec, pageable);
+    }
+
+    /** Full {@link SearchRequest} variant backing {@code POST /groups/search}. */
+    @Transactional(readOnly = true)
+    public Page<GroupResponse> search(SearchRequest request, Pageable pageable) {
+        Specification<Group> spec = FilterSpecifications.from(FILTER_FIELDS, request.q(), request.qFields(),
+                request.filters());
+        return groupListQueryExecutor.search(spec, pageable);
     }
 
     @Transactional(readOnly = true)
