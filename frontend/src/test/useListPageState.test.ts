@@ -99,4 +99,29 @@ describe('useListPageState', () => {
     const stored = JSON.parse(window.localStorage.getItem('sf_table_prefs_users') ?? '{}');
     expect(stored.pageSize).toBe(100);
   });
+
+  it('setFilters replaces the clauses and resets the page (K-49)', () => {
+    const { result } = renderHook(() =>
+      useListPageState({ defaultSort: { field: 'name', dir: 'asc' } }),
+    );
+    act(() => result.current.setPage(2));
+
+    const clause = { field: 'roleCount', operator: 'GTE' as const, values: ['1'] };
+    act(() => result.current.setFilters([clause]));
+    expect(result.current.filters).toEqual([clause]);
+    expect(result.current.page).toBe(0);
+
+    // Clearing keeps the page-reset contract.
+    act(() => result.current.setPage(5));
+    act(() => result.current.setFilters([]));
+    expect(result.current.filters).toEqual([]);
+    expect(result.current.page).toBe(0);
+  });
+
+  it('starts with no filter clauses', () => {
+    const { result } = renderHook(() =>
+      useListPageState({ defaultSort: { field: 'name', dir: 'asc' } }),
+    );
+    expect(result.current.filters).toEqual([]);
+  });
 });

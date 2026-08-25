@@ -1,4 +1,10 @@
-import type { ApiErrorResponse, PageParams, PageResponse, PageResult } from '../types';
+import type {
+  ApiErrorResponse,
+  PageParams,
+  PageResponse,
+  PageResult,
+  SearchRequestBody,
+} from '../types';
 import { useTenantStore } from '../store/tenantStore';
 
 export class ApiError extends Error {
@@ -138,9 +144,10 @@ export async function apiFetch<T>(
 }
 
 /**
- * Builds a `?page=&size=&sort=&q=` query string from {@link PageParams} (empty string
- * if none). Structured `sorts[]` is serialized as repeated `sort=field,dir` params
- * (Spring Data multi-sort), alongside the legacy raw `sort` string.
+ * Builds a `?page=&size=&sort=&q=&qFields=` query string from {@link PageParams} (empty
+ * string if none). Structured `sorts[]` is serialized as repeated `sort=field,dir`
+ * params (Spring Data multi-sort), alongside the legacy raw `sort` string; `qFields[]`
+ * as repeated params (smart-search field targeting, K-49).
  */
 export function toQuery(params: PageParams = {}): string {
   const sp = new URLSearchParams();
@@ -149,6 +156,7 @@ export function toQuery(params: PageParams = {}): string {
   if (params.sort) sp.set('sort', params.sort);
   (params.sorts ?? []).forEach((s) => sp.append('sort', `${s.field},${s.dir}`));
   if (params.q) sp.set('q', params.q);
+  (params.qFields ?? []).forEach((f) => sp.append('qFields', f));
   const qs = sp.toString();
   return qs ? `?${qs}` : '';
 }
@@ -182,3 +190,12 @@ export const api = {
     apiFetch<T>(path, { method: 'PATCH', body: body ? JSON.stringify(body) : undefined }),
   delete: <T>(path: string) => apiFetch<T>(path, { method: 'DELETE' }),
 };
+
+/**
+ * `POST /{resource}/search` helper for the filter-engine endpoints (K-49): sends the
+ * {@link SearchRequestBody} and normalizes the `PageResponse` into the UI-facing
+ * {@link PageResult}.
+ */
+export function searchPost<T>(path: string, body: SearchRequestBody): Promise<PageResult<T>> {
+  return api.post<PageResponse<T>>(path, body).then(normalizePage);
+}

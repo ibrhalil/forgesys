@@ -17,8 +17,9 @@ import {
   saveTablePreferences,
   type TableViewMode,
 } from '../../lib/tablePreferences';
-import type { SortState } from '../../types';
+import type { FilterCriteria, SortState } from '../../types';
 import { Badge } from './Badge';
+import { ColumnFilterButton, type ColumnFilterSpec } from './ColumnFilterButton';
 import { EmptyState } from './EmptyState';
 import { Spinner } from './Spinner';
 import { TablePagination } from './TablePagination';
@@ -36,6 +37,11 @@ export interface Column<T> {
    * the feature's backend sort whitelist.
    */
   sortKey?: string;
+  /**
+   * Structured column filter (K-49): when set AND the table receives
+   * `filters`/`onFiltersChange`, a filter popover renders next to the sort arrow.
+   */
+  filter?: ColumnFilterSpec;
   /**
    * Whether this column can be hidden by the user. Defaults to true when
    * personalization is enabled. Set to false for essential primary columns.
@@ -67,6 +73,13 @@ interface DataTableProps<T> {
   sort?: SortState;
   /** Click handler on a sortable header — receives the column's `sortKey`. */
   onSortChange?: (field: string) => void;
+  /**
+   * Active structured filter clauses (K-49 column filters). When omitted, no column
+   * renders a filter trigger — pages opt in per table.
+   */
+  filters?: FilterCriteria[];
+  /** Called with the full clause list after a column filter is applied or cleared. */
+  onFiltersChange?: (filters: FilterCriteria[]) => void;
   actions?: (row: T) => ReactNode;
   actionsHeader?: string;
   /**
@@ -141,6 +154,8 @@ export function DataTable<T>({
   onPageSizeChange,
   sort,
   onSortChange,
+  filters,
+  onFiltersChange,
   actions,
   actionsHeader,
   toolbar,
@@ -254,27 +269,57 @@ export function DataTable<T>({
 
   const sortable = (col: Column<T>): boolean => !!col.sortKey && !!onSortChange;
 
+  const columnFilterEnabled = (col: Column<T>): boolean =>
+    !!col.filter && filters !== undefined && !!onFiltersChange;
+
+  const activeFilterFor = (col: Column<T>): FilterCriteria | undefined =>
+    filters?.find((f) => f.field === col.filter?.field);
+
+  const handleFilterChange = (col: Column<T>, criteria: FilterCriteria | null) => {
+    if (!col.filter) return;
+    const rest = (filters ?? []).filter((f) => f.field !== col.filter!.field);
+    onFiltersChange?.(criteria ? [...rest, criteria] : rest);
+  };
+
   const headerContent = (col: Column<T>) => {
-    if (!sortable(col)) return col.header;
-    const active = !!sort && sort.field === col.sortKey;
+    const label =
+      !sortable(col) ? (
+        col.header
+      ) : (
+        (() => {
+          const active = !!sort && sort.field === col.sortKey;
+          return (
+            <button
+              type="button"
+              onClick={() => onSortChange?.(col.sortKey!)}
+              className="group inline-flex items-center gap-1 uppercase tracking-wide transition-colors hover:text-main"
+              title={col.header}
+            >
+              {col.header}
+              <span
+                aria-hidden
+                className={cn(
+                  'text-[10px] leading-none',
+                  active ? 'text-accent' : 'text-muted/50 group-hover:text-muted',
+                )}
+              >
+                {active && sort ? (sort.dir === 'asc' ? '▲' : '▼') : '▾'}
+              </span>
+            </button>
+          );
+        })()
+      );
+    if (!columnFilterEnabled(col)) return label;
     return (
-      <button
-        type="button"
-        onClick={() => onSortChange?.(col.sortKey!)}
-        className="group inline-flex items-center gap-1 uppercase tracking-wide transition-colors hover:text-main"
-        title={col.header}
-      >
-        {col.header}
-        <span
-          aria-hidden
-          className={cn(
-            'text-[10px] leading-none',
-            active ? 'text-accent' : 'text-muted/50 group-hover:text-muted',
-          )}
-        >
-          {active && sort ? (sort.dir === 'asc' ? '▲' : '▼') : '▾'}
-        </span>
-      </button>
+      <span className="inline-flex items-center gap-1.5">
+        {label}
+        <ColumnFilterButton
+          spec={col.filter!}
+          header={col.header}
+          active={activeFilterFor(col)}
+          onChange={(criteria) => handleFilterChange(col, criteria)}
+        />
+      </span>
     );
   };
 

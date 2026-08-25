@@ -233,4 +233,53 @@ describe('DataTable', () => {
     useLocaleStore.setState({ locale: 'tr' });
     await waitFor(() => expect(screen.getByText('Birincil')).toBeInTheDocument());
   });
+
+  /* ── K-49 column filters ── */
+
+  const filterColumns: Column<Row>[] = [
+    { key: 'name', header: 'Name', sortKey: 'name' },
+    {
+      key: 'note',
+      header: 'Note',
+      filter: { field: 'note', control: 'text' },
+    },
+  ];
+
+  it('renders no filter trigger when the table has no filter wiring', () => {
+    renderTable({ columns: filterColumns });
+
+    expect(screen.queryByRole('button', { name: /filter note/i })).not.toBeInTheDocument();
+  });
+
+  it('applies a structured clause from the column filter popover (K-49)', async () => {
+    const user = userEvent.setup();
+    const onFiltersChange = vi.fn();
+    renderTable({ columns: filterColumns, filters: [], onFiltersChange });
+
+    // Open the Note column's filter popover
+    await user.click(screen.getByRole('button', { name: /filter note/i }));
+    // Operator defaults to CONTAINS for text — type a value and apply
+    await user.type(await screen.findByLabelText(/value/i), 'urgent');
+    await user.click(screen.getByRole('button', { name: /apply/i }));
+
+    expect(onFiltersChange).toHaveBeenCalledWith([
+      { field: 'note', operator: 'CONTAINS', values: ['urgent'] },
+    ]);
+  });
+
+  it('clears an active clause via the popover clear link', async () => {
+    const user = userEvent.setup();
+    const onFiltersChange = vi.fn();
+    renderTable({
+      columns: filterColumns,
+      filters: [{ field: 'note', operator: 'CONTAINS', values: ['urgent'] }],
+      onFiltersChange,
+    });
+
+    // Active state: the trigger is accent-colored; opening shows Clear
+    await user.click(screen.getByRole('button', { name: /filter note/i }));
+    await user.click(screen.getByRole('button', { name: /clear/i }));
+
+    expect(onFiltersChange).toHaveBeenCalledWith([]);
+  });
 });
