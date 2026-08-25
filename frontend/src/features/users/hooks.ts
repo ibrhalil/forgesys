@@ -109,6 +109,15 @@ export function useUnlockUser() {
   });
 }
 
+/** Re-sends the email-verification mail to an unverified user. */
+export function useResendVerification() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => usersApi.resendVerification(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
+  });
+}
+
 export function useSetUserRoles() {
   const qc = useQueryClient();
   return useMutation({

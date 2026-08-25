@@ -83,3 +83,12 @@ export interface SuggestSubdomainRequest {
 export interface SuggestSubdomainResponse {
   suggestions: string[];
 }
+
+// 200 OK response of POST /api/v1/auth/verify-email (user lifecycle, optional policy)
+export interface EmailVerificationResponse {
+  message: string;
+}
+
+// Uniform {message} responses of the public auth actions (verify-email,
+// forgot-password, reset-password)
+export type MessageResponse = EmailVerificationResponse;

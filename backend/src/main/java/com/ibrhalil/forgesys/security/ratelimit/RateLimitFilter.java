@@ -81,6 +81,15 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if (uri.startsWith("/api/v1/auth/company/verify")) {
             return "verify";
         }
+        if (uri.startsWith("/api/v1/auth/verify-email")) {
+            return "verify-email";
+        }
+        if (uri.startsWith("/api/v1/auth/forgot-password")) {
+            return "forgot-password";
+        }
+        if (uri.startsWith("/api/v1/auth/reset-password")) {
+            return "reset-password";
+        }
         if (uri.startsWith("/api/v1/auth/login")) {
             return "login";
         }

@@ -25,6 +25,12 @@ import lombok.ToString;
  * time). Soft-delete-less ({@link GeneratedIdAuditEntity} — no {@code is_deleted}/
  * {@code version}); lifecycle is controlled by {@link #usedAt} + {@link #expiresAt}.
  * A token is single-use: once {@code usedAt} is set it is invalid forever.
+ *
+ * <p><strong>[RISK-30] Hash-at-rest:</strong> {@link #token} stores only the SHA-256
+ * hex digest of the raw token; the raw value exists solely in the emailed link and
+ * is never persisted. Consumers hash the presented token before lookup/claim. The
+ * public {@code V3} migration backfilled pre-existing rows, so outstanding links
+ * kept working.
  */
 @Entity
 @Getter
@@ -40,6 +46,10 @@ import lombok.ToString;
 )
 public class TenantVerificationToken extends GeneratedIdAuditEntity {
 
+    /**
+     * SHA-256 hex digest of the raw token ([RISK-30] hash-at-rest — a DB leak cannot
+     * replay a pending signup link). The raw value lives only in the emailed link.
+     */
     @Column(nullable = false, length = 255, unique = true)
     private String token;
 
@@ -58,9 +68,11 @@ public class TenantVerificationToken extends GeneratedIdAuditEntity {
     /**
      * Admin password, pre-hashed at phase 1 by {@code PepperingPasswordEncoder}. Phase 2
      * stores it verbatim on the new {@code User} (no re-hash). The raw password never
-     * persists.
+     * persists. [RISK-30] Nulled by {@code verifyAndProvision} once the admin user has
+     * been created — the token row must not outlive its purpose carrying credentials
+     * (nullable since public {@code V3}).
      */
-    @Column(name = "admin_password_hash", nullable = false, length = 255)
+    @Column(name = "admin_password_hash", length = 255)
     private String adminPasswordHash;
 
     @Column(name = "admin_first_name", length = 100)

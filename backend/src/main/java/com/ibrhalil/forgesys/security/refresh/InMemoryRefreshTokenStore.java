@@ -1,18 +1,15 @@
 package com.ibrhalil.forgesys.security.refresh;
 
+import com.ibrhalil.forgesys.security.TokenHasher;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Comparator;
 import java.util.HashSet;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -47,7 +44,7 @@ public class InMemoryRefreshTokenStore implements RefreshTokenStore {
     @Override
     public synchronized IssuedRefresh issue(UUID userId, String email, String tenant, String ipAddress, String userAgent) {
         String raw = generateToken();
-        String hash = sha256Hex(raw);
+        String hash = TokenHasher.sha256Hex(raw);
         OffsetDateTime now = OffsetDateTime.now();
         UUID sessionId = UUID.randomUUID();
         tokens.put(hash, new Entry("ACTIVE", userId, email, tenant, null, sessionId, ipAddress, userAgent, now, now));
@@ -60,7 +57,7 @@ public class InMemoryRefreshTokenStore implements RefreshTokenStore {
         if (presented == null || presented.isBlank()) {
             return new RotationResult.Unknown();
         }
-        String oldHash = sha256Hex(presented);
+        String oldHash = TokenHasher.sha256Hex(presented);
         Entry entry = tokens.get(oldHash);
         if (entry == null) {
             return new RotationResult.Unknown();
@@ -69,7 +66,7 @@ public class InMemoryRefreshTokenStore implements RefreshTokenStore {
             return new RotationResult.ReuseDetected(entry.userId, entry.tenant);
         }
         String newRaw = generateToken();
-        String newHash = sha256Hex(newRaw);
+        String newHash = TokenHasher.sha256Hex(newRaw);
         OffsetDateTime now = OffsetDateTime.now();
         tokens.put(oldHash, new Entry("ROTATED", entry.userId, entry.email, entry.tenant, newHash,
                 entry.sessionId, entry.ipAddress, entry.userAgent, entry.loginAt, entry.lastSeen));
@@ -92,7 +89,7 @@ public class InMemoryRefreshTokenStore implements RefreshTokenStore {
         // the successor too, or the session survives logout.
         boolean revokedAny = false;
         Set<String> visited = new HashSet<>();
-        String currentHash = sha256Hex(presented);
+        String currentHash = TokenHasher.sha256Hex(presented);
         while (currentHash != null && visited.add(currentHash)) {
             Entry entry = tokens.remove(currentHash);
             if (entry == null) {
@@ -181,7 +178,7 @@ public class InMemoryRefreshTokenStore implements RefreshTokenStore {
         if (presentedToken == null || presentedToken.isBlank()) {
             return Optional.empty();
         }
-        Entry entry = tokens.get(sha256Hex(presentedToken));
+        Entry entry = tokens.get(TokenHasher.sha256Hex(presentedToken));
         if (entry == null || !"ACTIVE".equals(entry.state)) {
             return Optional.empty();
         }
@@ -214,12 +211,4 @@ public class InMemoryRefreshTokenStore implements RefreshTokenStore {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
-    private static String sha256Hex(String input) {
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            return HexFormat.of().formatHex(md.digest(input.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 not available", e);
-        }
-    }
 }

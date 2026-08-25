@@ -13,7 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * K-21 public signup endpoints ([RISK-31]): {@code POST /company/register} (202) and
  * {@code POST /company/suggest-subdomain} (200). These are {@code permitAll} (no auth),
- * exercised end-to-end on H2 with the real service + {@code InMemoryVerificationSender}.
+ * exercised end-to-end on H2 with the real service + {@code InMemoryMailSender}.
  * The verify happy-path needs a real PostgreSQL (CREATE SCHEMA + Flyway) and lives in
  * the Testcontainers {@code CrossTenantIsolationIT}; token-error codes are covered by
  * {@code TenantProvisioningServiceTest}.

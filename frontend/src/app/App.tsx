@@ -10,6 +10,9 @@ import {SHELL_ROUTES} from './Routes.ts';
 import {LoginPage} from '../features/auth/LoginPage';
 import {RegisterPage} from '../features/auth/RegisterPage';
 import {VerifyTenantPage} from '../features/auth/VerifyTenantPage';
+import {VerifyEmailPage} from '../features/auth/VerifyEmailPage';
+import {ForgotPasswordPage} from '../features/auth/ForgotPasswordPage';
+import {ResetPasswordPage} from '../features/auth/ResetPasswordPage';
 import {ApiError} from '../lib/api';
 import {notifyApiError} from '../lib/notify';
 import {useT} from '../lib/i18n';
@@ -108,6 +111,9 @@ export default function App() {
           <Route path="/login" element={<LoginPage/>}/>
           <Route path="/register" element={<RegisterPage/>}/>
           <Route path="/verify-tenant" element={<VerifyTenantPage/>}/>
+          <Route path="/verify-email" element={<VerifyEmailPage/>}/>
+          <Route path="/forgot-password" element={<ForgotPasswordPage/>}/>
+          <Route path="/reset-password" element={<ResetPasswordPage/>}/>
 
           <Route
             path="/"

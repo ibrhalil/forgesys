@@ -79,8 +79,9 @@ src/
                            #   SelectInput, TextArea, Spinner (single animate-spin source),
                            #   Toggle (boolean-setting switch)
   features/<name>/         # ONE folder per domain: pages + api.ts + hooks.ts + types.ts (+ components/)
-    auth/                  #   Login/Register/VerifyTenant pages, authApi, registrationApi, types
-                           #   (K-21 tenant signup lives here)
+    auth/                  #   Login/Register/VerifyTenant/VerifyEmail/ForgotPassword/ResetPassword
+                           #   pages, authApi, registrationApi, types (K-21 tenant signup + K-48
+                           #   user lifecycle: email verification + password reset flows live here)
     users/                 #   Users/UserDetail/Profile pages + 5 modal components (assign
                            #   modals fetch the user detail themselves — list rows are the
                            #   flat UserDirectoryView projection: counts, no role/group arrays)

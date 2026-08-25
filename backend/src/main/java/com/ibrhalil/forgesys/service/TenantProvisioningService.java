@@ -22,6 +22,10 @@ import com.ibrhalil.forgesys.persistence.repository.PlanRepository;
 import com.ibrhalil.forgesys.persistence.repository.SubscriptionRepository;
 import com.ibrhalil.forgesys.persistence.repository.TenantVerificationTokenRepository;
 import com.ibrhalil.forgesys.persistence.repository.UserRepository;
+import com.ibrhalil.forgesys.security.TokenHasher;
+import com.ibrhalil.forgesys.service.mail.MailMessage;
+import com.ibrhalil.forgesys.service.mail.MailSender;
+import com.ibrhalil.forgesys.service.mail.MailTemplate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
@@ -36,6 +40,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.Statement;
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.UUID;
@@ -48,7 +53,7 @@ import java.util.UUID;
  *   <li>{@link #createPendingCompany} — light, fully transactional: validates
  *       uniqueness, inserts a {@code PROVISIONING} {@link Company} and a
  *       {@link TenantVerificationToken}, then hands the verification URL to
- *       {@link VerificationSender}. NO schema CREATE, NO Flyway, NO admin user —
+ *       {@link com.ibrhalil.forgesys.service.mail.MailSender}. NO schema CREATE, NO Flyway, NO admin user —
  *       squatting is cheap.</li>
  *   <li>{@link #verifyAndProvision} — heavy, triggered by the user clicking the link:
  *       consumes the token, runs {@code CREATE SCHEMA} + programmatic Flyway, creates
@@ -84,7 +89,7 @@ public class TenantProvisioningService {
     private final TenantMigrationSupport tenantMigrationSupport;
     private final ModuleActivationService moduleActivationService;
     private final TenantSampleDataService sampleDataService;
-    private final VerificationSender verificationSender;
+    private final MailSender mailSender;
     // Optional: RbacSeeder is @Profile("!test") — absent in tests, which never exercise provisioning.
     private final ObjectProvider<RbacSeeder> rbacSeederProvider;
     // Self-proxy reference so createAdminUser can be invoked through the Spring proxy,
@@ -108,14 +113,14 @@ public class TenantProvisioningService {
     @Transactional
     public CompanyRegisterResponse createPendingCompany(CompanyRegisterRequest request) {
         log.info("Creating pending tenant: subdomain={}", request.subdomain());
-        CompanyRegisterResponse response = createPendingCompanyInternal(request, /* sendVerification */ true);
+        PendingSignup pending = createPendingCompanyInternal(request, /* sendVerification */ true);
         log.info("Pending tenant created, verification sent: subdomain={}, companyId={}",
-                response.subdomain(), response.companyId());
+                pending.response().subdomain(), pending.response().companyId());
         return new CompanyRegisterResponse(
-                response.companyId(),
-                response.name(),
-                response.subdomain(),
-                response.status(),
+                pending.response().companyId(),
+                pending.response().name(),
+                pending.response().subdomain(),
+                pending.response().status(),
                 "Doğrulama bağlantısı admin e-postasına gönderildi."
         );
     }
@@ -131,10 +136,17 @@ public class TenantProvisioningService {
      * caller wins (claim returns 1); the second sees 0 and gets
      * {@code TENANT_TOKEN_ALREADY_USED}. Validity/expiry are still checked by SELECT
      * beforehand so the precise error code is preserved.
+     *
+     * <p>[RISK-30] The presented raw token is hashed before every lookup/claim — the
+     * DB stores only digests. After {@code createAdminUser} succeeds the token's
+     * {@code adminPasswordHash} is nulled (managed entity, flushes at commit); should
+     * this transaction roll back, the null rolls back too, so a DEBT-10 recovery
+     * retry still finds the hash.
      */
     @Transactional
-    public CompanyVerifyResponse verifyAndProvision(String token) {
-        TenantVerificationToken verification = tokenRepository.findByToken(token)
+    public CompanyVerifyResponse verifyAndProvision(String rawToken) {
+        String tokenHash = TokenHasher.sha256Hex(rawToken);
+        TenantVerificationToken verification = tokenRepository.findByToken(tokenHash)
                 .orElseThrow(() -> new BusinessException(ErrorCode.TENANT_TOKEN_INVALID));
         if (verification.isUsed()) {
             throw new BusinessException(ErrorCode.TENANT_TOKEN_ALREADY_USED);
@@ -152,7 +164,7 @@ public class TenantProvisioningService {
         // [RISK-25] Atomic claim: only one concurrent caller wins. A 0 count means
         // another verify request already stamped used_at between our SELECT and UPDATE.
         OffsetDateTime claimedAt = OffsetDateTime.now(ZoneOffset.UTC);
-        int claimedRows = tokenRepository.claimToken(token, claimedAt);
+        int claimedRows = tokenRepository.claimToken(tokenHash, claimedAt);
         if (claimedRows == 0) {
             throw new BusinessException(ErrorCode.TENANT_TOKEN_ALREADY_USED);
         }
@@ -176,6 +188,11 @@ public class TenantProvisioningService {
         } finally {
             TenantContext.clear();
         }
+
+        // [RISK-30] The admin user exists — drop the pre-hashed credentials from the
+        // token row. Managed entity in this transaction: the null flushes at commit,
+        // and a rollback restores the hash (DEBT-10 recovery retries still work).
+        verification.setAdminPasswordHash(null);
 
         // K-16 / Epic 3.0.A: FREE subscription + default module activations (permission
         // seed + activation record; pm needs no extra migration — baseline tables).
@@ -204,20 +221,27 @@ public class TenantProvisioningService {
      * Bootstrap-only auto-verify (K-24): runs phase 1 (no mail) then phase 2 in one
      * call so the {@code SystemAdminBootstrapRunner} can provision the reserved
      * {@code system} tenant without an email loop. Returns the activated Company.
+     * [RISK-30] phase 1 hands the raw token over in memory — the DB only keeps its
+     * digest, so re-reading the row is no longer possible.
      */
     @Transactional
     public Company provisionSystemTenant(CompanyRegisterRequest request) {
-        CompanyRegisterResponse pending = createPendingCompanyInternal(request, /* sendVerification */ false);
-        TenantVerificationToken token = tokenRepository.findByCompanyId(pending.companyId())
+        PendingSignup pending = createPendingCompanyInternal(request, /* sendVerification */ false);
+        verifyAndProvision(pending.rawToken());
+        return companyRepository.findById(pending.response().companyId())
                 .orElseThrow(() -> new IllegalStateException(
-                        "Verification token missing for just-created pending company: " + pending.companyId()));
-        verifyAndProvision(token.getToken());
-        return companyRepository.findById(pending.companyId())
-                .orElseThrow(() -> new IllegalStateException(
-                        "Company missing after provisioning: " + pending.companyId()));
+                        "Company missing after provisioning: " + pending.response().companyId()));
     }
 
     // --- internal helpers -------------------------------------------------
+
+    /**
+     * Phase 1 result: the register response plus the RAW token. The raw value never
+     * touches the DB ([RISK-30] hash-at-rest) — it is handed to the mail link or, on
+     * the bootstrap path, straight to {@code verifyAndProvision} in memory.
+     */
+    private record PendingSignup(CompanyRegisterResponse response, String rawToken) {
+    }
 
     /**
      * K-47: registers the sample-data seed to run AFTER the provisioning transaction
@@ -251,27 +275,36 @@ public class TenantProvisioningService {
         });
     }
 
-    private CompanyRegisterResponse createPendingCompanyInternal(CompanyRegisterRequest request,
-                                                                 boolean sendVerification) {
+    private PendingSignup createPendingCompanyInternal(CompanyRegisterRequest request,
+                                                       boolean sendVerification) {
         String schemaName = buildSchemaName(request.subdomain());
         validateUnique(request.subdomain(), schemaName);
         Company company = createCompany(request, schemaName, CompanyStatus.PROVISIONING);
-        TenantVerificationToken token = issueToken(company, request);
+        String rawToken = UUID.randomUUID().toString();
+        issueToken(company, request, rawToken);
         if (sendVerification) {
-            verificationSender.send(request.adminEmail(), buildVerificationUrl(token.getToken()));
+            mailSender.send(new MailMessage(
+                    request.adminEmail(),
+                    MailTemplate.TENANT_VERIFY,
+                    buildVerificationUrl(rawToken),
+                    request.adminFirstName(),
+                    request.companyName(),
+                    Duration.ofHours(tokenTtlHours)));
         }
-        return new CompanyRegisterResponse(
+        return new PendingSignup(new CompanyRegisterResponse(
                 company.getId(),
                 company.getName(),
                 company.getSubdomain(),
                 company.getStatus(),
                 null
-        );
+        ), rawToken);
     }
 
-    private TenantVerificationToken issueToken(Company company, CompanyRegisterRequest request) {
+    private void issueToken(Company company, CompanyRegisterRequest request, String rawToken) {
         TenantVerificationToken token = new TenantVerificationToken();
-        token.setToken(UUID.randomUUID().toString());
+        // [RISK-30] hash-at-rest: only the SHA-256 digest is persisted; the raw token
+        // lives in the emailed link alone.
+        token.setToken(TokenHasher.sha256Hex(rawToken));
         token.setCompany(company);
         token.setAdminEmail(request.adminEmail());
         // Pre-hash at phase 1 — phase 2 stores this verbatim (no re-hash).
@@ -279,7 +312,7 @@ public class TenantProvisioningService {
         token.setAdminFirstName(request.adminFirstName());
         token.setAdminLastName(request.adminLastName());
         token.setExpiresAt(OffsetDateTime.now(ZoneOffset.UTC).plusHours(tokenTtlHours));
-        return tokenRepository.save(token);
+        tokenRepository.save(token);
     }
 
     private String buildVerificationUrl(String token) {

@@ -84,7 +84,7 @@ Standart haline gelmiş kararlar. Yeni gereksinim bunlardan biriyle çelişirse 
 - **Bağlam:** Open endpoint'te ağır DDL (schema + Flyway) + subdomain squatting riski.
 - **Karar:** Faz 1 `register` — hafif (PROVISIONING Company + `TenantVerificationToken`; admin credential'ları token'a pre-hash gömülür) + doğrulama linki maili. Faz 2 `verify` — kullanıcının linke tıklamasıyla senkron: CREATE SCHEMA + Flyway + admin user → ACTIVE. `suggest-subdomain` (Türkçe-aware slug). Bootstrap yolu: `provisionSystemTenant` (K-24 — auto-verify, mail yok).
 - **Durum:** UYGULANDI.
-- **Etki:** Token consume atomic conditional UPDATE (RISK-25). `CREATE SCHEMA` implicit commit → DEBT-10 kısmi. Mail gönderimi şu an log (SMTP Faz 5'te).
+- **Etki:** Token consume atomic conditional UPDATE (RISK-25). `CREATE SCHEMA` implicit commit → DEBT-10 kısmi. Mail gönderimi K-48 ile SMTP'ye geçti (prod `SmtpMailSender`; dev log, test in-memory).
 
 ### K-22
 **Tenant Domain Handoff / Schema Archival**
@@ -237,6 +237,17 @@ Standart haline gelmiş kararlar. Yeni gereksinim bunlardan biriyle çelişirse 
 - **Reddedilen alternatifler:** Flyway `afterMigrate`/seed migration — `TenantMigrationRunner` tüm eski tenantlara uygular (mevcut tenantların verisi değişmez ilkesi ihlal); frontend mock — gerçek veri değil, kalıcı değil, öğretici değil.
 - **Durum:** UYGULANDI (2026-08-24).
 
+### K-48
+**User Lifecycle + Mail (SMTP, email doğrulama, password reset)**
+- **Karar:** Tek epikte üç blok: (1) SMTP mail altyapısı, (2) tenant içi email doğrulama, (3) self-service password reset — hepsi ortak token altyapısını paylaşır.
+- **Mail kanalı:** `service/mail/` altında port+adapter: `MailSender` arayüzü, profile-split implementasyonlar — prod `SmtpMailSender` (`spring-boot-starter-mail`; startup'ta `MAIL_HOST` fail-fast, send'de fail-loud — sessiz mail kaybı retry edilebilir hatadan kötü), dev `LogMailSender`, test `InMemoryMailSender`. Eski URL-only K-21 `VerificationSender` üçlüsü kaldırıldı. Şablon motoru BİLİNÇLİ YOK (Thymeleaf reddedildi — yeni bağımlılık): classpath `mail/<key>.<lang>.html` + `{{token}}` string replacement; expression language olmadığından şablon içeriği kod çalıştıramaz. Prod override: `forgesys.mail.templates-dir` → `infra/templates/` (eksik dosya classpath'e düşer).
+- **Token altyapısı:** `t_auth_tokens` (tenant V4; `purpose` EMAIL_VERIFY\|PASSWORD_RESET, `token_hash` UNIQUE, single-use `used_at`) + `UserTokenService`. RISK-30 konvansiyonları birebir: yalnızca SHA-256 digest DB'de, raw token yalnızca mail linkinde. Re-issue aynı purpose'ın outstanding tokenlarını geçersiz kılar (supersede-on-reissue — en yeni link çalışır). Consume atomik conditional UPDATE ([RISK-25] pattern).
+- **Link yapısı:** `MailLinkBuilder` — link subdomain-anchored (`{sub}.{host}[:{port}]{path}?token=`): `app-base-url` host'unun önüne subdomain eklenir; subdomain schema adından ters-fold ile türetilir (`_`→`-`; unique çünkü subdomain'de `_` yasak). Böylece kullanıcı linke tıklayınca frontend tenant subdomain'inden yüklenir ve `POST /auth/*` isteği `TenantFilter` tarafından çözülür — body'de tenant taşıma gereksiz.
+- **Email doğrulama = OPSİYONEL politika (ürün kararı):** doğrulanmamış kullanıcı login olabilir; `emailVerified` rozet + admin resend (`POST /users/{id}/resend-verification`, `iam:user:write`, zaten verified ise 409). Zorunluya çevirme noktası: `AuthService.login`'e tek kontrol. Create'te mail best-effort afterCommit (kullanıcı yaratımı SMTP'ye bağımlı değil); resend fail-loud (tx + token rollback). `POST /auth/verify-email` public; already-verified idempotent başarı.
+- **Password reset:** `POST /auth/forgot-password` HER ZAMAN 200 — unknown/disabled adres ve mail hatası birbirinden ayırt edilemez (enumeration yok; SMTP-down durumunda 200-vs-500 varlık sızıntısı da kapalı). `POST /auth/reset-password`: consume → peppered hash → tam session revoke zinciri (admin reset ile aynı: `tokenInvalidBefore` + refresh drop) → audit `user_password_reset_self` (actor unauthenticated → "system"). Rate-limit scope'ları: `verify-email`, `forgot-password`, `reset-password`.
+- **Purge:** `TokenPurgeJob` (ilk `@EnableScheduling`; `@Profile("!test")`) günlük 03:00 UTC iki aileyi süpürür: public signup tokenları + her tenant şemasındaki `t_auth_tokens` (set-and-restore TenantContext iterasyonu, per-tenant try/catch; tenant tx'i `UserTokenService.purgeStaleForCurrentTenant`). Retention default 7 gün.
+- **Durum:** UYGULANDI (2026-08-25).
+
 ---
 
 ## Risk Kayıtları (RISK-XX)
@@ -248,7 +259,7 @@ Standart haline gelmiş kararlar. Yeni gereksinim bunlardan biriyle çelişirse 
 ### RISK-10
 **`@Async` thread'lerde TenantContext taşınmaz — AÇIK**
 - **Bağlam:** `TenantContext` ThreadLocal; `@Async` yeni thread'de kaybolur.
-- **Karar:** `TaskDecorator` (TenantContext + SecurityContext propagation) ilk async tüketici (audit/email) ortaya çıktığında eklenir. Şu an `@Async`/`@EnableAsync` yok.
+- **Karar:** `TaskDecorator` (TenantContext + SecurityContext propagation) ilk async tüketici ortaya çıktığında eklenir. K-48 mail tüketici SENKRON geldi (in-request/afterCommit, aynı thread — decorator gerektirmedi); şu an `@Async`/`@EnableAsync` yok.
 
 ### RISK-13
 **BCrypt strength**
@@ -321,10 +332,10 @@ Standart haline gelmiş kararlar. Yeni gereksinim bunlardan biriyle çelişirse 
 - **Durum:** ÇÖZÜLDÜ. `MethodArgumentTypeMismatchException` / `MissingServletRequestParameterException` / `ConstraintViolationException` → 400 `validation_error`.
 
 ### RISK-30
-**Verification token plain-text + stale retention (P2) — AÇIK**
+**Verification token plain-text + stale retention (P2)**
 - **Bağlam:** `TenantVerificationToken.token` plain-text DB'de; unused token DB leak'inde replay edilebilir; expired/used token purge yok; `adminPasswordHash` consume sonrası kalıyor.
 - **Karar:** Token hash-at-rest (SHA-256) + scheduled purge job + `adminPasswordHash` null'lama.
-- **Durum:** Açık — provisioning akışına ve migration'a dokunuyor; SMTP/user-lifecycle fazıyla birlikte değerlendirilmeli (ROADMAP).
+- **Durum:** ÇÖZÜLDÜ (2026-08-25). `public/V3__token_hash_at_rest.sql` backfill (`encode(sha256(token::bytea),'hex')` — bekleyen linkler hash-lookup ile çalışmaya devam eder, consumed satırlar da hash'lenir ki yeniden sunulan token `TENANT_TOKEN_ALREADY_USED` versin) + `admin_password_hash DROP NOT NULL`. `TokenHasher` utility (refresh store'lardaki iki private kopya da buna birleştirildi); issue anında digest yazılır, `findByToken`/`claimToken` sunulan raw token'ın digest'i ile çalışır; `provisionSystemTenant` raw token'ı bellekte taşır (`PendingSignup` record), `findByCompanyId` kaldırıldı. `verifyAndProvision`, admin user oluştuktan sonra `adminPasswordHash`'i null'lar (managed entity — commit'te flush; tx rollback'ünde null da döner, DEBT-10 recovery retry hash'i bulmaya devam eder). `TokenPurgeJob` (ilk `@EnableScheduling`, `@Profile("!test")`, `config/SchedulingConfig`) günlük 03:00 UTC; retention `forgesys.security.verification-token-retention-days` (default 7 gün).
 
 ### RISK-31
 **K-21 HTTP test coverage (P1)**

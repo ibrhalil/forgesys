@@ -89,6 +89,10 @@ export function LoginPage() {
           </Button>
         </form>
 
+        <Link to="/forgot-password" className="mt-3 block text-center text-sm text-muted transition-colors hover:text-main">
+          {t('auth.forgot.link')}
+        </Link>
+
         <p className="mt-6 text-center text-sm text-muted">
           {t('auth.newOrg')}{' '}
           <Link to="/register" className="font-medium text-accent transition-colors hover:text-accent-blue">

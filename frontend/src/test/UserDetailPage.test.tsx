@@ -104,4 +104,42 @@ describe('UserDetailPage (edit-mode polish)', () => {
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(screen.getByRole('button', { name: 'Actions' })).toBeInTheDocument();
   });
+
+  it('resends the verification email from the overflow menu for an unverified user (K-48)', async () => {
+    const user = userEvent.setup();
+    // Override the shared fixture: an UNVERIFIED user shows the resend action.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url === '/api/v1/users/u-1') {
+          return new Response(JSON.stringify({ ...USER, emailVerified: false }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (url === '/api/v1/users/u-1/resend-verification' && init?.method === 'POST') {
+          return new Response(null, { status: 204 });
+        }
+        const body = url === '/api/v1/users/u-1/activity'
+          ? ACTIVITY
+          : url === '/api/v1/users/u-1/effective-permissions'
+            ? ['iam:user:read']
+            : EMPTY_PAGE;
+        return new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }),
+    );
+
+    renderAt('/users/u-1');
+    await user.click(await screen.findByRole('button', { name: 'Actions' }));
+    await user.click(await screen.findByRole('menuitem', { name: /resend verification email/i }));
+
+    const calls = (vi.mocked(fetch).mock.calls as unknown as [string, RequestInit][]);
+    const resend = calls.find(([url]) => url === '/api/v1/users/u-1/resend-verification');
+    expect(resend).toBeDefined();
+    expect(resend?.[1]?.method).toBe('POST');
+  });
 });

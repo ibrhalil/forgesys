@@ -37,6 +37,11 @@ describe('LoginPage', () => {
     expect(screen.getByLabelText(/email/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/password/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument();
+    // Self-service reset entry point (K-48) sits under the form.
+    expect(screen.getByRole('link', { name: /forgot your password/i })).toHaveAttribute(
+      'href',
+      '/forgot-password',
+    );
   });
 
   it('persists the tenant, submits credentials and redirects on success', async () => {

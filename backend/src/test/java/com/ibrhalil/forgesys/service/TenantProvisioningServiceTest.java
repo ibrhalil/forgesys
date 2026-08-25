@@ -18,6 +18,9 @@ import com.ibrhalil.forgesys.persistence.repository.PlanRepository;
 import com.ibrhalil.forgesys.persistence.repository.SubscriptionRepository;
 import com.ibrhalil.forgesys.persistence.repository.TenantVerificationTokenRepository;
 import com.ibrhalil.forgesys.persistence.repository.UserRepository;
+import com.ibrhalil.forgesys.security.TokenHasher;
+import com.ibrhalil.forgesys.service.mail.MailMessage;
+import com.ibrhalil.forgesys.service.mail.MailSender;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,6 +42,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -75,7 +79,7 @@ class TenantProvisioningServiceTest {
     @Mock private TenantMigrationSupport tenantMigrationSupport;
     @Mock private ModuleActivationService moduleActivationService;
     @Mock private TenantSampleDataService sampleDataService;
-    @Mock private VerificationSender verificationSender;
+    @Mock private MailSender mailSender;
     @Mock private ObjectProvider<RbacSeeder> rbacSeederProvider;
     @Mock private ObjectProvider<TenantProvisioningService> self;
 
@@ -88,7 +92,7 @@ class TenantProvisioningServiceTest {
         service = new TenantProvisioningService(
                 companyRepository, userRepository, tokenRepository, planRepository, subscriptionRepository,
                 passwordEncoder, dataSource, tenantMigrationSupport, moduleActivationService,
-                sampleDataService, verificationSender, rbacSeederProvider, self);
+                sampleDataService, mailSender, rbacSeederProvider, self);
         ReflectionTestUtils.setField(service, "appBaseUrl", "http://test.local");
         ReflectionTestUtils.setField(service, "tokenTtlHours", 24L);
         // REQUIRES_NEW self-proxy: createAdminUser is invoked through self.getObject(),
@@ -139,7 +143,34 @@ class TenantProvisioningServiceTest {
         assertThat(token.getExpiresAt()).isNotNull();
         assertThat(token.getUsedAt()).isNull();
 
-        verify(verificationSender).send(anyString(), anyString());
+        verify(mailSender).send(any(MailMessage.class));
+    }
+
+    /**
+     * [RISK-30] Hash-at-rest: the persisted row carries ONLY the SHA-256 digest of the
+     * token; the emailed link carries the raw value. The two must correspond — a link
+     * recipient's verify request hashes back to the stored digest.
+     */
+    @Test
+    void createPendingCompany_persistsOnlyTheTokenDigest() {
+        when(companyRepository.findBySubdomain(SUBDOMAIN)).thenReturn(Optional.empty());
+        when(companyRepository.findBySchemaName(SCHEMA_NAME)).thenReturn(Optional.empty());
+        when(companyRepository.save(any(Company.class))).thenAnswer(inv -> withId(inv.getArgument(0)));
+        when(passwordEncoder.encode("secret-pw")).thenReturn("{sf-peppered}hash");
+        ArgumentCaptor<TenantVerificationToken> tokenCaptor = ArgumentCaptor.forClass(TenantVerificationToken.class);
+        when(tokenRepository.save(tokenCaptor.capture())).thenAnswer(inv -> withTokenId(inv.getArgument(0)));
+
+        service.createPendingCompany(request());
+
+        // Raw token comes from the mailed action URL — the only place it exists.
+        ArgumentCaptor<MailMessage> mailCaptor = ArgumentCaptor.forClass(MailMessage.class);
+        verify(mailSender).send(mailCaptor.capture());
+        String url = mailCaptor.getValue().actionUrl();
+        String rawToken = url.substring(url.indexOf("token=") + "token=".length());
+
+        String persisted = tokenCaptor.getValue().getToken();
+        assertThat(persisted).isNotEqualTo(rawToken);
+        assertThat(persisted).isEqualTo(TokenHasher.sha256Hex(rawToken));
     }
 
     @Test
@@ -150,16 +181,16 @@ class TenantProvisioningServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.COMPANY_SUBDOMAIN_TAKEN);
 
-        verify(verificationSender, never()).send(anyString(), anyString());
+        verify(mailSender, never()).send(any(MailMessage.class));
     }
 
     @Test
     void verifyAndProvision_validToken_activatesAndCreatesAdmin() throws Exception {
         Company company = companyWithStatus(CompanyStatus.PROVISIONING);
         TenantVerificationToken token = validToken(company);
-        when(tokenRepository.findByToken("good-token")).thenReturn(Optional.of(token));
+        when(tokenRepository.findByToken(hashOf("good-token"))).thenReturn(Optional.of(token));
         // [RISK-25] atomic claim returns 1 (caller wins the race).
-        when(tokenRepository.claimToken(eq("good-token"), any(OffsetDateTime.class))).thenReturn(1);
+        when(tokenRepository.claimToken(eq(hashOf("good-token")), any(OffsetDateTime.class))).thenReturn(1);
         stubCreateSchema();
         when(companyRepository.save(any(Company.class))).thenAnswer(inv -> inv.getArgument(0));
         stubFreePlan();
@@ -170,6 +201,9 @@ class TenantProvisioningServiceTest {
         assertThat(response.status()).isEqualTo(CompanyStatus.ACTIVE);
         assertThat(company.getStatus()).isEqualTo(CompanyStatus.ACTIVE);
         assertThat(token.getUsedAt()).isNotNull();
+        // [RISK-30] the admin user has been created — the token row must no longer
+        // carry the pre-hashed admin credentials.
+        assertThat(token.getAdminPasswordHash()).isNull();
 
         verify(tenantMigrationSupport).migrateSchema(SCHEMA_NAME);
         verify(userRepository).save(any());
@@ -209,8 +243,8 @@ class TenantProvisioningServiceTest {
     void verifyAndProvision_sampleDataSeedFails_provisioningStillSucceeds() throws Exception {
         Company company = companyWithStatus(CompanyStatus.PROVISIONING);
         TenantVerificationToken token = validToken(company);
-        when(tokenRepository.findByToken("good-token")).thenReturn(Optional.of(token));
-        when(tokenRepository.claimToken(eq("good-token"), any(OffsetDateTime.class))).thenReturn(1);
+        when(tokenRepository.findByToken(hashOf("good-token"))).thenReturn(Optional.of(token));
+        when(tokenRepository.claimToken(eq(hashOf("good-token")), any(OffsetDateTime.class))).thenReturn(1);
         stubCreateSchema();
         when(companyRepository.save(any(Company.class))).thenAnswer(inv -> inv.getArgument(0));
         stubFreePlan();
@@ -229,7 +263,7 @@ class TenantProvisioningServiceTest {
 
     @Test
     void verifyAndProvision_unknownToken_throwsInvalid() {
-        when(tokenRepository.findByToken("missing")).thenReturn(Optional.empty());
+        when(tokenRepository.findByToken(hashOf("missing"))).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.verifyAndProvision("missing"))
                 .isInstanceOf(BusinessException.class)
@@ -242,7 +276,7 @@ class TenantProvisioningServiceTest {
     void verifyAndProvision_usedToken_throwsAlreadyUsed() {
         TenantVerificationToken token = validToken(companyWithStatus(CompanyStatus.PROVISIONING));
         token.setUsedAt(OffsetDateTime.now(ZoneOffset.UTC));
-        when(tokenRepository.findByToken("used")).thenReturn(Optional.of(token));
+        when(tokenRepository.findByToken(hashOf("used"))).thenReturn(Optional.of(token));
 
         assertThatThrownBy(() -> service.verifyAndProvision("used"))
                 .isInstanceOf(BusinessException.class)
@@ -262,8 +296,8 @@ class TenantProvisioningServiceTest {
     @Test
     void verifyAndProvision_concurrentClaimLost_throwsAlreadyUsed() throws Exception {
         TenantVerificationToken token = validToken(companyWithStatus(CompanyStatus.PROVISIONING));
-        when(tokenRepository.findByToken("contended")).thenReturn(Optional.of(token));
-        when(tokenRepository.claimToken(eq("contended"), any(OffsetDateTime.class))).thenReturn(0);
+        when(tokenRepository.findByToken(hashOf("contended"))).thenReturn(Optional.of(token));
+        when(tokenRepository.claimToken(eq(hashOf("contended")), any(OffsetDateTime.class))).thenReturn(0);
 
         assertThatThrownBy(() -> service.verifyAndProvision("contended"))
                 .isInstanceOf(BusinessException.class)
@@ -278,7 +312,7 @@ class TenantProvisioningServiceTest {
     void verifyAndProvision_expiredToken_throwsExpired() {
         TenantVerificationToken token = validToken(companyWithStatus(CompanyStatus.PROVISIONING));
         token.setExpiresAt(OffsetDateTime.now(ZoneOffset.UTC).minusHours(1));
-        when(tokenRepository.findByToken("expired")).thenReturn(Optional.of(token));
+        when(tokenRepository.findByToken(hashOf("expired"))).thenReturn(Optional.of(token));
 
         assertThatThrownBy(() -> service.verifyAndProvision("expired"))
                 .isInstanceOf(BusinessException.class)
@@ -293,15 +327,18 @@ class TenantProvisioningServiceTest {
         when(companyRepository.findBySchemaName(SCHEMA_NAME)).thenReturn(Optional.empty());
         when(companyRepository.save(any(Company.class))).thenAnswer(inv -> withId(inv.getArgument(0)));
         when(passwordEncoder.encode("secret-pw")).thenReturn("{sf-peppered}hash");
-        // The token created at phase 1 is looked up by companyId (phase 1.5 of bootstrap)
-        // and by its token value (phase 2). Wire both with the same instance so the chain holds.
-        Company provisioningCompany = companyWithStatus(CompanyStatus.PROVISIONING);
-        TenantVerificationToken token = validToken(provisioningCompany);
-        when(tokenRepository.save(any(TenantVerificationToken.class))).thenAnswer(inv -> withTokenId(inv.getArgument(0)));
-        when(tokenRepository.findByCompanyId(any(UUID.class))).thenReturn(Optional.of(token));
-        when(tokenRepository.findByToken(token.getToken())).thenReturn(Optional.of(token));
-        // [RISK-25] the auto-verify path also goes through the atomic claim.
-        when(tokenRepository.claimToken(eq(token.getToken()), any(OffsetDateTime.class))).thenReturn(1);
+        // [RISK-30] phase 1 hands the raw token to phase 2 in memory; phase 2 hashes it
+        // for lookup/claim. Capture the actually-issued digest so the stubs follow the
+        // production chain instead of a fabricated one.
+        AtomicReference<TenantVerificationToken> issued = new AtomicReference<>();
+        when(tokenRepository.save(any(TenantVerificationToken.class))).thenAnswer(inv -> {
+            TenantVerificationToken saved = withTokenId(inv.getArgument(0));
+            issued.set(saved);
+            return saved;
+        });
+        when(tokenRepository.findByToken(anyString()))
+                .thenAnswer(inv -> Optional.of(issued.get()));
+        when(tokenRepository.claimToken(anyString(), any(OffsetDateTime.class))).thenReturn(1);
         stubCreateSchema();
         stubFreePlan();
         when(companyRepository.findById(any(UUID.class)))
@@ -311,8 +348,11 @@ class TenantProvisioningServiceTest {
         Company result = service.provisionSystemTenant(request());
 
         assertThat(result).isNotNull();
+        // The claim must run against the digest phase 1 actually persisted (not a
+        // re-read of the row — the raw token never returns from the DB).
+        verify(tokenRepository).claimToken(eq(issued.get().getToken()), any(OffsetDateTime.class));
         // Bootstrap auto-verify must NOT email the verification link.
-        verify(verificationSender, never()).send(anyString(), anyString());
+        verify(mailSender, never()).send(any(MailMessage.class));
         verify(tenantMigrationSupport).migrateSchema(SCHEMA_NAME);
         verify(subscriptionRepository).save(any(Subscription.class));
         verify(moduleActivationService).activateDefaultModules(any(Company.class));
@@ -329,8 +369,8 @@ class TenantProvisioningServiceTest {
     @Test
     void verifyAndProvision_missingFreePlan_failsFast() throws Exception {
         TenantVerificationToken token = validToken(companyWithStatus(CompanyStatus.PROVISIONING));
-        when(tokenRepository.findByToken("good-token")).thenReturn(Optional.of(token));
-        when(tokenRepository.claimToken(eq("good-token"), any(OffsetDateTime.class))).thenReturn(1);
+        when(tokenRepository.findByToken(hashOf("good-token"))).thenReturn(Optional.of(token));
+        when(tokenRepository.claimToken(eq(hashOf("good-token")), any(OffsetDateTime.class))).thenReturn(1);
         stubCreateSchema();
         when(planRepository.findByKey("free")).thenReturn(Optional.empty());
 
@@ -341,6 +381,11 @@ class TenantProvisioningServiceTest {
     }
 
     // --- helpers ---------------------------------------------------------
+
+    /** [RISK-30] the digest the service derives from a presented raw token. */
+    private static String hashOf(String raw) {
+        return TokenHasher.sha256Hex(raw);
+    }
 
     private CompanyRegisterRequest request() {
         return new CompanyRegisterRequest(

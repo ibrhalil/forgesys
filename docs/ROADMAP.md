@@ -4,7 +4,7 @@
 
 ## Mevcut Durum
 
-Platform çekirdeği kullanımda: schema-per-tenant multi-tenancy, iki fazlı tenant signup, auth (RS256 JWT cookie + Redis refresh rotasyon/reuse detection), tam RBAC (rol kalıtımı + `all_permissions` + last-admin guard + privilege-change session revoke), audit/login/request log (append-only + `@AuditLog` AOP + delta), modül & plan sistemi (registry kodda), üç modül aktif ve **tipli proje konteynerine** çapalı (**pm** TASKS, **apps** APPS koleksiyonu, **notes** NOTES — K-45), admin console (permission-gated), Prometheus metrics (prod ayrı management portu), CI (backend + frontend + gated gerçek PG/Redis IT) + GHCR publish (deploy manuel).
+Platform çekirdeği kullanımda: schema-per-tenant multi-tenancy, iki fazlı tenant signup, auth (RS256 JWT cookie + Redis refresh rotasyon/reuse detection), tam RBAC (rol kalıtımı + `all_permissions` + last-admin guard + privilege-change session revoke), audit/login/request log (append-only + `@AuditLog` AOP + delta), modül & plan sistemi (registry kodda), üç modül aktif ve **tipli proje konteynerine** çapalı (**pm** TASKS, **apps** APPS koleksiyonu, **notes** NOTES — K-45), admin console (permission-gated), Prometheus metrics (prod ayrı management portu), CI (backend + frontend + gated gerçek PG/Redis IT) + GHCR publish (deploy manuel), kullanıcı lifecycle: SMTP mail kanalı + opsiyonel email doğrulama + self-service password reset (K-48; tokenlar hash-at-rest — RISK-30 kapandı).
 
 ## Tamamlanan Epikler (özet)
 
@@ -20,14 +20,9 @@ Platform çekirdeği kullanımda: schema-per-tenant multi-tenancy, iki fazlı te
 | Kalite/sadeleştirme seti | ölü kod kaldırma, API tutarlılık geçişi, migration squash, strict TS + Vitest/RTL, startup projection, springdoc-openapi | K-36..K-41 |
 | Observability + CI/CD | Prometheus expose, CI 3-job + gated IT'ler + GHCR publish | K-43 |
 | Audit genişletme | `@AuditLog` AOP, delta kaydı, `t_request_logs` + endpoint + UI, high-risk body masking | K-19, K-27 |
+| **K-48 — user lifecycle + mail** | SMTP kanalı (`MailSender` port + Smtp/Log/InMemory sender'lar, TR/EN şablonlar), `t_auth_tokens` (digest-at-rest + supersede-on-reissue + atomic claim), opsiyonel email doğrulama (verify-email/resend), self-service password reset (forgot/reset, uniform-200 no-enumeration, session kill), `TokenPurgeJob` (ilk `@EnableScheduling`) | K-48 (+RISK-30) |
 
 ## Kalan İşler
-
-### Kullanıcı lifecycle + mail (SMTP ön koşulu)
-- [ ] SMTP altyapısı: `spring-boot-starter-mail` + `MailVerificationSender` (prod; dev'de `LogVerificationSender` kalır) + template'ler (`infra/templates/`, TR/EN)
-- [ ] Tenant içi email doğrulama akışı (kendi migration'ını getirir — K-38)
-- [ ] Password reset akışı (`forgot-password`/`reset-password`; rate-limit kapsamına alınır)
-- [ ] RISK-30 birlikte: verification token hash-at-rest + purge job + `adminPasswordHash` null'lama
 
 ### Faz 3 kalanı — built-in modüller
 - [ ] **Warehouse:** ürün/depo/stok kalemi/stok hareketi (IN/OUT/TRANSFER) + minimum stok uyarısı
@@ -54,7 +49,8 @@ Platform çekirdeği kullanımda: schema-per-tenant multi-tenancy, iki fazlı te
 
 ### Ürün kararları bekliyor
 - [ ] Password complexity policy (tüm test/bootstrap şifrelerini değiştirir)
-- [ ] Tenant içi email verification zorunlu mu opsiyonel mi (akış yapılırken netleşecek)
+
+> Çözülen ürün kararı: tenant içi email doğrulama OPSİYONEL (login engellenmez; rozet + admin resend) — [K-48](DECISIONS.md#k-48).
 
 ### Bilinçli ertelenmiş / iptal (tekrar tartışılmaz)
 MapStruct (iptal — manuel `toResponse`) · `t_sessions_log` (iptal — K-28) · `PermissionCacheService` (düşük değer — yetkiler JWT'de gömülü) · `PasswordEncodingListener` · TaskDecorator (RISK-10 — ilk `@Async` tüketiciyle) · OAuth2 sosyal giriş / WebSocket-SSE / S3-MinIO / LDAP-SSO / microservice (Faz 5 değerlendirme listesi) · FORMULA property tipi (K-15) · drag-drop + expression editor (K-42) · ABAC görünürlük + WYSIWYG + tsvector search (K-44) · OTel (K-43 notu)
