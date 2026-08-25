@@ -20,9 +20,16 @@ import { AppFormModal } from './components/AppFormModal';
 
 export function AppsPage() {
   const { t } = useT();
-  const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, searchFields, setSearchFields, q } =
+  const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, searchFields, setSearchFields, filters, setFilters, q } =
     useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'apps' });
-  const { data, isLoading, isFetching } = useApps({ page, size: pageSize, sorts: [sort], q: q || undefined });
+  const { data, isLoading, isFetching } = useApps({
+    page,
+    size: pageSize,
+    sorts: [sort],
+    q: q || undefined,
+    qFields: searchFields.length ? searchFields : undefined,
+    filters: filters.length ? filters : undefined,
+  });
   // Usage indicator: unfiltered total via a one-row probe (the list above is q-filtered).
   const { data: usage } = useApps({ page: 0, size: 1 });
   const { data: planLimits } = usePlanLimits();
@@ -33,10 +40,13 @@ export function AppsPage() {
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<App | null>(null);
 
+  // Aligned with the backend's searchable registrations (AppBuilderService.FILTER_FIELDS).
   const appSearchFields = [
     { key: 'name', label: t('common.name'), searchable: true },
     { key: 'description', label: t('common.description'), searchable: true },
-    { key: 'project', label: t('projects.project'), searchable: false },
+    { key: 'projectName', label: t('projects.project'), searchable: true },
+    { key: 'icon', label: t('apps.iconLabel'), searchable: false },
+    { key: 'projectId', label: t('projects.project'), searchable: false },
     { key: 'createdDate', label: t('apps.createdDate'), searchable: false },
   ];
 
@@ -45,6 +55,7 @@ export function AppsPage() {
       key: 'name',
       header: t('common.name'),
       sortKey: 'name',
+      filter: { field: 'name', control: 'text' },
       hideable: false,
       render: (a) => (
         <Link to={`/apps/${a.id}`} className="font-medium text-main transition-colors hover:text-accent">
@@ -52,10 +63,18 @@ export function AppsPage() {
         </Link>
       ),
     },
-    { key: 'description', header: t('common.description'), render: (a) => <span className="text-muted">{a.description ?? '—'}</span> },
+    {
+      key: 'description',
+      header: t('common.description'),
+      sortKey: 'description',
+      filter: { field: 'description', control: 'text' },
+      render: (a) => <span className="text-muted">{a.description ?? '—'}</span>,
+    },
     {
       key: 'project',
       header: t('projects.project'),
+      sortKey: 'projectName',
+      filter: { field: 'projectName', control: 'text' },
       render: (a) =>
         a.projectName ? (
           <Link to={`/projects/${a.projectId}`} className="text-muted transition-colors hover:text-accent">
@@ -65,7 +84,7 @@ export function AppsPage() {
           <span className="text-muted">—</span>
         ),
     },
-    { key: 'createdDate', header: t('apps.createdDate'), sortKey: 'createdDate', render: (a) => <span className="text-muted">{formatDateTime(a.createdDate)}</span> },
+    { key: 'createdDate', header: t('apps.createdDate'), sortKey: 'createdDate', filter: { field: 'createdDate', control: 'date' }, render: (a) => <span className="text-muted">{formatDateTime(a.createdDate)}</span> },
   ];
 
   return (
@@ -119,6 +138,8 @@ export function AppsPage() {
         onPageChange={setPage}
         sort={sort}
         onSortChange={toggleSort}
+        filters={filters}
+        onFiltersChange={setFilters}
         toolbar={
           <SearchInput
             value={search}

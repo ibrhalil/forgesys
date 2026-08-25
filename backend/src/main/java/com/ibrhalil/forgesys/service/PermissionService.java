@@ -30,10 +30,10 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class PermissionService {
 
-    /** Filterable/sortable direct attributes of the permission list; {@code q} matches {@code name}. */
+    /** Filterable/sortable attributes of the permission list; {@code q} matches {@code name} + {@code description}. */
     public static final FilterFieldSet FILTER_FIELDS = FilterFieldSet.builder()
             .field(Permission_.NAME, FilterFieldType.STRING, true)
-            .field(Permission_.DESCRIPTION, FilterFieldType.STRING, false)
+            .field(Permission_.DESCRIPTION, FilterFieldType.STRING, true)
             .field(AuditEntity_.CREATED_DATE, FilterFieldType.TEMPORAL, false)
             .field(AuditEntity_.UPDATED_AT, FilterFieldType.TEMPORAL, false)
             .build();

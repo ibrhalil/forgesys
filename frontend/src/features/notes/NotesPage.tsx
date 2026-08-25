@@ -38,6 +38,8 @@ export function NotesPage() {
     setSearch,
     searchFields,
     setSearchFields,
+    filters,
+    setFilters,
     q,
   } = useListPageState({ defaultSort: { field: 'updatedAt', dir: 'desc' }, storageKey: 'notes' });
   const [categoryId, setCategoryId] = useState<string | null>(null);
@@ -48,8 +50,10 @@ export function NotesPage() {
     size: pageSize,
     sorts: [sort],
     q: q || undefined,
+    qFields: searchFields.length ? searchFields : undefined,
     categoryId: categoryId ?? undefined,
     pinned: pinnedOnly || undefined,
+    filters: filters.length ? filters : undefined,
   });
   const { data: categories } = useNoteCategories();
   const delNote = useDeleteNote();
@@ -58,10 +62,14 @@ export function NotesPage() {
 
   const [deleting, setDeleting] = useState<Note | null>(null);
 
+  // Aligned with the backend's searchable registrations (NoteService.FILTER_FIELDS):
+  // title + content + the resolved project/category names.
   const noteSearchFields = [
     { key: 'title', label: t('notes.titleCol'), searchable: true },
-    { key: 'category', label: t('notes.categoryCol'), searchable: false },
-    { key: 'project', label: t('projects.project'), searchable: false },
+    { key: 'content', label: t('notes.content'), searchable: true },
+    { key: 'categoryName', label: t('notes.categoryCol'), searchable: true },
+    { key: 'projectName', label: t('projects.project'), searchable: true },
+    { key: 'categoryId', label: t('notes.categoryCol'), searchable: false },
     { key: 'updatedAt', label: t('notes.updatedCol'), searchable: false },
   ];
 
@@ -70,6 +78,7 @@ export function NotesPage() {
       key: 'title',
       header: t('notes.titleCol'),
       sortKey: 'title',
+      filter: { field: 'title', control: 'text' },
       hideable: false,
       render: (n) => (
         <span className="inline-flex items-center gap-2">
@@ -83,11 +92,15 @@ export function NotesPage() {
     {
       key: 'category',
       header: t('notes.categoryCol'),
+      sortKey: 'categoryName',
+      filter: { field: 'categoryName', control: 'text' },
       render: (n) => (n.categoryName ? <Badge tone="blue">{n.categoryName}</Badge> : <span className="text-muted">—</span>),
     },
     {
       key: 'project',
       header: t('projects.project'),
+      sortKey: 'projectName',
+      filter: { field: 'projectName', control: 'text' },
       render: (n) =>
         n.projectName ? <Badge tone="muted">{n.projectName}</Badge> : <span className="text-muted">—</span>,
     },
@@ -95,6 +108,7 @@ export function NotesPage() {
       key: 'updatedAt',
       header: t('notes.updatedCol'),
       sortKey: 'updatedAt',
+      filter: { field: 'updatedAt', control: 'date' },
       render: (n) => <span className="text-muted">{formatDateTime(n.updatedAt)}</span>,
     },
   ];
@@ -123,6 +137,8 @@ export function NotesPage() {
         onPageChange={setPage}
         sort={sort}
         onSortChange={toggleSort}
+        filters={filters}
+        onFiltersChange={setFilters}
         toolbar={
           <div className="flex flex-wrap items-center gap-2">
             <SearchInput

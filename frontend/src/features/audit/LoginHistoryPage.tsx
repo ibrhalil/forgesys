@@ -26,19 +26,30 @@ export function LoginHistoryPage() {
     { value: 'false', label: t('loginHistory.failed') },
   ];
   const [success, setSuccess] = useState<'all' | 'true' | 'false'>('all');
-  const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, searchFields, setSearchFields, q } =
-    useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' }, storageKey: 'login-history' });
+  const {
+    page, setPage, pageSize, setPageSize, sort, toggleSort,
+    search, setSearch, searchFields, setSearchFields, filters, setFilters, q,
+  } = useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' }, storageKey: 'login-history' });
 
   const successParam = success === 'all' ? undefined : success === 'true';
-  const { data, isLoading, isFetching } = useLoginHistory({ page, size: pageSize, sort: `${sort.field},${sort.dir}`, success: successParam, q: q || undefined });
+  const { data, isLoading, isFetching } = useLoginHistory({
+    page,
+    size: pageSize,
+    sort: `${sort.field},${sort.dir}`,
+    success: successParam,
+    q: q || undefined,
+    qFields: searchFields.length ? searchFields : undefined,
+    filters: filters.length ? filters : undefined,
+  });
 
+  // Aligned with the backend's searchable registrations (AuditQueryService.LOGIN_HISTORY_FIELDS).
   const loginSearchFields = [
     { key: 'username', label: t('common.email'), searchable: true },
+    { key: 'reason', label: t('loginHistory.reason'), searchable: true },
+    { key: 'ipAddress', label: t('audit.ip'), searchable: true },
+    { key: 'userAgent', label: t('loginHistory.userAgent'), searchable: true },
     { key: 'success', label: t('loginHistory.result'), searchable: false },
-    { key: 'reason', label: t('loginHistory.reason'), searchable: false },
-    { key: 'ipAddress', label: t('audit.ip'), searchable: false },
-    { key: 'userAgent', label: t('loginHistory.userAgent'), searchable: false },
-    { key: 'createdAt', label: t('audit.date'), searchable: false },
+    { key: 'createdDate', label: t('audit.date'), searchable: false },
   ];
 
   const columns: Column<LoginHistory>[] = [
@@ -46,20 +57,46 @@ export function LoginHistoryPage() {
       key: 'createdAt',
       header: t('audit.date'),
       sortKey: 'createdDate',
+      filter: { field: 'createdDate', control: 'date' },
       hideable: false,
       render: (l) => <span className="whitespace-nowrap text-muted">{formatDateTime(l.createdAt)}</span>,
     },
-    { key: 'username', header: t('common.email'), sortKey: 'username', render: (l) => <span className="font-medium text-main">{l.username}</span> },
+    {
+      key: 'username',
+      header: t('common.email'),
+      sortKey: 'username',
+      filter: { field: 'username', control: 'text' },
+      render: (l) => <span className="font-medium text-main">{l.username}</span>,
+    },
     {
       key: 'success',
       header: t('loginHistory.result'),
       sortKey: 'success',
+      filter: { field: 'success', control: 'boolean' },
       render: (l) =>
         l.success ? <Badge tone="green">{t('loginHistory.success')}</Badge> : <Badge tone="danger">{t('loginHistory.failed')}</Badge>,
     },
-    { key: 'reason', header: t('loginHistory.reason'), render: (l) => <span className="text-muted">{l.reason ?? '—'}</span> },
-    { key: 'ipAddress', header: t('audit.ip'), render: (l) => <span className="whitespace-nowrap text-muted">{l.ipAddress ?? '—'}</span> },
-    { key: 'userAgent', header: t('loginHistory.userAgent'), render: (l) => <span className="line-clamp-1 max-w-xs text-xs text-muted/70">{l.userAgent ?? '—'}</span> },
+    {
+      key: 'reason',
+      header: t('loginHistory.reason'),
+      sortKey: 'reason',
+      filter: { field: 'reason', control: 'text' },
+      render: (l) => <span className="text-muted">{l.reason ?? '—'}</span>,
+    },
+    {
+      key: 'ipAddress',
+      header: t('audit.ip'),
+      sortKey: 'ipAddress',
+      filter: { field: 'ipAddress', control: 'text' },
+      render: (l) => <span className="whitespace-nowrap text-muted">{l.ipAddress ?? '—'}</span>,
+    },
+    {
+      key: 'userAgent',
+      header: t('loginHistory.userAgent'),
+      sortKey: 'userAgent',
+      filter: { field: 'userAgent', control: 'text' },
+      render: (l) => <span className="line-clamp-1 max-w-xs text-xs text-muted/70">{l.userAgent ?? '—'}</span>,
+    },
   ];
 
   return (
@@ -85,6 +122,8 @@ export function LoginHistoryPage() {
         onPageChange={setPage}
         sort={sort}
         onSortChange={toggleSort}
+        filters={filters}
+        onFiltersChange={setFilters}
         toolbar={(
           <>
             <SearchInput

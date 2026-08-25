@@ -1,5 +1,5 @@
-import { api, normalizePage, toQuery } from '../../lib/api';
-import type { PageParams, PageResponse } from '../../types';
+import { api, normalizePage, searchPost, toQuery } from '../../lib/api';
+import type { FilterCriteria, PageParams, PageResponse, SearchRequestBody } from '../../types';
 import type { AssignRolesRequest } from '../roles/types';
 import type {
   User, UserDirectoryView, UserActivity,
@@ -7,10 +7,21 @@ import type {
   PasswordChangeRequest, AdminPasswordResetRequest, AssignGroupsRequest,
 } from './types';
 
+/** List params with the K-49 structured column-filter clauses. */
+export type UserListParams = PageParams & { filters?: FilterCriteria[] };
+
 export const usersApi = {
   /** Flat directory projection (DB-side join + counts), visibility-scoped by the backend. */
   list: (params: PageParams = {}) =>
     api.get<PageResponse<UserDirectoryView>>(`/api/v1/users${toQuery(params)}`).then(normalizePage),
+  /**
+   * Engine list read: structured filter clauses route through `POST /users/search`,
+   * plain reads stay on GET. One entry point keeps the page's query key stable.
+   */
+  searchOrList: ({ filters, ...params }: UserListParams) =>
+    filters?.length
+      ? searchPost<UserDirectoryView>('/api/v1/users/search', { ...params } satisfies SearchRequestBody)
+      : usersApi.list(params),
   get: (id: string) => api.get<User>(`/api/v1/users/${id}`),
   create: (data: CreateUserRequest) => api.post<User>('/api/v1/users', data),
   update: (id: string, data: UpdateUserRequest) =>

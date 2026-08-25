@@ -1,5 +1,5 @@
-import { api, normalizePage, toQuery } from '../../lib/api';
-import type { PageParams, PageResponse } from '../../types';
+import { api, normalizePage, searchPost, toQuery } from '../../lib/api';
+import type { FilterCriteria, PageParams, PageResponse, SearchRequestBody } from '../../types';
 import type {
   App,
   AppDetail,
@@ -16,6 +16,8 @@ import type {
 export interface AppListParams extends PageParams {
   /** Cross-container narrowing (flat list) — the project panel also lands here. */
   projectId?: string;
+  /** K-49 structured column-filter clauses. */
+  filters?: FilterCriteria[];
 }
 
 export const appsApi = {
@@ -28,6 +30,22 @@ export const appsApi = {
     return api
       .get<PageResponse<App>>(`/api/v1/apps${qs ? `?${qs}` : ''}`)
       .then(normalizePage);
+  },
+  /**
+   * Engine list read: structured column-filter clauses route through
+   * `POST /apps/search` (with the container narrowing folded in as an EQ clause);
+   * without clauses everything stays on the plain GET.
+   */
+  searchOrList: ({ filters, projectId, ...params }: AppListParams = {}) => {
+    if (!filters?.length) {
+      return appsApi.list({ ...params, projectId });
+    }
+    const clauses: FilterCriteria[] = [...filters];
+    if (projectId) {
+      clauses.push({ field: 'projectId', operator: 'EQ', values: [projectId] });
+    }
+    const body: SearchRequestBody = { ...params, filters: clauses };
+    return searchPost<App>('/api/v1/apps/search', body);
   },
   get: (id: string) => api.get<AppDetail>(`/api/v1/apps/${id}`),
   create: (data: AppRequest) => api.post<App>('/api/v1/apps', data),

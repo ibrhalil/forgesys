@@ -17,17 +17,27 @@ import { useListPageState } from '../../lib/useListPageState';
  */
 export function AuditLogsPage() {
   const { t } = useT();
-  const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, searchFields, setSearchFields, q } =
-    useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' }, storageKey: 'audit-logs' });
-  const { data, isLoading, isFetching } = useAuditLogs({ page, size: pageSize, sort: `${sort.field},${sort.dir}`, q: q || undefined });
+  const {
+    page, setPage, pageSize, setPageSize, sort, toggleSort,
+    search, setSearch, searchFields, setSearchFields, filters, setFilters, q,
+  } = useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' }, storageKey: 'audit-logs' });
+  const { data, isLoading, isFetching } = useAuditLogs({
+    page,
+    size: pageSize,
+    sort: `${sort.field},${sort.dir}`,
+    q: q || undefined,
+    qFields: searchFields.length ? searchFields : undefined,
+    filters: filters.length ? filters : undefined,
+  });
 
+  // Aligned with the backend's searchable registrations (AuditQueryService.AUDIT_LOG_FIELDS).
   const auditSearchFields = [
     { key: 'actorName', label: t('audit.actor'), searchable: true },
     { key: 'action', label: t('audit.action'), searchable: true },
-    { key: 'entity', label: t('audit.target'), searchable: true },
-    { key: 'ipAddress', label: t('audit.ip'), searchable: false },
-    { key: 'traceId', label: t('audit.trace'), searchable: false },
-    { key: 'createdAt', label: t('audit.date'), searchable: false },
+    { key: 'entityName', label: t('audit.target'), searchable: true },
+    { key: 'ipAddress', label: t('audit.ip'), searchable: true },
+    { key: 'traceId', label: t('audit.trace'), searchable: true },
+    { key: 'createdDate', label: t('audit.date'), searchable: false },
   ];
 
   const columns: Column<AuditLog>[] = [
@@ -35,6 +45,7 @@ export function AuditLogsPage() {
       key: 'createdAt',
       header: t('audit.date'),
       sortKey: 'createdDate',
+      filter: { field: 'createdDate', control: 'date' },
       hideable: false,
       render: (l) => <span className="whitespace-nowrap text-muted">{formatDateTime(l.createdAt)}</span>,
     },
@@ -42,13 +53,15 @@ export function AuditLogsPage() {
       key: 'actorName',
       header: t('audit.actor'),
       sortKey: 'actorName',
+      filter: { field: 'actorName', control: 'text' },
       render: (l) => <span className="font-medium text-main">{l.actorName}</span>,
     },
-    { key: 'action', header: t('audit.action'), sortKey: 'action', render: (l) => <Badge tone="accent">{l.action}</Badge> },
+    { key: 'action', header: t('audit.action'), sortKey: 'action', filter: { field: 'action', control: 'text' }, render: (l) => <Badge tone="accent">{l.action}</Badge> },
     {
       key: 'entity',
       header: t('audit.target'),
       sortKey: 'entityName',
+      filter: { field: 'entityName', control: 'text' },
       render: (l) => (
         <div className="flex flex-col">
           <span className="text-main">{l.entityName ?? l.entityType}</span>
@@ -56,8 +69,20 @@ export function AuditLogsPage() {
         </div>
       ),
     },
-    { key: 'ipAddress', header: t('audit.ip'), render: (l) => <span className="whitespace-nowrap text-muted">{l.ipAddress ?? '—'}</span> },
-    { key: 'traceId', header: t('audit.trace'), render: (l) => <span className="font-mono text-xs text-muted/70">{l.traceId ? l.traceId.slice(0, 8) : '—'}</span> },
+    {
+      key: 'ipAddress',
+      header: t('audit.ip'),
+      sortKey: 'ipAddress',
+      filter: { field: 'ipAddress', control: 'text' },
+      render: (l) => <span className="whitespace-nowrap text-muted">{l.ipAddress ?? '—'}</span>,
+    },
+    {
+      key: 'traceId',
+      header: t('audit.trace'),
+      sortKey: 'traceId',
+      filter: { field: 'traceId', control: 'text' },
+      render: (l) => <span className="font-mono text-xs text-muted/70">{l.traceId ? l.traceId.slice(0, 8) : '—'}</span>,
+    },
   ];
 
   return (
@@ -83,6 +108,8 @@ export function AuditLogsPage() {
         onPageChange={setPage}
         sort={sort}
         onSortChange={toggleSort}
+        filters={filters}
+        onFiltersChange={setFilters}
         toolbar={
           <SearchInput
             value={search}

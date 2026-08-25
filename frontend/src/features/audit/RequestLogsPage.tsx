@@ -17,25 +17,30 @@ import { useListPageState } from '../../lib/useListPageState';
  */
 export function RequestLogsPage() {
   const { t } = useT();
-  const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, searchFields, setSearchFields, q } =
-    useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' }, storageKey: 'request-logs' });
+  const {
+    page, setPage, pageSize, setPageSize, sort, toggleSort,
+    search, setSearch, searchFields, setSearchFields, filters, setFilters, q,
+  } = useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' }, storageKey: 'request-logs' });
   const { data, isLoading, isFetching } = useRequestLogs({
     page,
     size: pageSize,
     sort: `${sort.field},${sort.dir}`,
     q: q || undefined,
+    qFields: searchFields.length ? searchFields : undefined,
+    filters: filters.length ? filters : undefined,
   });
 
+  // Aligned with the backend's searchable registrations (RequestLogQueryService.REQUEST_LOG_FIELDS).
   const requestSearchFields = [
     { key: 'traceId', label: t('requestLog.trace'), searchable: true },
     { key: 'path', label: t('requestLog.path'), searchable: true },
-    { key: 'user', label: t('requestLog.user'), searchable: true },
+    { key: 'username', label: t('requestLog.user'), searchable: true },
+    { key: 'ipAddress', label: t('requestLog.ip'), searchable: true },
+    { key: 'userAgent', label: t('requestLog.userAgent'), searchable: true },
     { key: 'method', label: t('requestLog.method'), searchable: false },
     { key: 'status', label: t('requestLog.status'), searchable: false },
-    { key: 'duration', label: t('requestLog.duration'), searchable: false },
-    { key: 'ipAddress', label: t('requestLog.ip'), searchable: false },
-    { key: 'userAgent', label: t('requestLog.userAgent'), searchable: false },
-    { key: 'createdAt', label: t('requestLog.date'), searchable: false },
+    { key: 'durationMs', label: t('requestLog.duration'), searchable: false },
+    { key: 'createdDate', label: t('requestLog.date'), searchable: false },
   ];
 
   const columns: Column<RequestLog>[] = [
@@ -43,6 +48,7 @@ export function RequestLogsPage() {
       key: 'createdAt',
       header: t('requestLog.date'),
       sortKey: 'createdDate',
+      filter: { field: 'createdDate', control: 'date' },
       hideable: false,
       render: (l) => <span className="whitespace-nowrap text-muted">{formatDateTime(l.createdAt)}</span>,
     },
@@ -50,12 +56,18 @@ export function RequestLogsPage() {
       key: 'traceId',
       header: t('requestLog.trace'),
       sortKey: 'traceId',
+      filter: { field: 'traceId', control: 'text' },
       render: (l) => <span className="font-mono text-xs text-muted/70">{l.traceId ? l.traceId.slice(0, 8) : '—'}</span>,
     },
     {
       key: 'method',
       header: t('requestLog.method'),
       sortKey: 'method',
+      filter: {
+        field: 'method',
+        control: 'select',
+        options: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map((m) => ({ value: m, label: m })),
+      },
       render: (l) => l.method ? (
         <Badge tone={methodTone(l.method)}>{l.method}</Badge>
       ) : (
@@ -66,12 +78,14 @@ export function RequestLogsPage() {
       key: 'path',
       header: t('requestLog.path'),
       sortKey: 'path',
+      filter: { field: 'path', control: 'text' },
       render: (l) => <span className="truncate max-w-xs font-mono text-sm">{l.path ?? '—'}</span>,
     },
     {
       key: 'status',
       header: t('requestLog.status'),
       sortKey: 'status',
+      filter: { field: 'status', control: 'number' },
       render: (l) => l.status ? (
         <Badge tone={statusTone(l.status)}>{l.status}</Badge>
       ) : (
@@ -82,6 +96,7 @@ export function RequestLogsPage() {
       key: 'duration',
       header: t('requestLog.duration'),
       sortKey: 'durationMs',
+      filter: { field: 'durationMs', control: 'number' },
       render: (l) => l.durationMs != null ? (
         <span className="whitespace-nowrap text-muted">{l.durationMs} ms</span>
       ) : (
@@ -92,6 +107,7 @@ export function RequestLogsPage() {
       key: 'user',
       header: t('requestLog.user'),
       sortKey: 'username',
+      filter: { field: 'username', control: 'text' },
       render: (l) => (
         <div className="flex flex-col">
           <span className="text-main">{l.username ?? '—'}</span>
@@ -103,11 +119,14 @@ export function RequestLogsPage() {
       key: 'ipAddress',
       header: t('requestLog.ip'),
       sortKey: 'ipAddress',
+      filter: { field: 'ipAddress', control: 'text' },
       render: (l) => <span className="whitespace-nowrap text-muted">{l.ipAddress ?? '—'}</span>,
     },
     {
       key: 'userAgent',
       header: t('requestLog.userAgent'),
+      sortKey: 'userAgent',
+      filter: { field: 'userAgent', control: 'text' },
       render: (l) => <span className="truncate max-w-xs text-xs text-muted/70">{l.userAgent ?? '—'}</span>,
     },
   ];
@@ -134,6 +153,8 @@ export function RequestLogsPage() {
         onPageChange={setPage}
         sort={sort}
         onSortChange={toggleSort}
+        filters={filters}
+        onFiltersChange={setFilters}
         toolbar={
           <SearchInput
             value={search}

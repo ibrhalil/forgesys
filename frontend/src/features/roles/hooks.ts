@@ -1,11 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { rolesApi } from './api';
-import type { PageParams } from '../../types';
 import type { CreateRoleRequest, AssignRolesRequest, AssignPermissionsRequest } from './types';
 
 // ─── Roles ───
-export function useRoles(params: PageParams = {}) {
-  return useQuery({ queryKey: ['roles', params], queryFn: () => rolesApi.list(params) });
+export function useRoles(params: Parameters<typeof rolesApi.searchOrList>[0] = {}) {
+  return useQuery({ queryKey: ['roles', params], queryFn: () => rolesApi.searchOrList(params) });
 }
 
 export function useRole(id?: string) {

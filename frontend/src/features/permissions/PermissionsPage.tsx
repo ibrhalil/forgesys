@@ -1,10 +1,10 @@
 import { PERMISSIONS } from '../../lib/permissions';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LuEye, LuPencil, LuTrash2 } from 'react-icons/lu';
 import type { Permission } from './types';
 import {
-  usePermissions, useCreatePermission, useUpdatePermission, useDeletePermission,
+  usePermissionSearch, useCreatePermission, useUpdatePermission, useDeletePermission,
 } from './hooks';
 import { notify, extractFieldErrors } from '../../lib/notify';
 import { DataTable, type Column } from '../../components/ui/DataTable';
@@ -18,56 +18,70 @@ import { TextField } from '../../components/ui/Field';
 import { TextAreaField } from '../../components/ui/TextArea';
 import { useT } from '../../lib/i18n';
 import { PAGE_SIZE_OPTIONS } from '../../lib/pagination';
-import { useClientPagination } from '../../lib/useClientPagination';
 import { useListPageState } from '../../lib/useListPageState';
 import { useAuthStore } from '../../store/authStore';
 
 export function PermissionsPage() {
   const { t } = useT();
-  const { data: permissions, isLoading, isFetching } = usePermissions();
   const delPermission = useDeletePermission();
   const navigate = useNavigate();
   const canWrite = useAuthStore((s) => s.hasAuthority(PERMISSIONS.PERMISSION_WRITE));
   const canDelete = useAuthStore((s) => s.hasAuthority(PERMISSIONS.PERMISSION_DELETE));
 
-  const [query, setQuery] = useState('');
-  // Client-paginated page: only the sort toggle comes from the list-state hook
-  // (page/search state is inert here — pagination is local, filtering is instant).
-  const { sort, toggleSort } = useListPageState({ defaultSort: { field: 'name', dir: 'asc' } });
+  // Server-side list (K-49): q + qFields + structured column filters all hit the
+  // filter engine; the former client-side includes/sort/pagination are gone.
+  const {
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+    sort,
+    toggleSort,
+    search,
+    setSearch,
+    searchFields,
+    setSearchFields,
+    filters,
+    setFilters,
+    q,
+  } = useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'permissions' });
+
+  const { data, isLoading, isFetching } = usePermissionSearch({
+    page,
+    size: pageSize,
+    sorts: [sort],
+    q: q || undefined,
+    qFields: searchFields.length ? searchFields : undefined,
+    filters: filters.length ? filters : undefined,
+  });
+  const hasFilterInput = q.length > 0 || filters.length > 0 || searchFields.length > 0;
+
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Permission | null>(null);
   const [deleting, setDeleting] = useState<Permission | null>(null);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const list = permissions?.items ?? [];
-    const filteredList = !q
-      ? list
-      : list.filter(
-          (p) => p.name.toLowerCase().includes(q) || (p.description ?? '').toLowerCase().includes(q),
-        );
-    const dir = sort.dir === 'asc' ? 1 : -1;
-    const key = sort.field as keyof Permission;
-    return [...filteredList].sort((a, b) => {
-      const av = (a[key] ?? '').toString().toLowerCase();
-      const bv = (b[key] ?? '').toString().toLowerCase();
-      return av.localeCompare(bv) * dir;
-    });
-  }, [permissions, query, sort]);
-
-  // Full list arrives in one response — paginate locally for the standard footer UX.
-  const pagination = useClientPagination(filtered, 10, 'permissions');
-  const resetPage = () => pagination.setPage(0);
+  // Aligned with the backend's searchable registrations (PermissionService.FILTER_FIELDS).
+  const permissionSearchFields = [
+    { key: 'name', label: t('common.permission'), searchable: true },
+    { key: 'description', label: t('common.description'), searchable: true },
+  ];
 
   const columns: Column<Permission>[] = [
     {
       key: 'name',
       header: t('common.permission'),
       sortKey: 'name',
+      filter: { field: 'name', control: 'text' },
       hideable: false,
       render: (p) => <span className="font-mono text-sm font-medium text-main">{p.name}</span>,
     },
-    { key: 'description', header: t('common.description'), sortKey: 'description', render: (p) => <span className="text-muted">{p.description ?? '—'}</span> },
+    {
+      key: 'description',
+      header: t('common.description'),
+      sortKey: 'description',
+      filter: { field: 'description', control: 'text' },
+      render: (p) => <span className="text-muted">{p.description ?? '—'}</span>,
+    },
   ];
 
   return (
@@ -80,25 +94,30 @@ export function PermissionsPage() {
 
       <DataTable<Permission>
         columns={columns}
-        data={pagination.paged}
+        data={data?.items ?? []}
         rowKey={(p) => p.id}
         storageKey="permissions"
-        loading={isLoading || (isFetching && !permissions)}
-        emptyMessage={query ? t('permissions.emptyFiltered') : t('permissions.empty')}
-        page={pagination.page}
-        pageSize={pagination.pageSize}
-        totalElements={pagination.totalElements}
-        totalPages={pagination.totalPages}
-        onPageChange={pagination.setPage}
+        loading={isLoading || (isFetching && !data)}
+        emptyMessage={hasFilterInput ? t('permissions.emptyFiltered') : t('permissions.empty')}
+        page={data?.page ?? page}
+        pageSize={data?.size ?? pageSize}
+        totalElements={data?.totalElements ?? 0}
+        totalPages={data?.totalPages ?? 0}
+        onPageChange={setPage}
         pageSizeOptions={PAGE_SIZE_OPTIONS}
-        onPageSizeChange={(size) => { pagination.setPageSize(size); resetPage(); }}
+        onPageSizeChange={setPageSize}
         sort={sort}
         onSortChange={toggleSort}
+        filters={filters}
+        onFiltersChange={setFilters}
         toolbar={(
           <SearchInput
-            value={query}
-            onChange={(value) => { setQuery(value); resetPage(); }}
+            value={search}
+            onChange={setSearch}
             placeholder={t('permissions.searchPh')}
+            fields={permissionSearchFields}
+            selectedFields={searchFields}
+            onSelectedFieldsChange={setSearchFields}
           />
         )}
         actionsHeader={t('common.actions')}

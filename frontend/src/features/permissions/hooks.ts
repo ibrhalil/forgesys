@@ -1,10 +1,19 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { permissionsApi } from './api';
+import { permissionsApi, type PermissionListParams } from './api';
 import type { CreatePermissionRequest } from './types';
 
 // ─── Permissions ───
+/** Full catalog in one response — assign modals and small bounded pickers. */
 export function usePermissions() {
   return useQuery({ queryKey: ['permissions'], queryFn: permissionsApi.list });
+}
+
+/** Server-side paged read for the permissions list page (K-49). */
+export function usePermissionSearch(params: PermissionListParams = {}) {
+  return useQuery({
+    queryKey: ['permissions', 'search', params],
+    queryFn: () => permissionsApi.searchOrList(params),
+  });
 }
 
 export function usePermission(id?: string) {

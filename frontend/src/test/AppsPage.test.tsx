@@ -68,7 +68,9 @@ describe('AppsPage', () => {
     renderPage();
 
     await user.click(await screen.findByRole('button', { name: '+ New App' }));
-    expect(screen.getByLabelText(/name/i)).toBeInTheDocument();
+    // Role+name query — the table header also carries a "Filter Name" trigger now (K-49),
+    // so a bare /name/i text match is ambiguous.
+    expect(screen.getByRole('textbox', { name: 'Name' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create' })).toBeInTheDocument();
   });
 
