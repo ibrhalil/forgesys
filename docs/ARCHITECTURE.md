@@ -286,7 +286,7 @@ classDiagram
 - `@SQLDelete` her concrete entity'de ayrı (table-specific `UPDATE ... SET is_deleted = true, version = version + 1`).
 - `UserAccount`/`UserProfile` `@MapsId` ile `User`'a shared PK (gereksiz FK yok).
 - Tüm ID'ler UUID (`GenerationType.UUID`). Tablo adları `t_` prefix'li. Constraint'ler `idx_*`, `uk_*`, `fk_*`.
-- `Subscription`/`TenantModule` (public şema) `BaseEntity`; `UserDirectoryView` read model'i (`@Immutable @Subselect`) hiyerarşi dışıdır. `AppRecordValue` ve `RequestLog` soft-delete'siz (`GeneratedIdAuditEntity`) — value clear = satır silinir (K-15); request log append-only (K-27).
+- `Subscription`/`TenantModule` (public şema) `BaseEntity`. Read model'ler hiyerarşi dışındadır ve K-49 ile entity değil kod içi Criteria DTO projection'dır (`web/projection/ProjectionListQuery` — eski `@Immutable @Subselect` `UserDirectoryView` kaldırıldı; view entity yalnızca karmaşık/yoğun tablolar için istisna). `AppRecordValue` ve `RequestLog` soft-delete'siz (`GeneratedIdAuditEntity`) — value clear = satır silinir (K-15); request log append-only (K-27).
 - **Tipli proje konteyneri (K-45):** `Project` = typed container (`project_type` NOT NULL: TASKS/NOTES/APPS; katalog aktif modüllerden türer). İçerik çapaları düz UUID kolonlarıdır (`@ManyToOne` yok — Task konvansiyonu): `Task.projectId`, `Note.projectId` + `NoteCategory.projectId` (NOTES), `App.projectId` (APPS koleksiyonu). İlişkisel veri katmanı (t_links) bilinçli erteli — talep-kapılı.
 
 > Detaylar: [`persistence/AGENTS.md`](../persistence/AGENTS.md)
