@@ -282,4 +282,39 @@ describe('DataTable', () => {
 
     expect(onFiltersChange).toHaveBeenCalledWith([]);
   });
+
+  it('renders the filter popover as a fixed-position body portal (short tables)', async () => {
+    const user = userEvent.setup();
+    renderTable({ columns: filterColumns, filters: [], onFiltersChange: vi.fn() });
+
+    await user.click(screen.getByRole('button', { name: /filter note/i }));
+
+    // Portaled to body so the table's overflow-x-auto wrapper can never clip it.
+    const panel = screen.getByRole('dialog', { name: /filter note/i });
+    expect(panel.parentElement).toBe(document.body);
+    expect(panel.style.position).toBe('fixed');
+  });
+
+  it('flips the popover above the trigger near the viewport bottom', async () => {
+    const user = userEvent.setup();
+    renderTable({ columns: filterColumns, filters: [], onFiltersChange: vi.fn() });
+
+    const trigger = screen.getByRole('button', { name: /filter note/i });
+    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue({
+      top: 740,
+      bottom: 750,
+      left: 40,
+      right: 52,
+      width: 12,
+      height: 10,
+      x: 40,
+      y: 740,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    await user.click(trigger);
+
+    const panel = screen.getByRole('dialog', { name: /filter note/i });
+    expect(parseFloat(panel.style.top)).toBeLessThan(740); // opened upward
+  });
 });
