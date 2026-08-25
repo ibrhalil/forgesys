@@ -10,6 +10,7 @@ import com.ibrhalil.forgesys.dto.AppViewConfigDto;
 import com.ibrhalil.forgesys.dto.AppViewRequest;
 import com.ibrhalil.forgesys.dto.AppViewResponse;
 import com.ibrhalil.forgesys.dto.FilterCriteria;
+import com.ibrhalil.forgesys.dto.SearchRequest;
 import com.ibrhalil.forgesys.entity.App;
 import com.ibrhalil.forgesys.entity.AppProperty;
 import com.ibrhalil.forgesys.entity.AppView;
@@ -62,16 +63,25 @@ public class AppBuilderService {
     private static final int MAX_SELECT_OPTIONS = 100;
     private static final int MAX_OPTION_LENGTH = 100;
 
-    /** Filterable/sortable direct attributes of the app list; {@code q} matches {@code name}. */
+    /**
+     * Filterable/sortable attributes of the app list (K-49); {@code q} matches
+     * {@code name}, {@code description} and the resolved APPS container name.
+     * {@code projectName} is a correlated scalar subquery over the plain
+     * {@code project_id} column (K-45 convention).
+     */
     public static final FilterFieldSet FILTER_FIELDS = FilterFieldSet.builder()
             .field(App_.NAME, FilterFieldType.STRING, true)
-            .field(App_.DESCRIPTION, FilterFieldType.STRING, false)
+            .field(App_.DESCRIPTION, FilterFieldType.STRING, true)
+            .field(App_.ICON, FilterFieldType.STRING, false)
             .field(App_.PROJECT_ID, FilterFieldType.UUID, false)
+            .subqueryField("projectName", FilterFieldType.STRING, true,
+                    NoteListQueryExecutor.projectNameOf(App_.PROJECT_ID))
             .field(AuditEntity_.CREATED_DATE, FilterFieldType.TEMPORAL, false)
             .field(AuditEntity_.UPDATED_AT, FilterFieldType.TEMPORAL, false)
             .build();
 
     private final AppRepository appRepository;
+    private final AppListQueryExecutor appListQueryExecutor;
     private final AppPropertyRepository propertyRepository;
     private final AppViewRepository viewRepository;
     private final AppViewConfigValidator viewConfigValidator;
@@ -84,21 +94,30 @@ public class AppBuilderService {
     // ── apps ─────────────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
-    public Page<AppResponse> search(String q, UUID projectId, Pageable pageable) {
+    public Page<AppResponse> search(String q, List<String> qFields, UUID projectId, Pageable pageable) {
         List<FilterCriteria> filters = projectId == null ? List.of()
                 : List.of(new FilterCriteria(App_.PROJECT_ID, FilterOperator.EQ, List.of(projectId.toString())));
+        return doSearch(q, qFields, filters, pageable);
+    }
+
+    /** Full {@link SearchRequest} variant backing {@code POST /apps/search}. */
+    @Transactional(readOnly = true)
+    public Page<AppResponse> search(SearchRequest request, Pageable pageable) {
+        return doSearch(request.q(), request.qFields(), request.filters(), pageable);
+    }
+
+    private Page<AppResponse> doSearch(String q, List<String> qFields, List<FilterCriteria> filters,
+            Pageable pageable) {
         Specification<App> spec = FilterSpecifications.from(FILTER_FIELDS,
-                StringUtils.hasText(q) ? q.trim() : null, filters);
-        Page<App> page = appRepository.findAll(spec, pageable);
-        Map<UUID, String> projectNames = resolveProjectNames(page.stream().map(App::getProjectId).toList());
-        return page.map(app -> toResponse(app, projectNames.get(app.getProjectId())));
+                StringUtils.hasText(q) ? q.trim() : null, qFields, filters);
+        return appListQueryExecutor.search(spec, pageable);
     }
 
     /** Cross-container list narrowed to one APPS container (nested endpoint, K-45). */
     @Transactional(readOnly = true)
-    public Page<AppResponse> searchInProject(UUID projectId, String q, Pageable pageable) {
+    public Page<AppResponse> searchInProject(UUID projectId, String q, List<String> qFields, Pageable pageable) {
         projectContainerSupport.assertProject(ProjectType.APPS, projectId);
-        return search(q, projectId, pageable);
+        return search(q, qFields, projectId, pageable);
     }
 
     @Transactional(readOnly = true)

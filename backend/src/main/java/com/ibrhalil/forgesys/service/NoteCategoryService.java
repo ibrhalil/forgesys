@@ -4,6 +4,7 @@ import com.ibrhalil.forgesys.audit.AuditLog;
 import com.ibrhalil.forgesys.dto.FilterCriteria;
 import com.ibrhalil.forgesys.dto.NoteCategoryRequest;
 import com.ibrhalil.forgesys.dto.NoteCategoryResponse;
+import com.ibrhalil.forgesys.dto.SearchRequest;
 import com.ibrhalil.forgesys.entity.NoteCategory;
 import com.ibrhalil.forgesys.entity.NoteCategory_;
 import com.ibrhalil.forgesys.entity.Project;
@@ -41,29 +42,43 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class NoteCategoryService {
 
-    /** Sortable direct attributes; {@code q} matches {@code name}. */
+    /** Filterable/sortable attributes (K-49); {@code q} matches {@code name}. */
     public static final FilterFieldSet FILTER_FIELDS = FilterFieldSet.builder()
             .field(NoteCategory_.NAME, FilterFieldType.STRING, true)
+            .field(NoteCategory_.COLOR, FilterFieldType.STRING, false)
             .field(NoteCategory_.PROJECT_ID, FilterFieldType.UUID, false)
             .build();
 
     private final NoteCategoryRepository noteCategoryRepository;
+    private final NoteCategoryListQueryExecutor noteCategoryListQueryExecutor;
     private final ProjectContainerSupport projectContainerSupport;
 
     @Transactional(readOnly = true)
-    public Page<NoteCategoryResponse> search(String q, UUID projectId, Pageable pageable) {
+    public Page<NoteCategoryResponse> search(String q, List<String> qFields, UUID projectId, Pageable pageable) {
         List<FilterCriteria> filters = projectId == null ? List.of()
                 : List.of(new FilterCriteria(NoteCategory_.PROJECT_ID, FilterOperator.EQ, List.of(projectId.toString())));
+        return doSearch(q, qFields, filters, pageable);
+    }
+
+    /** Full {@link SearchRequest} variant backing {@code POST /note-categories/search}. */
+    @Transactional(readOnly = true)
+    public Page<NoteCategoryResponse> search(SearchRequest request, Pageable pageable) {
+        return doSearch(request.q(), request.qFields(), request.filters(), pageable);
+    }
+
+    private Page<NoteCategoryResponse> doSearch(String q, List<String> qFields, List<FilterCriteria> filters,
+            Pageable pageable) {
         Specification<NoteCategory> spec = FilterSpecifications.from(FILTER_FIELDS,
-                StringUtils.hasText(q) ? q.trim() : null, filters);
-        return noteCategoryRepository.findAll(spec, pageable).map(this::toResponse);
+                StringUtils.hasText(q) ? q.trim() : null, qFields, filters);
+        return noteCategoryListQueryExecutor.search(spec, pageable);
     }
 
     /** Container-scoped list (nested endpoint, K-45). */
     @Transactional(readOnly = true)
-    public Page<NoteCategoryResponse> searchInProject(UUID projectId, String q, Pageable pageable) {
+    public Page<NoteCategoryResponse> searchInProject(UUID projectId, String q, List<String> qFields,
+            Pageable pageable) {
         projectContainerSupport.assertProject(ProjectType.NOTES, projectId);
-        return search(q, projectId, pageable);
+        return search(q, qFields, projectId, pageable);
     }
 
     @Transactional(readOnly = true)

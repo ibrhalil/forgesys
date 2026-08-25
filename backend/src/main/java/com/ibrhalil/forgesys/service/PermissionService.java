@@ -2,6 +2,7 @@ package com.ibrhalil.forgesys.service;
 
 import com.ibrhalil.forgesys.dto.PermissionRequest;
 import com.ibrhalil.forgesys.dto.PermissionResponse;
+import com.ibrhalil.forgesys.dto.SearchRequest;
 import com.ibrhalil.forgesys.entity.AuditEntity_;
 import com.ibrhalil.forgesys.entity.Permission;
 import com.ibrhalil.forgesys.entity.Permission_;
@@ -38,14 +39,23 @@ public class PermissionService {
             .build();
 
     private final PermissionRepository permissionRepository;
+    private final PermissionListQueryExecutor permissionListQueryExecutor;
     private final AuditService auditService;
     private final SessionRevocationService sessionRevocationService;
 
     @Transactional(readOnly = true)
-    public Page<PermissionResponse> search(String q, Pageable pageable) {
+    public Page<PermissionResponse> search(String q, List<String> qFields, Pageable pageable) {
         Specification<Permission> spec = FilterSpecifications.from(FILTER_FIELDS,
-                StringUtils.hasText(q) ? q.trim() : null, List.of());
-        return permissionRepository.findAll(spec, pageable).map(this::toResponse);
+                StringUtils.hasText(q) ? q.trim() : null, qFields, List.of());
+        return permissionListQueryExecutor.search(spec, pageable);
+    }
+
+    /** Full {@link SearchRequest} variant backing {@code POST /permissions/search}. */
+    @Transactional(readOnly = true)
+    public Page<PermissionResponse> search(SearchRequest request, Pageable pageable) {
+        Specification<Permission> spec = FilterSpecifications.from(FILTER_FIELDS, request.q(), request.qFields(),
+                request.filters());
+        return permissionListQueryExecutor.search(spec, pageable);
     }
 
     @Transactional(readOnly = true)

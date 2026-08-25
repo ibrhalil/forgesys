@@ -60,7 +60,8 @@ public class NoteService {
             .field(Note_.CATEGORY_ID, FilterFieldType.UUID, false)
             .field(Note_.PROJECT_ID, FilterFieldType.UUID, false)
             .subqueryField("categoryName", FilterFieldType.STRING, true, NoteListQueryExecutor.categoryName())
-            .subqueryField("projectName", FilterFieldType.STRING, true, NoteListQueryExecutor.projectName())
+            .subqueryField("projectName", FilterFieldType.STRING, true,
+                    NoteListQueryExecutor.projectNameOf(Note_.PROJECT_ID))
             .field(AuditEntity_.CREATED_DATE, FilterFieldType.TEMPORAL, false)
             .field(AuditEntity_.UPDATED_AT, FilterFieldType.TEMPORAL, false)
             .build();

@@ -1,10 +1,12 @@
 package com.ibrhalil.forgesys.controller;
 
 import com.ibrhalil.forgesys.dto.PageResponse;
+import com.ibrhalil.forgesys.dto.SearchRequest;
 import com.ibrhalil.forgesys.dto.TaskRequest;
 import com.ibrhalil.forgesys.dto.TaskResponse;
 import com.ibrhalil.forgesys.service.TaskService;
 import com.ibrhalil.forgesys.web.SortGuard;
+import com.ibrhalil.forgesys.web.filter.SearchRequests;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
@@ -20,8 +22,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -39,9 +43,24 @@ public class TaskController {
     @PreAuthorize("hasAuthority('pm:task:read')")
     public ResponseEntity<PageResponse<TaskResponse>> list(
             @PathVariable UUID projectId,
-            @PageableDefault(sort = "createdDate", direction = Sort.Direction.DESC) Pageable pageable) {
+            @PageableDefault(sort = "createdDate", direction = Sort.Direction.DESC) Pageable pageable,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) List<String> qFields) {
         SortGuard.require(pageable, TaskService.FILTER_FIELDS);
-        return ResponseEntity.ok(PageResponse.of(taskService.list(projectId, pageable)));
+        return ResponseEntity.ok(PageResponse.of(taskService.list(projectId, q, qFields, pageable)));
+    }
+
+    /**
+     * Filter-engine variant of the list: paging + multi-sort + structured filters +
+     * global {@code q} (optionally narrowed via {@code qFields}) in one POST body.
+     */
+    @PostMapping("/search")
+    @PreAuthorize("hasAuthority('pm:task:read')")
+    public ResponseEntity<PageResponse<TaskResponse>> search(
+            @PathVariable UUID projectId,
+            @Valid @RequestBody SearchRequest request) {
+        Pageable pageable = SearchRequests.toPageable(request, TaskService.FILTER_FIELDS);
+        return ResponseEntity.ok(PageResponse.of(taskService.search(projectId, request, pageable)));
     }
 
     @GetMapping("/{taskId}")

@@ -41,7 +41,10 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class AuditQueryService {
 
-    /** Filterable/sortable direct attributes of the audit log; {@code q} matches actor/entity names and the action key. */
+    /**
+     * Filterable/sortable attributes of the audit log (K-49 — every displayed column);
+     * {@code q} matches actor/entity names, the action key, IP and trace id.
+     */
     public static final FilterFieldSet AUDIT_LOG_FIELDS = FilterFieldSet.builder()
             .field(AuditLog_.ACTION, FilterFieldType.STRING, true)
             .field(AuditLog_.ENTITY_TYPE, FilterFieldType.STRING, false)
@@ -49,15 +52,23 @@ public class AuditQueryService {
             .field(AuditLog_.ACTOR_ID, FilterFieldType.UUID, false)
             .field(AuditLog_.ACTOR_NAME, FilterFieldType.STRING, true)
             .field(AuditLog_.ENTITY_NAME, FilterFieldType.STRING, true)
+            .field(AuditLog_.IP_ADDRESS, FilterFieldType.STRING, true)
+            .field(AuditLog_.TRACE_ID, FilterFieldType.STRING, true)
             .field(AuditEntity_.CREATED_DATE, FilterFieldType.TEMPORAL, false)
             .field(AuditEntity_.UPDATED_AT, FilterFieldType.TEMPORAL, false)
             .build();
 
-    /** Filterable/sortable direct attributes of the login history; {@code q} matches {@code username}. */
+    /**
+     * Filterable/sortable attributes of the login history (K-49 — every displayed
+     * column); {@code q} matches {@code username}, {@code reason}, IP and user agent.
+     */
     public static final FilterFieldSet LOGIN_HISTORY_FIELDS = FilterFieldSet.builder()
             .field(LoginHistory_.USER_ID, FilterFieldType.UUID, false)
             .field(LoginHistory_.USERNAME, FilterFieldType.STRING, true)
             .field(LoginHistory_.SUCCESS, FilterFieldType.BOOLEAN, false)
+            .field(LoginHistory_.REASON, FilterFieldType.STRING, true)
+            .field(LoginHistory_.IP_ADDRESS, FilterFieldType.STRING, true)
+            .field(LoginHistory_.USER_AGENT, FilterFieldType.STRING, true)
             .field(AuditEntity_.CREATED_DATE, FilterFieldType.TEMPORAL, false)
             .field(AuditEntity_.UPDATED_AT, FilterFieldType.TEMPORAL, false)
             .build();
@@ -66,7 +77,8 @@ public class AuditQueryService {
     private final LoginHistoryRepository loginHistoryRepository;
 
     @Transactional(readOnly = true)
-    public Page<AuditLogResponse> findAllAuditLogs(Pageable pageable, String q, String action, UUID actorId) {
+    public Page<AuditLogResponse> findAllAuditLogs(Pageable pageable, String q, List<String> qFields,
+            String action, UUID actorId) {
         List<FilterCriteria> filters = new ArrayList<>();
         if (StringUtils.hasText(action)) {
             filters.add(new FilterCriteria(AuditLog_.ACTION, FilterOperator.EQ, List.of(action.trim())));
@@ -74,17 +86,19 @@ public class AuditQueryService {
         if (actorId != null) {
             filters.add(new FilterCriteria(AuditLog_.ACTOR_ID, FilterOperator.EQ, List.of(actorId.toString())));
         }
-        return searchAuditLogs(pageable, StringUtils.hasText(q) ? q.trim() : null, filters);
+        return searchAuditLogs(pageable, StringUtils.hasText(q) ? q.trim() : null, qFields, filters);
     }
 
     @Transactional(readOnly = true)
-    public Page<AuditLogResponse> searchAuditLogs(Pageable pageable, String q, List<FilterCriteria> filters) {
-        Specification<AuditLog> spec = FilterSpecifications.from(AUDIT_LOG_FIELDS, q, filters);
+    public Page<AuditLogResponse> searchAuditLogs(Pageable pageable, String q, List<String> qFields,
+            List<FilterCriteria> filters) {
+        Specification<AuditLog> spec = FilterSpecifications.from(AUDIT_LOG_FIELDS, q, qFields, filters);
         return auditLogRepository.findAll(spec, pageable).map(this::toAuditLogResponse);
     }
 
     @Transactional(readOnly = true)
-    public Page<LoginHistoryResponse> findAllLoginHistory(Pageable pageable, String q, UUID userId, Boolean success) {
+    public Page<LoginHistoryResponse> findAllLoginHistory(Pageable pageable, String q, List<String> qFields,
+            UUID userId, Boolean success) {
         List<FilterCriteria> filters = new ArrayList<>();
         if (userId != null) {
             filters.add(new FilterCriteria(LoginHistory_.USER_ID, FilterOperator.EQ, List.of(userId.toString())));
@@ -92,12 +106,13 @@ public class AuditQueryService {
         if (success != null) {
             filters.add(new FilterCriteria(LoginHistory_.SUCCESS, FilterOperator.EQ, List.of(success.toString())));
         }
-        return searchLoginHistory(pageable, StringUtils.hasText(q) ? q.trim() : null, filters);
+        return searchLoginHistory(pageable, StringUtils.hasText(q) ? q.trim() : null, qFields, filters);
     }
 
     @Transactional(readOnly = true)
-    public Page<LoginHistoryResponse> searchLoginHistory(Pageable pageable, String q, List<FilterCriteria> filters) {
-        Specification<LoginHistory> spec = FilterSpecifications.from(LOGIN_HISTORY_FIELDS, q, filters);
+    public Page<LoginHistoryResponse> searchLoginHistory(Pageable pageable, String q, List<String> qFields,
+            List<FilterCriteria> filters) {
+        Specification<LoginHistory> spec = FilterSpecifications.from(LOGIN_HISTORY_FIELDS, q, qFields, filters);
         return loginHistoryRepository.findAll(spec, pageable).map(this::toLoginHistoryResponse);
     }
 

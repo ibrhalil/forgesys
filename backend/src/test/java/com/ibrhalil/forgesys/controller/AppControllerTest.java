@@ -129,7 +129,9 @@ class AppControllerTest extends AbstractRbacWebTest {
 
     @Test
     void listRejectsUnknownSortProperty() throws Exception {
-        perform(get("/api/v1/apps").queryParam("sort", "icon"), "apps:app:read")
+        // 'icon' became a registered sortable column with K-49 — 'deletedAt' stays off
+        // the whitelist (internal soft-delete stamp, never a sort target).
+        perform(get("/api/v1/apps").queryParam("sort", "deletedAt"), "apps:app:read")
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("validation_error"));
     }

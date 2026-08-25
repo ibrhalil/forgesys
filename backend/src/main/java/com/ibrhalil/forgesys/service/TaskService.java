@@ -1,5 +1,6 @@
 package com.ibrhalil.forgesys.service;
 
+import com.ibrhalil.forgesys.dto.SearchRequest;
 import com.ibrhalil.forgesys.dto.TaskRequest;
 import com.ibrhalil.forgesys.dto.TaskResponse;
 import com.ibrhalil.forgesys.entity.AuditEntity_;
@@ -14,12 +15,16 @@ import com.ibrhalil.forgesys.persistence.repository.UserRepository;
 import com.ibrhalil.forgesys.audit.AuditLog;
 import com.ibrhalil.forgesys.web.filter.FilterFieldSet;
 import com.ibrhalil.forgesys.web.filter.FilterFieldType;
+import com.ibrhalil.forgesys.web.filter.FilterSpecifications;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -32,26 +37,54 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class TaskService {
 
-    /** Sortable/filterable direct attributes of the project's task list (K-37 paging). */
+    /**
+     * Filterable/sortable attributes of the project's task list (K-49 — now fully
+     * engine-wired); {@code q} matches {@code title} and {@code description}. The
+     * kanban columns ({@code status}/{@code priority}) filter and sort; {@code dueDate}
+     * is a DATE (ISO {@code yyyy-MM-dd}); {@code assigneeId} filters by the plain FK.
+     */
     public static final FilterFieldSet FILTER_FIELDS = FilterFieldSet.builder()
             .field(Task_.TITLE, FilterFieldType.STRING, true)
-            .field(Task_.STATUS, FilterFieldType.ENUM, false)
-            .field(Task_.PRIORITY, FilterFieldType.ENUM, false)
+            .field(Task_.DESCRIPTION, FilterFieldType.STRING, true)
+            .enumField(Task_.STATUS, TaskStatus.class, false)
+            .enumField(Task_.PRIORITY, TaskPriority.class, false)
+            .field(Task_.ASSIGNEE_ID, FilterFieldType.UUID, false)
+            .field(Task_.DUE_DATE, FilterFieldType.DATE, false)
             .field(AuditEntity_.CREATED_DATE, FilterFieldType.TEMPORAL, false)
             .field(AuditEntity_.UPDATED_AT, FilterFieldType.TEMPORAL, false)
             .build();
 
     private final TaskRepository taskRepository;
+    private final TaskListQueryExecutor taskListQueryExecutor;
     private final ProjectRepository projectRepository;
     private final UserRepository userRepository;
     private final AuditService auditService;
 
     @Transactional(readOnly = true)
-    public Page<TaskResponse> list(UUID projectId, Pageable pageable) {
+    public Page<TaskResponse> list(UUID projectId, String q, List<String> qFields, Pageable pageable) {
+        assertProjectExists(projectId);
+        Specification<Task> spec = FilterSpecifications.from(FILTER_FIELDS,
+                StringUtils.hasText(q) ? q.trim() : null, qFields, List.of());
+        return taskListQueryExecutor.search(spec.and(projectScope(projectId)), pageable);
+    }
+
+    /** Full {@link SearchRequest} variant backing {@code POST /projects/{id}/tasks/search}. */
+    @Transactional(readOnly = true)
+    public Page<TaskResponse> search(UUID projectId, SearchRequest request, Pageable pageable) {
+        assertProjectExists(projectId);
+        Specification<Task> spec = FilterSpecifications.from(FILTER_FIELDS, request.q(), request.qFields(),
+                request.filters());
+        return taskListQueryExecutor.search(spec.and(projectScope(projectId)), pageable);
+    }
+
+    private Specification<Task> projectScope(UUID projectId) {
+        return (root, query, cb) -> cb.equal(root.get(Task_.PROJECT_ID), projectId);
+    }
+
+    private void assertProjectExists(UUID projectId) {
         if (!projectRepository.existsById(projectId)) {
             throw new ResourceNotFoundException("Project not found: " + projectId);
         }
-        return taskRepository.findAllByProjectId(projectId, pageable).map(this::toResponse);
     }
 
     @Transactional(readOnly = true)

@@ -90,6 +90,80 @@ class RoleControllerTest extends AbstractRbacWebTest {
                 .andExpect(jsonPath("$.code").value("validation_error"));
     }
 
+    /* ── K-49: count subquery, permission/parent membership, POST /search ── */
+
+    @Test
+    void searchFiltersSortsByPermissionCountAndMembership() throws Exception {
+        Permission read = new Permission();
+        read.setName("iam:user:read");
+        entityManager.persist(read);
+        Permission write = new Permission();
+        write.setName("iam:user:write");
+        entityManager.persist(write);
+        Role editor = new Role();
+        editor.setName("k49-editor");
+        editor.getPermissions().add(read);
+        editor.getPermissions().add(write);
+        entityManager.persist(editor);
+        Role viewer = new Role();
+        viewer.setName("k49-viewer");
+        viewer.getPermissions().add(read);
+        entityManager.persist(viewer);
+        Role plain = new Role();
+        plain.setName("k49-plain");
+        entityManager.persist(plain);
+        entityManager.flush();
+
+        // permissionCount GTE 1, sorted desc -> editor (2), viewer (1); plain filtered out
+        mockMvc.perform(post("/api/v1/roles/search")
+                        .contentType(JSON)
+                        .cookie(auth("reader@tenant.test", "iam:role:read"))
+                        .content("""
+                                {"filters":[{"field":"permissionCount","operator":"GTE","values":["1"]}],
+                                 "sorts":[{"field":"permissionCount","direction":"desc"},{"field":"name","direction":"asc"}]}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.meta.totalElements").value(2))
+                .andExpect(jsonPath("$.data[0].name").value("k49-editor"))
+                .andExpect(jsonPath("$.data[1].name").value("k49-viewer"));
+
+        // permissionIds membership: only roles carrying the write permission
+        mockMvc.perform(post("/api/v1/roles/search")
+                        .contentType(JSON)
+                        .cookie(auth("reader@tenant.test", "iam:role:read"))
+                        .content("""
+                                {"filters":[{"field":"permissionIds","operator":"IN","values":["%s"]}]}"""
+                                .formatted(write.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.meta.totalElements").value(1))
+                .andExpect(jsonPath("$.data[0].name").value("k49-editor"));
+    }
+
+    @Test
+    void searchFiltersByParentMembership() throws Exception {
+        Role base = new Role();
+        base.setName("k49-base");
+        entityManager.persist(base);
+        Role child = new Role();
+        child.setName("k49-child");
+        child.getParentRoles().add(base);
+        entityManager.persist(child);
+        Role standalone = new Role();
+        standalone.setName("k49-standalone");
+        entityManager.persist(standalone);
+        entityManager.flush();
+
+        mockMvc.perform(post("/api/v1/roles/search")
+                        .contentType(JSON)
+                        .cookie(auth("reader@tenant.test", "iam:role:read"))
+                        .content("""
+                                {"filters":[{"field":"parentIds","operator":"IN","values":["%s"]}]}"""
+                                .formatted(base.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.meta.totalElements").value(1))
+                .andExpect(jsonPath("$.data[0].name").value("k49-child"))
+                .andExpect(jsonPath("$.data[0].parents[0].name").value("k49-base"));
+    }
+
     @Test
     void createReturns201() throws Exception {
         mockMvc.perform(post("/api/v1/roles")

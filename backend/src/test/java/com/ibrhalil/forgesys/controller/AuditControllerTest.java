@@ -4,12 +4,14 @@ import com.ibrhalil.forgesys.entity.AuditLog;
 import com.ibrhalil.forgesys.entity.LoginHistory;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -17,6 +19,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("test")
 @Transactional
 class AuditControllerTest extends AbstractRbacWebTest {
+
+    private static final MediaType JSON = MediaType.APPLICATION_JSON;
 
     @Test
     void auditLogsRequireAuthentication() throws Exception {
@@ -217,6 +221,57 @@ class AuditControllerTest extends AbstractRbacWebTest {
                         .cookie(auth("reader@tenant.test", "iam:audit:read")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("validation_error"));
+    }
+
+    /* ── K-49: newly registered columns (reason/userAgent/ipAddress) + INT status ── */
+
+    @Test
+    void loginHistoryFiltersByReason() throws Exception {
+        LoginHistory locked = new LoginHistory();
+        locked.setUsername("reason_locked@example.com");
+        locked.setSuccess(false);
+        locked.setReason("auth_account_locked");
+        entityManager.persist(locked);
+        LoginHistory bad = new LoginHistory();
+        bad.setUsername("reason_bad@example.com");
+        bad.setSuccess(false);
+        bad.setReason("auth_bad_credentials");
+        entityManager.persist(bad);
+
+        mockMvc.perform(post("/api/v1/login-history/search")
+                        .contentType(JSON)
+                        .cookie(auth("reader@tenant.test", "iam:audit:read"))
+                        .content("""
+                                {"filters":[{"field":"reason","operator":"EQ","values":["auth_account_locked"]}]}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[*].username").value(hasItem("reason_locked@example.com")))
+                .andExpect(jsonPath("$.data[*].username").value(not(hasItem("reason_bad@example.com"))));
+    }
+
+    @Test
+    void requestLogsFilterByIntStatus() throws Exception {
+        com.ibrhalil.forgesys.entity.RequestLog error = seedRequestLogWithStatus("status_probe", 500);
+        seedRequestLogWithStatus("status_probe", 200);
+
+        mockMvc.perform(post("/api/v1/request-logs/search")
+                        .contentType(JSON)
+                        .cookie(auth("reader@tenant.test", "iam:audit:read"))
+                        .content("""
+                                {"filters":[{"field":"status","operator":"GTE","values":["400"]}]}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.meta.totalElements").value(1))
+                .andExpect(jsonPath("$.data[0].traceId").value(error.getTraceId()));
+    }
+
+    private com.ibrhalil.forgesys.entity.RequestLog seedRequestLogWithStatus(String pathSentinel, int status) {
+        com.ibrhalil.forgesys.entity.RequestLog entry = new com.ibrhalil.forgesys.entity.RequestLog();
+        entry.setTraceId(java.util.UUID.randomUUID().toString());
+        entry.setMethod("GET");
+        entry.setPath(pathSentinel);
+        entry.setStatus(status);
+        entry.setDurationMs(100L);
+        entityManager.persist(entry);
+        return entry;
     }
 
     private void seedRequestLog(String pathSentinel, Long durationMs) {

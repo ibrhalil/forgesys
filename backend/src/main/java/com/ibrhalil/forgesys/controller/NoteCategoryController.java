@@ -3,8 +3,10 @@ package com.ibrhalil.forgesys.controller;
 import com.ibrhalil.forgesys.dto.NoteCategoryRequest;
 import com.ibrhalil.forgesys.dto.NoteCategoryResponse;
 import com.ibrhalil.forgesys.dto.PageResponse;
+import com.ibrhalil.forgesys.dto.SearchRequest;
 import com.ibrhalil.forgesys.service.NoteCategoryService;
 import com.ibrhalil.forgesys.web.SortGuard;
+import com.ibrhalil.forgesys.web.filter.SearchRequests;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
@@ -22,6 +24,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -41,9 +44,22 @@ public class NoteCategoryController {
     public ResponseEntity<PageResponse<NoteCategoryResponse>> list(
             @PageableDefault(sort = "name") Pageable pageable,
             @RequestParam(required = false) String q,
+            @RequestParam(required = false) List<String> qFields,
             @RequestParam(required = false) UUID projectId) {
         SortGuard.require(pageable, NoteCategoryService.FILTER_FIELDS);
-        return ResponseEntity.ok(PageResponse.of(noteCategoryService.search(q, projectId, pageable)));
+        return ResponseEntity.ok(PageResponse.of(
+                noteCategoryService.search(q, qFields, projectId, pageable)));
+    }
+
+    /**
+     * Filter-engine variant of the list: paging + multi-sort + structured filters +
+     * global {@code q} (optionally narrowed via {@code qFields}) in one POST body.
+     */
+    @PostMapping("/search")
+    @PreAuthorize("hasAuthority('notes:category:read')")
+    public ResponseEntity<PageResponse<NoteCategoryResponse>> search(@Valid @RequestBody SearchRequest request) {
+        Pageable pageable = SearchRequests.toPageable(request, NoteCategoryService.FILTER_FIELDS);
+        return ResponseEntity.ok(PageResponse.of(noteCategoryService.search(request, pageable)));
     }
 
     @GetMapping("/{id}")

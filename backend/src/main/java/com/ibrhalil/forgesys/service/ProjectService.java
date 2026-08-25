@@ -8,6 +8,7 @@ import com.ibrhalil.forgesys.dto.FilterCriteria;
 import com.ibrhalil.forgesys.dto.ProjectRequest;
 import com.ibrhalil.forgesys.dto.ProjectResponse;
 import com.ibrhalil.forgesys.dto.ProjectTypeResponse;
+import com.ibrhalil.forgesys.dto.SearchRequest;
 import com.ibrhalil.forgesys.entity.AuditEntity_;
 import com.ibrhalil.forgesys.entity.Company;
 import com.ibrhalil.forgesys.entity.ModuleStatus;
@@ -53,12 +54,19 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ProjectService {
 
-    /** Filterable/sortable direct attributes of the project list; {@code q} matches {@code name}. */
+    /**
+     * Filterable/sortable attributes of the project list (K-49); {@code q} matches
+     * {@code name}, {@code description} and the resolved parent name.
+     * {@code parentProjectName} is a correlated scalar subquery over the plain self-FK
+     * column — a soft-deleted parent resolves to null.
+     */
     public static final FilterFieldSet FILTER_FIELDS = FilterFieldSet.builder()
             .field(Project_.NAME, FilterFieldType.STRING, true)
-            .field(Project_.DESCRIPTION, FilterFieldType.STRING, false)
+            .field(Project_.DESCRIPTION, FilterFieldType.STRING, true)
             .enumField(Project_.TYPE, ProjectType.class, false)
             .field(Project_.PARENT_PROJECT_ID, FilterFieldType.UUID, false)
+            .subqueryField("parentProjectName", FilterFieldType.STRING, true,
+                    NoteListQueryExecutor.projectNameOf(Project_.PARENT_PROJECT_ID))
             .field(Project_.IS_DEFAULT, FilterFieldType.BOOLEAN, false)
             .field(AuditEntity_.CREATED_DATE, FilterFieldType.TEMPORAL, false)
             .field(AuditEntity_.UPDATED_AT, FilterFieldType.TEMPORAL, false)
@@ -68,13 +76,15 @@ public class ProjectService {
     private static final int MAX_PARENT_DEPTH = 50;
 
     private final ProjectRepository projectRepository;
+    private final ProjectListQueryExecutor projectListQueryExecutor;
     private final ProjectContentGuard projectContentGuard;
     private final TenantModuleRepository tenantModuleRepository;
     private final CompanyRepository companyRepository;
     private final AuditService auditService;
 
     @Transactional(readOnly = true)
-    public Page<ProjectResponse> search(String q, UUID parentProjectId, ProjectType type, Pageable pageable) {
+    public Page<ProjectResponse> search(String q, List<String> qFields, UUID parentProjectId, ProjectType type,
+            Pageable pageable) {
         List<FilterCriteria> filters = new ArrayList<>();
         if (parentProjectId != null) {
             filters.add(new FilterCriteria(Project_.PARENT_PROJECT_ID, FilterOperator.EQ, List.of(parentProjectId.toString())));
@@ -82,9 +92,20 @@ public class ProjectService {
         if (type != null) {
             filters.add(new FilterCriteria(Project_.TYPE, FilterOperator.EQ, List.of(type.name())));
         }
+        return doSearch(q, qFields, filters, pageable);
+    }
+
+    /** Full {@link SearchRequest} variant backing {@code POST /projects/search}. */
+    @Transactional(readOnly = true)
+    public Page<ProjectResponse> search(SearchRequest request, Pageable pageable) {
+        return doSearch(request.q(), request.qFields(), request.filters(), pageable);
+    }
+
+    private Page<ProjectResponse> doSearch(String q, List<String> qFields, List<FilterCriteria> filters,
+            Pageable pageable) {
         Specification<Project> spec = FilterSpecifications.from(FILTER_FIELDS,
-                StringUtils.hasText(q) ? q.trim() : null, filters);
-        return projectRepository.findAll(spec, pageable).map(this::toResponse);
+                StringUtils.hasText(q) ? q.trim() : null, qFields, filters);
+        return projectListQueryExecutor.search(spec, pageable);
     }
 
     /**
