@@ -1,30 +1,19 @@
-import { api, normalizePage, searchPost } from '../../lib/api';
-import type { FilterCriteria, PageParams, PageResponse } from '../../types';
+import { api, normalizePage, searchPost, toQuery } from '../../lib/api';
+import type { FilterCriteria, PageParams, PageResponse, SearchOrListParams } from '../../types';
 import type { AuditLog, LoginHistory, RequestLog } from './types';
 
-/** K-49 structured column-filter clauses (shared by the three audit surfaces). */
-export interface AuditFilterParams {
-  /** Structured column filters — routed through `POST /{resource}/search` when present. */
-  filters?: FilterCriteria[];
-}
+/** Audit GET lists keep their scoped legacy filters alongside the K-49 structured clauses. */
+export type AuditLogParams = SearchOrListParams & { action?: string; actorId?: string };
 
-export interface AuditLogParams extends PageParams, AuditFilterParams {
-  action?: string;
-  actorId?: string;
-}
+export type LoginHistoryParams = SearchOrListParams & { userId?: string; success?: boolean };
 
-export interface LoginHistoryParams extends PageParams, AuditFilterParams {
-  userId?: string;
-  success?: boolean;
-}
-
-export interface RequestLogParams extends PageParams, AuditFilterParams {
+export type RequestLogParams = SearchOrListParams & {
   traceId?: string;
   method?: string;
   status?: number;
   userId?: string;
   username?: string;
-}
+};
 
 /**
  * Audit & login-history endpoints (K-19 read side). Both require the
@@ -79,17 +68,17 @@ export const requestLogsApi = {
 };
 
 /**
- * Builds a query string from page/sort plus any present filter values, skipping
- * empties. Unlike the generic {@code toQuery} helper (which only carries page/size/
- * sort), this one threads the audit-specific filters (action/actorId/userId/success);
- * array values (qFields) serialize as repeated params.
+ * Query string for the audit GET lists: the shared page/sort/q serialization
+ * (`toQuery`) plus the audit-specific first-match filters (action/actorId/
+ * userId/success/...), skipping empties.
  */
-function buildQuery(params: object): string {
-  const sp = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) {
+function buildQuery(params: PageParams & Record<string, unknown>): string {
+  const { page, size, sort, sorts, q, qFields, ...rest } = params;
+  const sp = new URLSearchParams(toQuery({ page, size, sort, sorts, q, qFields }).replace(/^\?/, ''));
+  for (const [key, value] of Object.entries(rest)) {
     if (value === undefined || value === null || value === '') continue;
     if (Array.isArray(value)) {
-      (value as unknown[]).forEach((v) => sp.append(key, String(v)));
+      value.forEach((v) => sp.append(key, String(v)));
     } else {
       sp.set(key, String(value));
     }

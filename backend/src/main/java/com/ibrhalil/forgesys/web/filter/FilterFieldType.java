@@ -7,11 +7,8 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Coarse value type of a filterable/sortable field. Determines the set of supported
- * {@link FilterOperator}s and how wire values are parsed. Kept intentionally small —
- * new kinds arrive with the first attribute that needs them ({@code NUMERIC} with
- * {@code RequestLog.durationMs}, {@code DATE} with {@code Task.dueDate},
- * {@code INT} with {@code RequestLog.status}).
+ * Coarse value type of a filterable/sortable field — decides the supported
+ * {@link FilterOperator}s and how wire values are parsed.
  */
 public enum FilterFieldType {
 

@@ -9,10 +9,9 @@ import java.time.LocalDate;
 import java.util.UUID;
 
 /**
- * Create/update a task within a project. {@code status}/{@code priority} are optional:
- * on create they default to {@code TODO}/{@code MEDIUM}; on update a {@code null} leaves
- * the field unchanged. {@code assigneeId} is optional and validated against the tenant's
- * users when present.
+ * Create/update a task; {@code status}/{@code priority} default to
+ * {@code TODO}/{@code MEDIUM} on create and {@code null} means "leave unchanged"
+ * on update. {@code assigneeId} is validated against the tenant's users when present.
  */
 public record TaskRequest(
         @NotBlank(message = "Task title is required")

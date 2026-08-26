@@ -35,13 +35,10 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * Note CRUD anchored to NOTES-type project containers (K-44, re-scoped by K-45).
- * The flat list is the cross-container view ({@code ?projectId=} narrows it); notes
- * are created through the nested project endpoints or the flat path defaulting to
- * the tenant's "Genel" container ({@link ProjectContainerSupport}). Visibility stays
- * tenant-wide ({@code notes:note:read} sees all tenant notes); personal/ABAC notes
- * remain deferred. Category/project names are resolved server-side, batched per
- * page (no per-row lookups).
+ * Note CRUD anchored to NOTES-type containers (K-44/K-45): the flat list is the
+ * cross-container view ({@code ?projectId=} narrows); flat creates default to "Genel".
+ * Visibility stays tenant-wide (ABAC deferred); names resolved batched per page.
+ * Rationale: docs/CODE_NOTES.md (backend/service → NoteService).
  */
 @Service
 @RequiredArgsConstructor
@@ -49,9 +46,8 @@ public class NoteService {
 
     /**
      * Filterable/sortable attributes of the note list (K-49); {@code q} matches title,
-     * content, project name and category name. {@code projectName}/{@code categoryName}
-     * are correlated scalar subqueries over the plain FK columns — referenced rows are
-     * resolved and filtered in the database, soft-deleted references yield null.
+     * content, project and category names. {@code categoryName}/{@code projectName} are
+     * correlated subqueries over the plain FK columns (soft-deleted refs → null).
      */
     public static final FilterFieldSet FILTER_FIELDS = FilterFieldSet.builder()
             .field(Note_.TITLE, FilterFieldType.STRING, true)

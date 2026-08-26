@@ -5,10 +5,9 @@ import org.springframework.http.HttpStatus;
 import java.util.Locale;
 
 /**
- * Stable, machine-readable error codes surfaced in {@link ApiErrorResponse#code()}.
- * The wire value is the enum name lowercased (e.g. {@code auth_bad_credentials}).
- * Clients may branch on this value; the HTTP status and message may evolve but
- * codes remain stable.
+ * Stable, machine-readable error codes surfaced in {@link ApiErrorResponse#code()}
+ * (wire value = lowercased enum name, e.g. {@code auth_bad_credentials}). Clients
+ * branch on the code; status/message may evolve, codes stay stable.
  */
 public enum ErrorCode {
 

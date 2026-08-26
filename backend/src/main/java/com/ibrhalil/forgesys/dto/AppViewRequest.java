@@ -8,10 +8,9 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 /**
- * Create/update a view of a custom app (K-15 / Epic 3.0.B). {@code config} is validated
- * against the app's property set and stored as canonical JSON. {@code position} is
- * optional: absent on create appends at the end (max+1), absent on update keeps the
- * current value.
+ * Create/update a view of a custom app (K-15); {@code config} is validated
+ * against the app's property set. {@code position} absent appends on create /
+ * keeps current on update.
  */
 public record AppViewRequest(
         @NotBlank(message = "View name is required")

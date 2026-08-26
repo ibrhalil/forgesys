@@ -18,14 +18,9 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Test-profile {@link RefreshTokenStore} (Docker-free build, K-34 + K-28). Mirrors the
- * Redis state machine (ACTIVE→ROTATED, reuse detection, per-user index) in plain
- * concurrent maps so the default H2 test suite exercises refresh rotation/reuse and
- * session listing/revoke without a Redis container.
- *
- * <p>TTL/expiry semantics are intentionally not enforced here — those are verified
- * against real Redis by the gated {@code RedisRefreshTokenIT}
- * ({@code -Dforgesys.redis.it=true}).
+ * Test-profile store (Docker-free build): mirrors the Redis ACTIVE→ROTATED state
+ * machine in concurrent maps. TTL/expiry semantics are intentionally not enforced —
+ * verified against real Redis by the gated {@code RedisRefreshTokenIT}.
  */
 @Component
 @Profile("test")
@@ -70,7 +65,7 @@ public class InMemoryRefreshTokenStore implements RefreshTokenStore {
         OffsetDateTime now = OffsetDateTime.now();
         tokens.put(oldHash, new Entry("ROTATED", entry.userId, entry.email, entry.tenant, newHash,
                 entry.sessionId, entry.ipAddress, entry.userAgent, entry.loginAt, entry.lastSeen));
-        // Preserved sessionId + original device metadata; lastSeen advances.
+        // sessionId + original device metadata preserved; lastSeen advances.
         tokens.put(newHash, new Entry("ACTIVE", entry.userId, entry.email, entry.tenant, null,
                 entry.sessionId, entry.ipAddress, entry.userAgent, entry.loginAt, now));
         index(entry.tenant, entry.userId).add(newHash);
@@ -83,10 +78,8 @@ public class InMemoryRefreshTokenStore implements RefreshTokenStore {
         if (presented == null || presented.isBlank()) {
             return false;
         }
-        // Follow the rotation chain (parity with RedisRefreshTokenStore.revoke): a
-        // ROTATED record's rotatedTo successor is the live token of the SAME session.
-        // Revoking an already-rotated token (logout racing a silent refresh) must kill
-        // the successor too, or the session survives logout.
+        // Follow the rotation chain (parity with RedisRefreshTokenStore): kill the
+        // rotatedTo successor too, or the session survives logout.
         boolean revokedAny = false;
         Set<String> visited = new HashSet<>();
         String currentHash = TokenHasher.sha256Hex(presented);
@@ -136,8 +129,7 @@ public class InMemoryRefreshTokenStore implements RefreshTokenStore {
 
     @Override
     public synchronized List<ActiveSession> listAllSessions(String tenant) {
-        // Aggregate listSessions across every user index for this tenant. Index keys are
-        // "<tenant>:<userId>"; prefix-scan the in-memory map.
+        // Index keys are "<tenant>:<userId>" — prefix-scan and aggregate.
         String prefix = (tenant == null ? "" : tenant) + ":";
         List<ActiveSession> sessions = new ArrayList<>();
         for (String key : index.keySet()) {

@@ -21,9 +21,9 @@ import lombok.Setter;
 import lombok.ToString;
 
 /**
- * Records that a module (identified by {@code moduleKey}, resolved against the code-side
- * {@code ModuleDefinition} registry) is activated for a tenant (K-16 / Epic 3.0.A).
- * Partial unique {@code (company_id, module_key) WHERE is_deleted = false}.
+ * Module activation state per tenant (K-16): {@code moduleKey} is resolved against
+ * the code-side {@code ModuleDefinition} registry (NOT an FK); partial unique
+ * {@code (company_id, module_key) WHERE is_deleted = false}.
  */
 @Entity
 @Getter

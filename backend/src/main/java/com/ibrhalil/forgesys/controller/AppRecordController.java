@@ -26,10 +26,9 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.UUID;
 
 /**
- * Record (row) endpoints nested under their owning app (K-15 / Epic 3.0.B). A record
- * of another app yields 404 (scoped lookup, no cross-app leak). Update uses PATCH
- * semantics (partial value merge). {@code /search} runs the PostgreSQL JSONB filter
- * path.
+ * Records (rows) nested under their owning app (K-15): a record of another app
+ * yields 404 (scoped lookup). Update is PATCH (partial value merge); /search
+ * runs the PostgreSQL JSONB filter path.
  */
 @RestController
 @RequestMapping("/api/v1/apps/{appId}/records")

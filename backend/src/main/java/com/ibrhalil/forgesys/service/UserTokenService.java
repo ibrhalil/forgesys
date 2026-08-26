@@ -19,20 +19,11 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Tenant-internal single-use auth tokens (user lifecycle): issue/consume for email
- * verification and password reset. Follows the [RISK-30]/[RISK-25] conventions:
- *
- * <ul>
- *   <li>Hash-at-rest — only the SHA-256 digest is persisted; the returned raw token
- *       goes straight into the mailed link.</li>
- *   <li>Re-issue supersedes — a new token of a purpose stamps the user's outstanding
- *       tokens of that purpose {@code usedAt}, so only the newest link works.</li>
- *   <li>Atomic claim — consumption is a conditional UPDATE; two concurrent consumers
- *       of the same link cannot both win.</li>
- * </ul>
- *
- * <p>Tenant-scoped: relies on the caller's {@code TenantContext} (request filter or a
- * set-and-restore window for out-of-request flows).
+ * Tenant-internal single-use lifecycle tokens (email verify + password reset).
+ * Conventions ([RISK-30]/[RISK-25]): SHA-256 hash-at-rest (raw goes only into the
+ * mailed link); re-issue supersedes the user's outstanding tokens of the purpose;
+ * consumption is an atomic claim. Tenant-scoped via the caller's {@code TenantContext}.
+ * Rationale: docs/CODE_NOTES.md (backend/service → UserTokenService).
  */
 @Service
 @RequiredArgsConstructor
@@ -47,10 +38,7 @@ public class UserTokenService {
     @Value("${forgesys.security.reset-token-ttl-minutes:30}")
     private long resetTokenTtlMinutes;
 
-    /**
-     * Issues a fresh token for the user + purpose and returns the RAW value (caller
-     * builds the mailed link; the DB keeps only its digest).
-     */
+    /** Issues a fresh token and returns the RAW value (the DB keeps only its digest). */
     @Transactional
     public String issue(UUID userId, UserAuthTokenPurpose purpose) {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
@@ -67,22 +55,15 @@ public class UserTokenService {
         return rawToken;
     }
 
-    /**
-     * Digest lookup WITHOUT consuming — returns the token entity whatever its
-     * used/expired state (empty when unknown). Lets callers implement idempotent
-     * flows: a used EMAIL_VERIFY token whose user is already verified can succeed
-     * silently instead of surfacing {@code user_token_already_used} to a re-clicked
-     * link. Validation/claim semantics live in {@link #consume}.
-     */
+    /** Digest lookup WITHOUT consuming (any used/expired state) — idempotency probe base. */
     @Transactional(readOnly = true)
     public Optional<UserAuthToken> peek(String rawToken) {
         return tokenRepository.findByTokenHash(TokenHasher.sha256Hex(rawToken));
     }
 
     /**
-     * Validates and atomically consumes the presented raw token; returns the claimed
-     * entity (carries {@code user} for the consuming flow). Error codes mirror the
-     * tenant-signup semantics: {@code user_token_invalid} / {@code user_token_expired}
+     * Validates and atomically consumes the raw token (carries {@code user} for the
+     * consuming flow). Errors: {@code user_token_invalid} / {@code user_token_expired}
      * / {@code user_token_already_used}.
      */
     @Transactional
@@ -97,8 +78,7 @@ public class UserTokenService {
             throw new BusinessException(ErrorCode.USER_TOKEN_EXPIRED);
         }
         if (token.getPurpose() != purpose) {
-            // Token exists but belongs to a different flow — do not let a password-reset
-            // link consume an email-verification token (or vice versa).
+            // A token of another flow must not consume this one.
             throw new BusinessException(ErrorCode.USER_TOKEN_INVALID);
         }
 
@@ -111,11 +91,7 @@ public class UserTokenService {
         return token;
     }
 
-    /**
-     * [RISK-30] Daily purge hook for {@code TokenPurgeJob} — deletes this tenant's
-     * consumed/expired tokens older than the cutoff. Runs in its own transaction per
-     * tenant schema (invoked with the job's set-and-restore TenantContext window).
-     */
+    /** [RISK-30] TokenPurgeJob hook — deletes consumed/expired tokens older than the cutoff. */
     @Transactional
     public int purgeStaleForCurrentTenant(OffsetDateTime cutoff) {
         return tokenRepository.purgeStale(cutoff);

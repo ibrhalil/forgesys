@@ -300,10 +300,10 @@ export function EntityListPage() {
     sort, toggleSort,
     search, setSearch,
     searchFields, setSearchFields,
-    q,
+    listParams,
   } = useListPageState({ storageKey: 'entities' });
 
-  const { data, isLoading } = useEntities({ page, size: pageSize, sorts: [sort], q });
+  const { data, isLoading } = useEntities(listParams);
   const [deleteTarget, setDeleteTarget] = useState<Entity | null>(null);
 
   const columns: Column<Entity>[] = [

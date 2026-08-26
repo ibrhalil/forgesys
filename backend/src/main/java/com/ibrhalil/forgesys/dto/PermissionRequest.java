@@ -5,10 +5,8 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 /**
- * Create/update payload for a tenant permission. The name MUST follow the
- * {@code {module}:{resource}:{action}} convention enforced across the built-in
- * {@link com.ibrhalil.forgesys.config.PermissionCatalog} so runtime-created permissions
- * stay consistent with the seeded namespace.
+ * Create/update payload for a tenant permission; the name must follow the seeded
+ * {@code {module}:{resource}:{action}} namespace convention.
  */
 public record PermissionRequest(
         @NotBlank(message = "Permission name is required")

@@ -7,9 +7,8 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Replace-semantics request for setting the members of a group
- * ({@code PUT /groups/{id}/members}). An empty list removes all members. User ids that do
- * not resolve are rejected with 404.
+ * Replace-semantics member assignment ({@code PUT /groups/{id}/members}); empty
+ * removes all, unresolvable ids 404.
  */
 public record AssignMembersRequest(
         @NotNull(message = "userIds must be present (use an empty list to clear)")

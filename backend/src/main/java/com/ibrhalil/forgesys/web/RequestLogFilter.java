@@ -1,7 +1,6 @@
 package com.ibrhalil.forgesys.web;
 
 import com.ibrhalil.forgesys.common.tenant.TenantContext;
-import com.ibrhalil.forgesys.entity.RequestLog;
 import com.ibrhalil.forgesys.service.RequestLogService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -19,19 +18,12 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Captures per-request trace metadata and writes a {@link RequestLog} entry after
- * the request completes. Registered INSIDE the security chain (order -95, see
- * {@code SecurityConfig#requestLogFilterRegistration}) so that in this filter's
- * {@code finally} — which unwinds before the security/tenant/metadata filters
- * clear their ThreadLocals — the tenant schema, authentication and request
- * metadata are still live when the row is written.
- *
- * <p>Skips the write when no tenant was resolved (actuator, tenant signup,
- * unknown host): {@code t_request_logs} exists only in tenant schemas, so an
- * insert would land in {@code public} and fail. This filter is also the single
- * clear point for {@link AuditRequestContext} — the masked body set by
- * {@link RequestBodyCaptureFilter} is consumed here and never leaks to the
- * next request on a reused thread.
+ * Writes a {@code t_request_logs} row after the request completes (K-19 layer 3).
+ * Order -95, INSIDE the security chain: this filter's {@code finally} unwinds
+ * BEFORE the tenant/security/metadata filters clear their ThreadLocals, so tenant
+ * schema, authentication and request metadata are still live at write time. Also
+ * the single clear point for {@link AuditRequestContext}.
+ * rationale: docs/CODE_NOTES.md (backend/web → RequestLogFilter)
  */
 @Slf4j
 @Component
@@ -57,7 +49,6 @@ public class RequestLogFilter extends OncePerRequestFilter {
             long durationMs = java.time.Duration.between(start, Instant.now()).toMillis();
             int status = response.getStatus();
 
-            // Extract user info from SecurityContext
             UUID userId = null;
             String username = null;
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -66,7 +57,6 @@ public class RequestLogFilter extends OncePerRequestFilter {
                 username = user.getEmail();
             }
 
-            // Get request metadata from RequestContext
             String ipAddress = null;
             String userAgent = null;
             var meta = RequestContext.current();
@@ -75,13 +65,11 @@ public class RequestLogFilter extends OncePerRequestFilter {
                 userAgent = meta.get().userAgent();
             }
 
-            // Get masked request body from AuditRequestContext (high-risk paths only);
-            // consuming it here is the single clear point (no leak across requests).
+            // Consuming here is the single clear point — no leak across reused threads.
             String requestBody = AuditRequestContext.getAndClearRequestBody();
 
             if (TenantContext.getCurrentTenant().isEmpty()) {
-                // No tenant resolved (actuator, tenant signup, unknown host): the table
-                // lives in tenant schemas only — skip instead of failing the insert.
+                // Table lives in tenant schemas only — skip instead of failing the insert.
                 return;
             }
 

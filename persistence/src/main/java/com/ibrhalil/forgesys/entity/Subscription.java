@@ -21,9 +21,9 @@ import lombok.Setter;
 import lombok.ToString;
 
 /**
- * A tenant's subscription to a {@link Plan} (K-16 / Epic 3.0.A). One subscription row per
- * company (partial unique {@code (company_id) WHERE is_deleted = false}); plan changes in
- * Faz 6 will UPDATE the row, not insert history (audit logs carry the trail).
+ * A tenant's subscription to a {@link Plan} (K-16) — one live row per company
+ * (partial unique on {@code company_id}); plan changes UPDATE the row, audit carries
+ * the trail.
  */
 @Entity
 @Getter

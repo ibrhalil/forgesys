@@ -4,9 +4,8 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 /**
- * A custom app row for lists (K-15 / Epic 3.0.B) — definition only; properties/views
- * live in {@link AppDetailResponse}. Carries the APPS container id/name (K-45) so
- * list rows render the project chip without a second round-trip (batched server-side).
+ * A custom app list row (K-15) — definition only; carries the APPS container
+ * id/name (K-45) for the project chip.
  */
 public record AppResponse(
         UUID id,

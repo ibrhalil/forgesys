@@ -8,17 +8,10 @@ import org.springframework.stereotype.Repository;
 import java.util.Optional;
 import java.util.UUID;
 
-/**
- * Append-only login attempt history (tenant schema). Read access is
- * Specification-driven (filter engine) — no associations, so no {@code @EntityGraph}.
- */
+/** Append-only login history (tenant schema) — Specification-driven reads, no associations. */
 @Repository
 public interface LoginHistoryRepository extends JpaRepository<LoginHistory, UUID>, JpaSpecificationExecutor<LoginHistory> {
 
-    /**
-     * Most recent failed login attempt for the user (null when there has never been
-     * one) — backs the user detail activity view. Hits {@code idx_login_history_user_id};
-     * the append-only table has no soft-delete rows to filter.
-     */
+    /** Most recent failed login for the user (null when none) — user detail activity view. */
     Optional<LoginHistory> findFirstByUserIdAndSuccessFalseOrderByCreatedDateDesc(UUID userId);
 }

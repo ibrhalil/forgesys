@@ -8,8 +8,7 @@ import { useDebouncedLoadOptions } from './useDebouncedLoadOptions';
 export interface ReferencePickerProps {
   // single mode
   value?: string | null;
-  /** Display label for the current value (e.g. a resolved detail); falls back to the
-   *  last search/pick result, then the raw id. */
+  /** Display label for the current value; falls back to the last pick, then the raw id. */
   valueLabel?: string;
   onChange?: (value: string | null) => void;
   // multi mode (assignment surfaces)
@@ -34,9 +33,8 @@ export interface ReferencePickerProps {
 /**
  * Internal core of the reference pickers: debounced async `loadOptions` over
  * SelectInput with id→label bookkeeping. Search results merge into a
- * monotonically-growing label map (seeded from `selectedOptions`), so single
- * mode never flashes a raw id after a pick and multi mode keeps every selected
- * chip labeled — ids outside any seen option still render as the raw id.
+ * monotonically-growing label map (seeded from `selectedOptions`) so picks never
+ * flash a raw id; ids outside any seen option render as the raw id.
  */
 export function ReferencePicker({
   search,
@@ -94,9 +92,6 @@ export function ReferencePicker({
   // Label precedence: the pick/search-fed map first (a fresh selection must win
   // over a stale caller-provided seed), the seed only while the id is unknown
   // to the map, the raw id as the last resort.
-  // Label precedence: the pick/search-fed map first (a fresh selection must win
-  // over a stale caller-provided seed), the seed only while the id is unknown
-  // to the map, the raw id as the last resort.
   const singleValue = value ? { value, label: labelMap.get(value) ?? valueLabel ?? value } : null;
   const multiValue = (values ?? []).map((id) => ({ value: id, label: labelMap.get(id) ?? id }));
 
@@ -110,8 +105,8 @@ export function ReferencePicker({
       isMulti={isMulti}
       size={size}
       loadOptions={loadOptions}
-      // Menu-open shows the first page without typing (react-select only fetches
-      // on non-empty input changes otherwise).
+      // Menu-open fetches the first page without typing (react-select otherwise
+      // only loads on non-empty input changes).
       defaultOptions
       noOptionsMessage={t('apps.pickerNoOptions')}
       value={isMulti ? multiValue : singleValue}

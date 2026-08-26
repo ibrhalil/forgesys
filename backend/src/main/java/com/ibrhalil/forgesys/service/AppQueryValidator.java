@@ -21,13 +21,11 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Shared validation for property-value filter/sort clauses (K-15 / Epic 3.0.B) — used
- * by both record search ({@code AppRecordSearchRequest}) and saved view configs
- * ({@code AppViewConfigDto}), so the two stay in lockstep. Every clause must resolve
- * against the app's property set: property existence, operator-vs-type support and
- * value shape are checked <em>eagerly</em>, before any query is built — an invalid
- * request is a 400, never a mid-query 500. SQL built downstream references only
- * validated UUIDs and enum-derived fragments, keeping the JSONB query injection-free.
+ * Shared validation for property-value filter/sort clauses (K-15) — used by both
+ * record search and saved view configs so the two stay in lockstep. Clauses resolve
+ * eagerly against the app's property set — invalid = 400, never a mid-query 500;
+ * downstream SQL references only validated UUIDs + enum fragments (injection-free).
+ * Rationale: docs/CODE_NOTES.md (backend/service → AppQueryValidator).
  */
 @Component
 public class AppQueryValidator {

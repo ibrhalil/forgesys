@@ -6,11 +6,7 @@ import org.springframework.stereotype.Component;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * Test-profile {@link TokenBlacklistService} (Docker-free build, K-34). Keeps
- * {@code jti → expiry-millis} and prunes on read; enough for the H2 test suite to
- * exercise per-session logout without a Redis container.
- */
+/** Test-profile blacklist (Docker-free): jti → expiry-millis, pruned on read. */
 @Component
 @Profile("test")
 public class InMemoryTokenBlacklistService implements TokenBlacklistService {

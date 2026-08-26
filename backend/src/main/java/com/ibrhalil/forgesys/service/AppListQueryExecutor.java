@@ -14,12 +14,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Component;
 
-/**
- * Read side of the app list (K-49): flat Criteria DTO projection; the APPS container
- * name ({@code projectName}) resolves as a correlated scalar subquery over the plain
- * {@code project_id} column (K-45 convention) — replacing the per-page batch
- * name-resolution and becoming a first-class filter/sort/{@code q} target.
- */
+/** App list read side (K-49); {@code projectName} via the K-45 plain-FK subquery convention. */
 @Component
 public class AppListQueryExecutor {
 

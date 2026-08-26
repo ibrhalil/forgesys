@@ -20,11 +20,9 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * Self-service endpoints for the authenticated user's own account. Tenant-scoped but
- * requiring no {@code iam:*} permission — any authenticated user may read/update their
- * own profile and change their own password. Mapped under {@code /api/v1/users/me};
- * the literal {@code me} segment takes precedence over the {@code /{id}} path variable
- * declared in {@link UserController}.
+ * Self-service endpoints for the authenticated user's own account — no
+ * {@code iam:*} permission required. The literal {@code me} segment takes
+ * precedence over the {@code /{id}} variable in {@link UserController}.
  */
 @RestController
 @RequestMapping("/api/v1/users/me")
@@ -33,10 +31,7 @@ public class UserProfileController {
 
     private final UserService userService;
 
-    /**
-     * The single /me endpoint (K-37): full self view from the DB + the authorities
-     * embedded in the caller's access token (claims — no extra resolution work).
-     */
+    /** The single /me (K-37): full self view from the DB + authorities embedded in the access token. */
     @GetMapping
     public ResponseEntity<MeResponse> me(@AuthenticationPrincipal CustomUserDetails principal) {
         UserResponse user = userService.findById(principal.getUserId());

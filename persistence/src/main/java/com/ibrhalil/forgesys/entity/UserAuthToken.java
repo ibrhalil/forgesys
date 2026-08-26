@@ -8,8 +8,6 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.ForeignKey;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
 import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
@@ -20,15 +18,11 @@ import lombok.Setter;
 import lombok.ToString;
 
 /**
- * Tenant-internal single-use auth token (user lifecycle): email verification and
- * password reset. Mirrors the {@code TenantVerificationToken} ([RISK-30]) conventions —
- * hash-at-rest, soft-delete-less {@link GeneratedIdAuditEntity}, {@code usedAt}
- * invalidation — but lives in the TENANT schema and points at a {@link User}.
- *
- * <p>Only the SHA-256 hex digest of the raw token is persisted ({@link #tokenHash});
- * the raw value exists solely in the mailed link. Re-issuing a purpose supersedes the
- * user's outstanding tokens of the same purpose (stamped {@code usedAt}), so only the
- * newest link works.
+ * Tenant-internal single-use auth token (user lifecycle: email verify / password
+ * reset). Mirrors {@code TenantVerificationToken} — RISK-30 digest-only
+ * ({@link #tokenHash}), soft-delete-less — but lives in the TENANT schema and points
+ * at a {@link User}. Re-issuing a purpose supersedes the outstanding tokens of that
+ * purpose.
  */
 @Entity
 @Getter

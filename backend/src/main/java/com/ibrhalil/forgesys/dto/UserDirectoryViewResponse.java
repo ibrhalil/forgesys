@@ -4,10 +4,9 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 /**
- * Flat list-item projection of the user directory ({@code UserDirectoryView} subselect).
- * Replaces the full {@link UserResponse} on {@code GET /users} and
- * {@code POST /users/search}: association lists become counts (the detail endpoint
- * still returns the full role/group sets) — matching the UI's narrow-list convention.
+ * Flat list-item projection for {@code GET /users} + {@code POST /users/search}
+ * (K-49): association lists become counts; the detail endpoint still returns
+ * the full role/group sets.
  */
 public record UserDirectoryViewResponse(
         UUID id,

@@ -29,8 +29,8 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Task endpoints nested under their owning project. A task is only addressable through
- * its project; a task of another project yields 404 (scoped lookup, no cross-project leak).
+ * Tasks nested under their owning project; a task of another project yields 404
+ * (scoped lookup, no cross-project leak).
  */
 @RestController
 @RequestMapping("/api/v1/projects/{projectId}/tasks")
@@ -50,10 +50,7 @@ public class TaskController {
         return ResponseEntity.ok(PageResponse.of(taskService.list(projectId, q, qFields, pageable)));
     }
 
-    /**
-     * Filter-engine variant of the list: paging + multi-sort + structured filters +
-     * global {@code q} (optionally narrowed via {@code qFields}) in one POST body.
-     */
+    /** Filter-engine variant of the list: paging + multi-sort + filters + {@code q} in one POST body. */
     @PostMapping("/search")
     @PreAuthorize("hasAuthority('pm:task:read')")
     public ResponseEntity<PageResponse<TaskResponse>> search(

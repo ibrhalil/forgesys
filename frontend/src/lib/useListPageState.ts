@@ -1,46 +1,27 @@
 import { useEffect, useState } from 'react';
 import { useDebouncedValue } from './useDebouncedValue';
 import { loadTablePreferences, saveTablePreferences } from './tablePreferences';
-import type { FilterCriteria, SortState } from '../types';
+import type { FilterCriteria, SearchOrListParams, SortState } from '../types';
 
 export interface UseListPageStateOptions {
-  /**
-   * Initial sort. The field MUST be in the backend feature's sort whitelist
-   * (SortGuard) or the request 400s — see the page's `Column.sortKey` docs.
-   */
+  /** Initial sort — the field MUST be in the backend feature's sort whitelist or the request 400s. */
   defaultSort: SortState;
   /** Initial rows-per-page; part of `PAGE_SIZE_OPTIONS`. */
   defaultPageSize?: number;
   /** Search debounce window; the raw input renders immediately, queries key on `q`. */
   debounceMs?: number;
-  /**
-   * Optional unique key to persist table preferences (e.g. pageSize) in localStorage.
-   */
+  /** Optional key persisting table preferences (e.g. pageSize) in localStorage. */
   storageKey?: string;
 }
 
 /**
  * The list-page scaffold (K-39): page/pageSize/sort/search/filter state with the
- * shared contracts every server-side list page repeated inline before this hook:
- *
- * - search is debounced (`q`), and a new term resets the page to 0;
- * - sorting toggles asc/desc on the same field, switches to asc on a new field,
- *   and resets the page to 0;
- * - changing the rows-per-page resets the page to 0 and persists preference if storageKey is given;
- * - changing the structured filters (K-49 column filters) resets the page to 0.
- *
- * Pages wire DataTable directly: `onPageSizeChange={setPageSize}`,
- * `onSortChange={toggleSort}`, `onPageChange={setPage}`,
- * `filters={filters}` / `onFiltersChange={setFilters}`,
- * `toolbar={<SearchInput value={search} onChange={setSearch} …/>}` and query with
- * `page`/`size: pageSize`/`sorts: [sort]` (or the legacy `sort` string)/`q`/
- * `qFields: searchFields` — or the filter-engine `POST /search` body carrying
- * `filters` when any is active.
- *
- * Client-paginated pages (full list in one response, e.g. permissions) manage
- * their own page state via `useClientPagination` — they may still use this hook
- * for the sort toggle only, ignoring the unused page/search state (it is inert
- * when never wired).
+ * shared contracts — a new search term, a sort toggle, a page-size change (persisted
+ * via storageKey) or a filter change each resets the page to 0. Query with the
+ * ready-made `listParams` (`{page, size, sorts: [sort], q, qFields, filters}` —
+ * empty optional keys absent; spread scoped legacy params on top). Client-paginated
+ * pages (one full response, e.g. permissions) use `useClientPagination` instead and
+ * may take only the sort toggle from here.
  */
 export function useListPageState({
   defaultSort,
@@ -62,7 +43,6 @@ export function useListPageState({
   const [filters, setFiltersState] = useState<FilterCriteria[]>([]);
   const q = useDebouncedValue(search, debounceMs);
 
-  // A new search term invalidates the current page position.
   useEffect(() => {
     setPage(0);
   }, [q]);
@@ -97,6 +77,17 @@ export function useListPageState({
     setPage(0);
   };
 
+  // Ready-to-spread list-query params; empty optional keys stay absent, `sorts`
+  // serializes to the same repeated `sort=field,dir` wire params as the raw string.
+  const listParams: SearchOrListParams = {
+    page,
+    size: pageSize,
+    sorts: [sort],
+    q: q || undefined,
+    qFields: searchFields.length ? searchFields : undefined,
+    filters: filters.length ? filters : undefined,
+  };
+
   return {
     page,
     setPage,
@@ -111,5 +102,6 @@ export function useListPageState({
     filters,
     setFilters,
     q,
+    listParams,
   };
 }

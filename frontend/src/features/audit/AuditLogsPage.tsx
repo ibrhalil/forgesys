@@ -19,16 +19,9 @@ export function AuditLogsPage() {
   const { t } = useT();
   const {
     page, setPage, pageSize, setPageSize, sort, toggleSort,
-    search, setSearch, searchFields, setSearchFields, filters, setFilters, q,
+    search, setSearch, searchFields, setSearchFields, filters, setFilters, listParams,
   } = useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' }, storageKey: 'audit-logs' });
-  const { data, isLoading, isFetching } = useAuditLogs({
-    page,
-    size: pageSize,
-    sort: `${sort.field},${sort.dir}`,
-    q: q || undefined,
-    qFields: searchFields.length ? searchFields : undefined,
-    filters: filters.length ? filters : undefined,
-  });
+  const { data, isLoading, isFetching } = useAuditLogs(listParams);
 
   // Aligned with the backend's searchable registrations (AuditQueryService.AUDIT_LOG_FIELDS).
   const auditSearchFields = [

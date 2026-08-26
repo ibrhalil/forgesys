@@ -41,19 +41,15 @@ export function NotesPage() {
     filters,
     setFilters,
     q,
+    listParams,
   } = useListPageState({ defaultSort: { field: 'updatedAt', dir: 'desc' }, storageKey: 'notes' });
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [pinnedOnly, setPinnedOnly] = useState(false);
 
   const { data, isLoading, isFetching } = useNotes({
-    page,
-    size: pageSize,
-    sorts: [sort],
-    q: q || undefined,
-    qFields: searchFields.length ? searchFields : undefined,
+    ...listParams,
     categoryId: categoryId ?? undefined,
     pinned: pinnedOnly || undefined,
-    filters: filters.length ? filters : undefined,
   });
   const { data: categories } = useNoteCategories();
   const delNote = useDeleteNote();

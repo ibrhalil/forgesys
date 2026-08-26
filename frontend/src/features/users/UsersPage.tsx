@@ -40,16 +40,9 @@ export function UsersPage() {
     filters,
     setFilters,
     q,
+    listParams,
   } = useListPageState({ defaultSort: { field: 'email', dir: 'asc' }, storageKey: 'users' });
-  const { data, isLoading, isFetching } = useUsers({
-    page,
-    size: pageSize,
-    sorts: [sort],
-    q: q || undefined,
-    // Smart-search targeting: only send when narrowed (empty = all searchable fields).
-    qFields: searchFields.length ? searchFields : undefined,
-    filters: filters.length ? filters : undefined,
-  });
+  const { data, isLoading, isFetching } = useUsers(listParams);
   const delUser = useDeleteUser();
   const unlockUser = useUnlockUser();
   const navigate = useNavigate();

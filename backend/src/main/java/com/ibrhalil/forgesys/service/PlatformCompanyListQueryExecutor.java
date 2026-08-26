@@ -14,12 +14,9 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Component;
 
 /**
- * Read side of the platform company list (K-49): paged, engine-filtered Criteria DTO
- * projection over {@code public.t_companies} — replacing the unpaged {@code findAll()}
- * (the last K-37 paging violation). Runs INSIDE
- * {@code PlatformCompanyService.executeWithoutTenantContext} — the cleared
- * {@code TenantContext} pins the multi-tenant EntityManager to the public schema,
- * exactly like the repository reads before it.
+ * Platform company list read side (K-49) — replaced the unpaged {@code findAll()} (the
+ * last K-37 paging violation). Runs INSIDE {@code executeWithoutTenantContext}: the
+ * cleared TenantContext pins the EntityManager to the public schema.
  */
 @Component
 public class PlatformCompanyListQueryExecutor {

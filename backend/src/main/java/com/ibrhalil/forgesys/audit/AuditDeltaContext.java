@@ -3,9 +3,8 @@ package com.ibrhalil.forgesys.audit;
 import java.util.Optional;
 
 /**
- * ThreadLocal holder for audit delta values (before/after name collections)
- * set by service methods annotated with {@link AuditLog#captureDelta()}.
- * The aspect reads these after the method proceeds and clears them.
+ * ThreadLocal holder for audit delta values (before/after name collections) —
+ * set by the service, read and cleared by {@link AuditLogAspect} after proceed.
  */
 public final class AuditDeltaContext {
 

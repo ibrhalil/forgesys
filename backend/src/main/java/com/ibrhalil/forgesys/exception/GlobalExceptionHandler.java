@@ -25,9 +25,9 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Global REST exception handler. Maps every exception to the uniform
- * {@link ApiErrorResponse} shape with a stable {@link ErrorCode}, traceId, and
- * sanitized field errors.
+ * Global REST exception handler: every exception → uniform {@link ApiErrorResponse}
+ * with a stable {@link ErrorCode}, traceId and sanitized field errors.
+ * Rationale: docs/CODE_NOTES.md (backend → exception package).
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -49,10 +49,8 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * No handler mapping matched the request path (Spring 6.1+ static-resource chain
-     * throws {@link NoResourceFoundException} instead of rendering a plain 404). Maps
-     * to the standard {@code resource_not_found} wire shape — e.g. hitting
-     * {@code /v3/api-docs} in a profile where springdoc is disabled (K-41 prod gating).
+     * No handler matched the path (Spring 6.1+ {@link NoResourceFoundException}) → 404
+     * {@code resource_not_found} (e.g. springdoc disabled in prod, K-41).
      */
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<ApiErrorResponse> handleNoResourceFound(NoResourceFoundException ex, HttpServletRequest request) {
@@ -74,10 +72,8 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Method-level {@code @PreAuthorize} denials throw {@code AuthorizationDeniedException}
-     * (a subclass of {@link AccessDeniedException}) from the controller method, so they
-     * surface at the MVC layer and are caught here rather than by the filter-chain
-     * {@code RestAccessDeniedHandler}. Mapped to 403 to match the wire contract.
+     * Method-level {@code @PreAuthorize} denials ({@code AuthorizationDeniedException})
+     * surface at the MVC layer → 403 here, not in the filter-chain handler.
      */
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ApiErrorResponse> handleAccessDenied(AccessDeniedException ex, HttpServletRequest request) {
@@ -85,11 +81,7 @@ public class GlobalExceptionHandler {
         return build(ErrorCode.AUTH_ACCESS_DENIED, ErrorCode.AUTH_ACCESS_DENIED.defaultMessage(), request.getRequestURI());
     }
 
-    /**
-     * Malformed JSON body (e.g. an unparseable/invalid enum value like
-     * {@code {"status":"FOO"}}). Without this the catch-all maps it to 500; the body is
-     * a client error, so it maps to {@code validation_error} (400).
-     */
+    /** Malformed JSON body → 400 {@code validation_error} (not a 500). */
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ApiErrorResponse> handleMalformedBody(HttpMessageNotReadableException ex, HttpServletRequest request) {
         log.warn("Malformed request body at {}: {}", request.getRequestURI(), ex.getMessage());
@@ -111,12 +103,7 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
 
-    /**
-     * Malformed path/query parameter that cannot be converted to its target type
-     * (e.g. {@code GET /api/v1/users/not-a-uuid}). Without this the catch-all maps it
-     * to 500; it is a client error, so it maps to {@code validation_error} (400).
-     * [RISK-29]
-     */
+    /** Malformed path/query param → 400 {@code validation_error} ([RISK-29]). */
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ApiErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex, HttpServletRequest request) {
         String param = ex.getName();
@@ -129,9 +116,7 @@ public class GlobalExceptionHandler {
         return build(ErrorCode.VALIDATION_ERROR, message, request.getRequestURI());
     }
 
-    /**
-     * Missing required {@code @RequestParam} (e.g. {@code GET /api/v1/users?}). [RISK-29]
-     */
+    /** Missing required {@code @RequestParam} → 400 {@code validation_error} ([RISK-29]). */
     @ExceptionHandler(MissingServletRequestParameterException.class)
     public ResponseEntity<ApiErrorResponse> handleMissingParam(MissingServletRequestParameterException ex, HttpServletRequest request) {
         String message = "Missing required request parameter: '" + ex.getParameterName() + "'";
@@ -140,12 +125,8 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * A {@code sort} property that does not resolve against the domain entity (e.g.
-     * {@code GET /api/v1/users?sort=notAField}). Without this the repository layer
-     * propagates the Spring Data exception into the catch-all and the client gets a
-     * 500; it is a client error, so it maps to {@code validation_error} (400). Known
-     * property <em>paths</em> that should stay closed are rejected earlier by
-     * {@code SortGuard} at the controller.
+     * Unknown {@code sort} property → 400 {@code validation_error} ([RISK-29]); closed
+     * property paths are rejected earlier by {@code SortGuard} at the controller.
      */
     @ExceptionHandler(org.springframework.data.core.PropertyReferenceException.class)
     public ResponseEntity<ApiErrorResponse> handlePropertyReference(org.springframework.data.core.PropertyReferenceException ex, HttpServletRequest request) {
@@ -155,11 +136,8 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Bean Validation violations on method parameters (service-layer {@code @Validated}
-     * beans, or a future controller {@code @Validated}). Currently nothing triggers this —
-     * controllers use {@code @Valid} on {@code @RequestBody} which yields
-     * {@link MethodArgumentNotValidException}; kept as a defensive, forward-compatible
-     * 400 path. Sensitive rejected values are masked. [RISK-29]
+     * Bean Validation on method parameters → 400; defensive/forward-compatible
+     * (controllers use {@code @Valid} → {@link MethodArgumentNotValidException}).
      */
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<ApiErrorResponse> handleConstraintViolation(ConstraintViolationException ex, HttpServletRequest request) {
@@ -176,12 +154,8 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Concurrent uniqueness race (TOCTOU): two requests pass the service-level
-     * {@code existsBy*} check and one hits the DB unique constraint. Without this it
-     * surfaces as a generic 500; mapped to 400 with the precise {@code *_TAKEN} code
-     * when the constraint name is recognized (PostgreSQL partial-unique index names),
-     * otherwise {@code business_error}. The service checks stay (defense-in-depth);
-     * this covers the race. [RISK-28]
+     * Concurrent uniqueness race → 400 with the precise {@code *_TAKEN} code when the
+     * constraint name is recognized, else {@code business_error} ([RISK-28]).
      */
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiErrorResponse> handleDataIntegrity(DataIntegrityViolationException ex, HttpServletRequest request) {
@@ -194,10 +168,8 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Backing-store connectivity failure (Redis/DB down — e.g. a refresh-token
-     * {@code issue} that cannot persist). Surfaced as 503 {@code service_unavailable}
-     * instead of a generic 500 so clients can distinguish "retry later" from a real
-     * bug. {@link DataIntegrityViolationException} keeps its more specific handler.
+     * Backing-store failure (Redis/DB down) → 503 {@code service_unavailable} —
+     * "retry later", not a bug. {@link DataIntegrityViolationException} keeps its own handler.
      */
     @ExceptionHandler(DataAccessException.class)
     public ResponseEntity<ApiErrorResponse> handleDataAccess(DataAccessException ex, HttpServletRequest request) {
@@ -215,18 +187,12 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(errorCode.status()).body(ApiErrorFactory.of(errorCode, message, path));
     }
 
-    /**
-     * Masks the rejected value of sensitive fields (password, token, secret,
-     * credential) so secrets are never echoed back in a validation error payload.
-     */
+    /** Masks sensitive rejected values (password/token/secret/credential). */
     static Object sanitizeRejectedValue(FieldError fieldError) {
         return maskIfSensitive(fieldError.getField(), fieldError.getRejectedValue());
     }
 
-    /**
-     * Shared sensitive-value masking for both {@code @RequestBody} field errors and
-     * {@code ConstraintViolation} invalid values.
-     */
+    /** Shared masking for field errors and {@code ConstraintViolation} invalid values. */
     private static Object maskIfSensitive(String fieldName, Object value) {
         String field = fieldName == null ? "" : fieldName.toLowerCase(Locale.ROOT);
         if (field.contains("password") || field.contains("token")
@@ -248,11 +214,9 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Maps a unique-constraint violation to a precise {@code *_TAKEN} {@link ErrorCode}
-     * by substring-matching the constraint/index name. Substring matching is portable
-     * across PostgreSQL (named partial-unique indexes {@code uk_users_email} etc.) and
-     * tolerates H2/PG name divergence; unknown constraints fall back to
-     * {@link ErrorCode#BUSINESS_ERROR} (still 400, never 500).
+     * Maps a unique-constraint violation to a {@code *_TAKEN} code by constraint-name
+     * substring (portable across PG/H2); unknown constraints → {@code business_error}
+     * (still 400, never 500).
      */
     private ErrorCode resolveDuplicateCode(DataIntegrityViolationException ex) {
         String constraintName = extractConstraintName(ex);

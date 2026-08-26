@@ -14,7 +14,6 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
-import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Root;
@@ -26,15 +25,12 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Component;
 
 /**
- * Read side of the flattened user directory (K-49): the join (profile + account)
- * and the role/group counts run in the database as a single Criteria DTO projection
- * ({@link ProjectionListQuery}) — replacing the former {@code @Immutable @Subselect}
- * {@code UserDirectoryView} read model with an in-code projection that the shared
- * filter engine can filter and sort on natively (joined columns, count subqueries,
- * collection membership). No associations are hydrated; N+1 is structurally
- * impossible. Soft-delete semantics are preserved by the joined entities'
- * {@code @SQLRestriction} (applied to the LEFT JOIN ON clause), which also means
- * the role/group counts now exclude soft-deleted roles/groups.
+ * Read side of the flattened user directory (K-49): profile/account joins +
+ * role/group counts as ONE Criteria DTO projection ({@link ProjectionListQuery}) —
+ * replaced the former {@code @Subselect UserDirectoryView} read model; nothing is
+ * hydrated (N+1 impossible). Soft-delete rides the joined entities'
+ * {@code @SQLRestriction} → counts exclude soft-deleted roles/groups.
+ * Rationale: docs/CODE_NOTES.md (backend/service → UserDirectoryQueryExecutor).
  */
 @Component
 public class UserDirectoryQueryExecutor {
@@ -42,11 +38,7 @@ public class UserDirectoryQueryExecutor {
     @PersistenceContext
     private EntityManager entityManager;
 
-    /**
-     * Subquery expression counting the members of a plural association of the row
-     * (LEFT join + {@code count} — 0 when there are none). Shared by the filter/sort
-     * registrations ({@code roleCount}/{@code groupCount}) and the projection select.
-     */
+    /** Subquery counting a plural association's members (LEFT join, 0 when none). */
     static FilterFieldSet.SubqueryExpression countMembers(String association) {
         return (root, query, cb) -> {
             Subquery<Long> sq = query.subquery(Long.class);

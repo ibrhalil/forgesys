@@ -8,7 +8,6 @@ import com.ibrhalil.forgesys.entity.Company;
 import com.ibrhalil.forgesys.entity.ModuleStatus;
 import com.ibrhalil.forgesys.entity.Permission;
 import com.ibrhalil.forgesys.entity.Plan;
-import com.ibrhalil.forgesys.entity.SubscriptionStatus;
 import com.ibrhalil.forgesys.entity.TenantModule;
 import com.ibrhalil.forgesys.persistence.repository.CompanyRepository;
 import com.ibrhalil.forgesys.persistence.repository.PlanRepository;

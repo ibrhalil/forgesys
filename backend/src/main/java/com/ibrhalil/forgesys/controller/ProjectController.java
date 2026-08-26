@@ -49,10 +49,7 @@ public class ProjectController {
                 projectService.search(q, qFields, parentProjectId, type, pageable)));
     }
 
-    /**
-     * Filter-engine variant of the list: paging + multi-sort + structured filters +
-     * global {@code q} (optionally narrowed via {@code qFields}) in one POST body.
-     */
+    /** Filter-engine variant of the list: paging + multi-sort + filters + {@code q} in one POST body. */
     @PostMapping("/search")
     @PreAuthorize("hasAuthority('pm:project:read')")
     public ResponseEntity<PageResponse<ProjectResponse>> search(@Valid @RequestBody SearchRequest request) {
@@ -60,11 +57,7 @@ public class ProjectController {
         return ResponseEntity.ok(PageResponse.of(projectService.search(request, pageable)));
     }
 
-    /**
-     * The creatable project-type catalog (K-45): one entry per ACTIVE module that
-     * supplies a project type, with the per-type default container id. Registry-derived
-     * bounded list (documented {@code List} exception — never DB-paged).
-     */
+    /** Creatable type catalog from ACTIVE modules (K-45); registry-bounded list — never DB-paged. */
     @GetMapping("/types")
     @PreAuthorize("hasAuthority('pm:project:read')")
     public ResponseEntity<List<ProjectTypeResponse>> types() {

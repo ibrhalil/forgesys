@@ -3,8 +3,8 @@ package com.ibrhalil.forgesys.web;
 import java.util.Optional;
 
 /**
- * ThreadLocal holder for the current request's masked body captured by
- * {@link RequestBodyCaptureFilter}. Cleared after the audit aspect consumes it.
+ * ThreadLocal holder for the masked request body; cleared only by
+ * {@code RequestLogFilter}'s finally (the single clear point).
  */
 public final class AuditRequestContext {
 

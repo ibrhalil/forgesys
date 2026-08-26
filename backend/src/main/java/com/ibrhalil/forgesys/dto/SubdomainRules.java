@@ -3,9 +3,9 @@ package com.ibrhalil.forgesys.dto;
 import java.util.regex.Pattern;
 
 /**
- * Shared subdomain validation rules (K-21). Single source for the subdomain pattern
- * used by both {@link CompanyRegisterRequest} (as a {@code @Pattern}) and
- * {@code SubdomainSuggestionService} (compiled), so the two cannot drift apart.
+ * Shared subdomain validation rules (K-21) — single source for
+ * {@link CompanyRegisterRequest} and {@code SubdomainSuggestionService} so the
+ * two cannot drift.
  */
 public final class SubdomainRules {
 

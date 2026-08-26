@@ -6,13 +6,7 @@ import org.springframework.stereotype.Component;
 import java.time.Instant;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * Test-profile {@link RateLimiter} (Docker-free build, Faz 3). Mirrors the Redis Lua
- * token-bucket in a {@link ConcurrentHashMap} of {@code [tokens, lastRefillEpochSec]}
- * pairs so the default H2 test suite exercises rate-limiting without a Redis container.
- * The refill/consume math is identical to the Lua script; real Redis atomicity is
- * verified separately (the dev/prod path).
- */
+/** Test-profile limiter (Docker-free): same refill/consume math as the Lua script; Redis atomicity is verified by the dev/prod path. */
 @Component
 @Profile("test")
 public class InMemoryRateLimiter implements RateLimiter {

@@ -1,9 +1,9 @@
 package com.ibrhalil.forgesys.config;
 
-import com.ibrhalil.forgesys.common.tenant.TenantContext;
 import com.ibrhalil.forgesys.persistence.repository.CompanyRepository;
 import com.ibrhalil.forgesys.persistence.repository.TenantVerificationTokenRepository;
 import com.ibrhalil.forgesys.service.UserTokenService;
+import com.ibrhalil.forgesys.tenant.TenantContextExecutor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
@@ -17,23 +17,10 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 
 /**
- * [RISK-30] Daily purge of stale single-use tokens:
- * <ol>
- *   <li>Signup verification tokens in the {@code public} schema
- *       ({@code t_tenant_verification_tokens}).</li>
- *   <li>User lifecycle tokens (email verify / password reset) in EVERY tenant schema
- *       ({@code t_auth_tokens}) — iterated with the {@code TenantMigrationRunner}
- *       set-and-restore pattern; {@link UserTokenService#purgeStaleForCurrentTenant}
- *       opens the per-tenant transaction.</li>
- * </ol>
- * Rows consumed ({@code used_at}) or expired ({@code expires_at}) more than
- * {@code forgesys.security.verification-token-retention-days} days ago are deleted.
- * Per-tenant failures are isolated (try/catch) — one broken schema never blocks the
- * rest.
- *
- * <p>The signup purge runs through the {@code self} proxy (same pattern as
- * {@code TenantProvisioningService.createAdminUser}): {@code @Scheduled} entry point
- * and transactional worker live in one class without a self-invocation trap.
+ * [RISK-30] Daily 03:00 UTC purge of stale single-use tokens: public signup tokens
+ * ({@code t_tenant_verification_tokens}) + per-tenant {@code t_auth_tokens} (set-and-restore
+ * tenant iteration, per-tenant try/catch). Rows consumed/expired more than
+ * {@code verification-token-retention-days} days ago are deleted.
  */
 @Slf4j
 @Component
@@ -49,7 +36,6 @@ public class TokenPurgeJob {
     @Value("${forgesys.security.verification-token-retention-days:7}")
     private long retentionDays;
 
-    /** Daily at 03:00 UTC (off-peak). */
     @Scheduled(cron = "0 0 3 * * *", zone = "UTC")
     public void purgeStaleTokens() {
         OffsetDateTime cutoff = OffsetDateTime.now(ZoneOffset.UTC).minusDays(retentionDays);
@@ -68,16 +54,17 @@ public class TokenPurgeJob {
     private void purgeTenantUserTokens(OffsetDateTime cutoff) {
         for (CompanyRepository.TenantSchemaView tenant : companyRepository.findAllTenantSchemas()) {
             try {
-                TenantContext.setCurrentTenant(tenant.getSchemaName());
-                int purged = userTokenService.purgeStaleForCurrentTenant(cutoff);
-                if (purged > 0) {
-                    log.info("Purged {} stale user auth tokens for tenant {}", purged, tenant.getSchemaName());
-                }
+                TenantContextExecutor.inTenantContext(tenant.getSchemaName(),
+                        () -> logPurged(userTokenService.purgeStaleForCurrentTenant(cutoff), tenant.getSchemaName()));
             } catch (Exception e) {
                 log.error("User auth token purge failed for tenant {}", tenant.getSchemaName(), e);
-            } finally {
-                TenantContext.clear();
             }
+        }
+    }
+
+    private void logPurged(int purged, String schemaName) {
+        if (purged > 0) {
+            log.info("Purged {} stale user auth tokens for tenant {}", purged, schemaName);
         }
     }
 }

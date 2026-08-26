@@ -14,12 +14,9 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Mints RS256 access tokens. Claims: {@code sub} (userId), {@code jti} (unique token
- * id — granular blacklist target, K-34), {@code email}, {@code tenant} (schema),
- * {@code authorities} (resolved permission strings), plus standard {@code iss}/
- * {@code iat}/{@code exp}. The authorities are embedded so the auth filter need not
- * hit the DB on every request; permission changes take effect on the next token issue
- * (login/refresh).
+ * Mints RS256 access tokens: sub (userId), jti (blacklist target, K-34), email, tenant,
+ * authorities + iss/iat/exp. Authorities are embedded so the filter skips the DB;
+ * permission changes apply on the next token issue (login/refresh).
  */
 @Component
 public class JwtTokenProvider {
@@ -53,8 +50,7 @@ public class JwtTokenProvider {
                 .subject(userId)
                 .claim(CLAIM_EMAIL, email)
                 .claim(CLAIM_AUTHORITIES, authorities == null ? List.of() : authorities);
-        // The tenant claim is only present when a tenant was resolved (login always
-        // resolves one via subdomain; omitted claim keeps the builder happy otherwise).
+        // Tenant claim present only when a tenant was resolved (login always resolves one).
         if (tenantSchema != null) {
             builder.claim(CLAIM_TENANT, tenantSchema);
         }

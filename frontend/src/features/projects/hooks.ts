@@ -39,14 +39,6 @@ export function useCreateProject() {
   });
 }
 
-export function useUpdateProject() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: ProjectRequest }) => projectsApi.update(id, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['projects'] }),
-  });
-}
-
 export function useDeleteProject() {
   const qc = useQueryClient();
   return useMutation({

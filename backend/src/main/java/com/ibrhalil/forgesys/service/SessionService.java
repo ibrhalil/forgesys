@@ -17,19 +17,12 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Active-session management (K-28). Reads and revokes refresh-token sessions via
- * {@link RefreshTokenStore}. Sessions are scoped to the request tenant
- * ({@link TenantContext}) and an owner user id; the self endpoints self-scope to the
- * authenticated principal, the admin endpoints take an explicit user id.
- *
- * <p>Revoke semantics: ending a session drops its refresh token <em>and</em> stamps
- * {@code UserAccount.tokenInvalidBefore} (via {@link SessionRevocationService}) so the
- * affected user's outstanding access tokens die immediately — the device is signed out on
- * its next request, not at access-token TTL. For a single-session revoke the stamp is
- * user-scoped (it is the only immediate lever available without per-session {@code jti}
- * storage), so other devices of the same user briefly 401 then recover via their
- * still-valid refresh token; the targeted device, whose refresh was dropped, is fully
- * signed out. {@link #revokeAllUserSessions} additionally drops every refresh token.
+ * Active-session management (K-28) via the refresh-token store, scoped to the request
+ * tenant + owner user. Revoke semantics: dropping the refresh alone is not enough —
+ * {@code tokenInvalidBefore} is also stamped so outstanding access tokens die now.
+ * The stamp is USER-scoped (no per-session {@code jti} storage yet): sibling devices
+ * briefly 401 then silent-refresh; the targeted device is fully signed out.
+ * Rationale: docs/CODE_NOTES.md (backend/service → SessionService).
  */
 @Service
 @RequiredArgsConstructor
@@ -41,10 +34,7 @@ public class SessionService {
     private final SessionRevocationService sessionRevocationService;
     private final AuditService auditService;
 
-    /**
-     * Lists the caller's own active sessions, flagging the one behind
-     * {@code currentRefreshToken} (the httpOnly cookie) as current.
-     */
+    /** Lists the caller's own sessions, flagging the current refresh cookie's session. */
     @Transactional(readOnly = true)
     public List<ActiveSessionResponse> listMySessions(UUID userId, String currentRefreshToken) {
         String tenant = currentTenant();
@@ -63,17 +53,14 @@ public class SessionService {
         if (!refreshTokenStore.revokeSession(userId, currentTenant(), sessionId)) {
             throw notFound();
         }
-        // Kill the user's outstanding access tokens now (not at TTL) so the device is
-        // signed out on its next request. Revoking the current device logs it out
-        // immediately; revoking another own device briefly blips the current one (401 +
-        // silent refresh) and recovers.
+        // Kill outstanding access tokens now (user-scoped stamp: siblings 401 +
+        // silent-refresh, the target device dies).
         sessionRevocationService.invalidateAccessTokens(userId);
     }
 
     /**
-     * Whether the session behind {@code presentedRefreshToken} is {@code sessionId}.
-     * Used by the self-revoke path to clear the dead refresh cookie when the caller
-     * ended their own current device.
+     * Whether the session behind {@code presentedRefreshToken} is {@code sessionId}
+     * (used to clear the dead refresh cookie on self-revoke).
      */
     public boolean isCurrentSession(String presentedRefreshToken, UUID sessionId) {
         if (presentedRefreshToken == null || presentedRefreshToken.isBlank()) {
@@ -93,11 +80,7 @@ public class SessionService {
                 .toList();
     }
 
-    /**
-     * Admin tenant-wide view: every active session across all users of the request
-     * tenant (the "all sessions" table). Each row carries its owner (userId + email) so
-     * the admin can see who is signed in where.
-     */
+    /** Tenant-wide session view; each row carries its owner (userId + email). */
     @Transactional(readOnly = true)
     public List<AdminSessionResponse> listAllSessions() {
         return refreshTokenStore.listAllSessions(currentTenant()).stream()
@@ -112,8 +95,7 @@ public class SessionService {
         if (!refreshTokenStore.revokeSession(targetUserId, currentTenant(), sessionId)) {
             throw notFound();
         }
-        // Kill the user's outstanding access tokens now (not at TTL) so the device is
-        // signed out on its next request. Sibling devices briefly 401 + silent-refresh.
+        // Kill outstanding access tokens now; sibling devices 401 + silent-refresh.
         sessionRevocationService.invalidateAccessTokens(targetUserId);
     }
 

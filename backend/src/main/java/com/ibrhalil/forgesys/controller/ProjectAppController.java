@@ -24,10 +24,9 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Custom apps nested under their APPS-type collection container (K-45 step 5) — the
- * TaskController pattern: the container must exist (404) and be an APPS container
- * (409 {@code project_type_mismatch}). Tenant-level plan limits still apply on the
- * nested create. Update/delete stay on the flat {@code /apps/{id}} surface.
+ * Custom apps nested under their APPS-type container (K-45): unknown → 404,
+ * non-APPS → 409 {@code project_type_mismatch}; tenant-level plan limits still
+ * apply. Update/delete stay on the flat {@code /apps/{id}} surface.
  */
 @RestController
 @RequestMapping("/api/v1/projects/{projectId}/apps")

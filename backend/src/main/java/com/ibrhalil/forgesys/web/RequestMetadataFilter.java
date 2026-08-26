@@ -14,24 +14,11 @@ import java.util.UUID;
 import java.util.regex.Pattern;
 
 /**
- * Captures per-request metadata (trace id, client IP, User-Agent) for every
- * request and exposes it via {@link RequestContext} (for services) and the SLF4J
- * MDC (for log correlation and {@link ApiErrorFactory}). Registered to run before
- * the tenant filter (order -102) and the Spring Security chain (-100), so error
- * responses produced downstream carry a stable trace id.
- *
- * <p>The trace id is taken from the {@code X-Request-Id} header when present and
- * well-formed (alphanumeric, dots, dashes, underscores; max 128 chars &mdash;
- * prevents MDC / log forging); otherwise a fresh UUID is generated. The client
- * IP prefers {@code X-Forwarded-For} (first hop) then {@code X-Real-IP}, falling
- * back to {@link HttpServletRequest#getRemoteAddr()}; the platform runs behind a
- * trusted reverse proxy in prod (K-33 topology), so forwarded headers are
- * trusted.
- *
- * <p>Both {@link RequestContext} and the MDC are cleared in {@code finally} so the
- * values never leak across reused request threads. There is no
- * {@code shouldNotFilter} override: request metadata is useful for every path,
- * including actuator and public auth endpoints.
+ * Captures per-request metadata (trace id, client IP, User-Agent) into
+ * {@link RequestContext} + MDC for every request (K-19). Order -102 — before the
+ * tenant filter (-101) and security chain (-100) — so downstream errors carry a
+ * stable trace id; ThreadLocals cleared in {@code finally}.
+ * rationale: docs/CODE_NOTES.md (backend/web → RequestMetadataFilter)
  */
 @Component
 public class RequestMetadataFilter extends OncePerRequestFilter {
@@ -43,10 +30,10 @@ public class RequestMetadataFilter extends OncePerRequestFilter {
     private static final String REAL_IP = "X-Real-IP";
     private static final String USER_AGENT = "User-Agent";
 
-    /** Accept only safe, bounded trace ids to avoid MDC / log forging. */
+    // Bounded charset/length — prevents MDC / log forging via a hostile header.
     private static final Pattern TRACE_ID_PATTERN = Pattern.compile("^[A-Za-z0-9._-]{1,128}$");
 
-    /** Matches {@code t_login_history.user_agent} / {@code t_audit_logs}-adjacent limits. */
+    // Matches the t_login_history.user_agent column limit.
     private static final int USER_AGENT_MAX = 500;
 
     @Override
@@ -75,7 +62,7 @@ public class RequestMetadataFilter extends OncePerRequestFilter {
     String resolveClientIp(HttpServletRequest request) {
         String forwarded = request.getHeader(FORWARDED_FOR);
         if (forwarded != null && !forwarded.isBlank()) {
-            // "client, proxy1, proxy2" &mdash; the first token is the originating client.
+            // "client, proxy1, proxy2" — the first token is the originating client.
             String first = forwarded.split(",")[0].trim();
             if (!first.isEmpty()) {
                 return first;

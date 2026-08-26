@@ -28,9 +28,8 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Flat note-category surface (K-44, re-scoped by K-45): the cross-container list —
- * {@code ?projectId=} narrows it. Container-nested reads/writes live on
- * {@link ProjectNoteCategoryController}.
+ * Flat cross-container note-category surface (K-44/K-45); container-nested
+ * reads/writes live on {@link ProjectNoteCategoryController}.
  */
 @RestController
 @RequestMapping("/api/v1/note-categories")
@@ -51,10 +50,7 @@ public class NoteCategoryController {
                 noteCategoryService.search(q, qFields, projectId, pageable)));
     }
 
-    /**
-     * Filter-engine variant of the list: paging + multi-sort + structured filters +
-     * global {@code q} (optionally narrowed via {@code qFields}) in one POST body.
-     */
+    /** Filter-engine variant of the list: paging + multi-sort + filters + {@code q} in one POST body. */
     @PostMapping("/search")
     @PreAuthorize("hasAuthority('notes:category:read')")
     public ResponseEntity<PageResponse<NoteCategoryResponse>> search(@Valid @RequestBody SearchRequest request) {

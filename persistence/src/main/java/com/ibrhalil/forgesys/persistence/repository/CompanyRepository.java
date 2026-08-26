@@ -15,10 +15,7 @@ public interface CompanyRepository extends JpaRepository<Company, UUID> {
 
     Optional<Company> findBySchemaName(String schemaName);
 
-    /**
-     * Lightweight tenant listing for the startup runners (K-40) — no entity
-     * hydration, cost does not grow with entity graph size.
-     */
+    /** Lightweight tenant listing for the startup runners (K-40) — no entity hydration. */
     @Query("select c.id as id, c.schemaName as schemaName, c.status as status from Company c")
     List<TenantSchemaView> findAllTenantSchemas();
 

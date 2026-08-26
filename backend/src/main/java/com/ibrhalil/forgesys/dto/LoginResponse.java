@@ -4,18 +4,9 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Successful login/refresh response. The access token is also delivered via an
- * httpOnly cookie ({@code sf_access_token}) and the refresh token via
- * {@code sf_refresh_token}; the body copies let non-browser clients use them.
- *
- * @param accessToken  RS256 JWT (also set as a cookie)
- * @param refreshToken opaque refresh token (also set as a cookie); {@code null} on the
- *                     {@code /me} shape — present on login and refresh
- * @param tokenType    always {@code Bearer}
- * @param expiresIn    access-token lifetime in seconds
- * @param userId       authenticated user id
- * @param email        authenticated user email
- * @param authorities  effective permissions ({module}:{resource}:{action})
+ * Login/refresh response. Tokens are ALSO set as httpOnly cookies
+ * ({@code sf_access_token} / {@code sf_refresh_token}) — body copies serve
+ * non-browser clients; {@code refreshToken} is null on the /me shape.
  */
 public record LoginResponse(
         String accessToken,

@@ -40,15 +40,9 @@ export function GroupsPage() {
     filters,
     setFilters,
     q,
+    listParams,
   } = useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'groups' });
-  const { data, isLoading, isFetching } = useGroups({
-    page,
-    size: pageSize,
-    sorts: [sort],
-    q: q || undefined,
-    qFields: searchFields.length ? searchFields : undefined,
-    filters: filters.length ? filters : undefined,
-  });
+  const { data, isLoading, isFetching } = useGroups(listParams);
   const delGroup = useDeleteGroup();
   const canWrite = useAuthStore((s) => s.hasAuthority(PERMISSIONS.GROUP_WRITE));
   const canDelete = useAuthStore((s) => s.hasAuthority(PERMISSIONS.GROUP_DELETE));

@@ -29,14 +29,12 @@ public class TenantMigrationSupport {
     }
 
     /**
-     * Runs a module's own tenant migrations ({@code db/migration/module/{key}}) in
-     * the given tenant schema against a module-scoped history table
-     * ({@code flyway_schema_history_mod_{key}}) — isolated from the core tenant history,
-     * so module versions never collide with core versions and each module versions
-     * independently from V1 (K-16 / Epic 3.0.A). Module locations deliberately live
-     * OUTSIDE {@code db/migration/tenant} (recursive scan would swallow them into the
-     * core history). Modules whose tables ship in the core tenant baseline
-     * ({@link ModuleDefinition#flywayLocation()} == {@code null}) are a no-op.
+     * Runs a module's own migrations ({@code db/migration/module/{key}}) against a
+     * module-scoped history table ({@code flyway_schema_history_mod_<key>}) — module
+     * versions never collide with core versions (K-16). Module locations deliberately
+     * live OUTSIDE {@code db/migration/tenant} (a recursive scan would swallow them
+     * into the core history). Null {@link ModuleDefinition#flywayLocation()} = no-op
+     * (tables ship in the core tenant baseline).
      */
     public void migrateModule(String schemaName, ModuleDefinition module) {
         String location = module.flywayLocation();
@@ -49,12 +47,9 @@ public class TenantMigrationSupport {
                 .schemas(schemaName)
                 .locations(location)
                 .table(MODULE_HISTORY_TABLE_PATTERN.formatted(module.key()))
-                // The tenant schema is always non-empty when a module activates (core
-                // tables + core history exist), and the module history table does not
-                // exist yet on first activation — Flyway demands a baseline in that
-                // state. Baseline version 0 records "nothing applied" and skips NOTHING:
-                // every module migration (V1+) still runs. (Unlike the core history,
-                // where baselineOnMigrate is intentionally avoided — K-36.)
+                // baselineOnMigrate + version 0: the schema is non-empty but the module
+                // history table isn't — Flyway demands a baseline there. Version 0 records
+                // "nothing applied" and skips NOTHING (unlike the core history — K-36).
                 .baselineOnMigrate(true)
                 .baselineVersion("0")
                 .load();

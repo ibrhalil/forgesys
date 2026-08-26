@@ -73,9 +73,8 @@ public class PermissionService {
         permission.setName(request.name());
         permission.setDescription(request.description());
         Permission saved = permissionRepository.save(permission);
-        // A new permission joins the all-permissions set, so holders of an all-permissions
-        // role (Admin + any "ALL" role) should see it on their next request rather than at
-        // their access-token TTL — their outstanding tokens still embed the prior snapshot.
+        // A new permission joins the all-permissions set — refresh all-permissions
+        // holders' tokens now, not at their access-token TTL.
         sessionRevocationService.revokeAllPermissionsRoleHolders();
         return toResponse(saved);
     }
@@ -91,8 +90,7 @@ public class PermissionService {
         permission.setName(request.name());
         permission.setDescription(request.description());
         Permission saved = permissionRepository.save(permission);
-        // A rename changes the authority string every all-permissions user carries, so
-        // refresh their tokens to embed the new name (same rationale as create).
+        // A rename changes every all-permissions user's authority string — same refresh rationale.
         if (renamed) {
             sessionRevocationService.revokeAllPermissionsRoleHolders();
         }
@@ -100,10 +98,8 @@ public class PermissionService {
     }
 
     /**
-     * Blocks while the permission is still assigned to any role ({@code isInUse}). A
-     * permission in use is part of the live RBAC graph: deleting it would silently
-     * shrink every bearer's authority set. Callers must unassign it from all roles first
-     * (which already triggers session revoke via {@code RoleService.setPermissions}).
+     * Blocks while still assigned to any role ({@code permission_in_use}, 409) —
+     * deletion would silently shrink every bearer's authority set; unassign first.
      */
     @Transactional
     @AuditLog(action = "permission_deleted", entityType = "Permission", entityId = "#id", entityName = "")

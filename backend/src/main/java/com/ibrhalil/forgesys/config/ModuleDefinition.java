@@ -6,29 +6,13 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Code-side registry of platform modules (K-16 / Epic 3.0.A). The single source of truth
- * for module metadata — replaces a {@code t_module_catalog} DB table on purpose: a module
- * is code (entities, services, migrations), so its registry entry must ship with the code
- * and cannot drift from it. {@code t_tenant_modules} stores only the per-tenant activation
- * state keyed by {@link #key}.
- *
- * <ul>
- *   <li>{@code minPlan} — the cheapest {@link PlanDefinition} that may activate the module;
- *       activation checks tenant plan rank &gt;= module min rank.</li>
- *   <li>{@code ownMigrations} — whether the module ships its own tenant migrations under
- *       {@code db/migration/module/{key}} (run with a module-scoped Flyway history
- *       table, isolated from the core tenant history). {@code false} = tables already ship
- *       in the core tenant baseline (true for {@code pm}, whose tables predate the module
- *       system). NOTE: module locations MUST live OUTSIDE {@code db/migration/tenant} —
- *       Flyway location scanning is recursive and would swallow module versions into the
- *       core tenant history (duplicate-version collisions).</li>
- *   <li>{@code projectType} — the {@link ProjectType} whose content this module supplies
- *       inside a typed project container (K-45). The creatable type catalog derives from
- *       the tenant's ACTIVE modules; a module without a container-facing type carries
- *       {@code null}.</li>
- *   <li>{@code permissions} — the module's permission definitions, seeded into the tenant's
- *       {@code t_permissions} on activation (and re-synced at startup for activated modules).</li>
- * </ul>
+ * Code-side registry of platform modules (K-16) — a module is code (entities, services,
+ * migrations), so its metadata ships with the code; {@code t_tenant_modules} stores only
+ * per-tenant activation state keyed by {@link #key}. {@code minPlan} gates activation
+ * (plan rank &gt;= module rank); {@code ownMigrations} = module ships tenant migrations
+ * under {@code db/migration/module/{key}} with a module-scoped Flyway history. WARNING:
+ * module locations MUST live OUTSIDE {@code db/migration/tenant} — recursive Flyway
+ * scanning would swallow module versions into the core history (duplicate versions).
  */
 public enum ModuleDefinition {
 
@@ -42,12 +26,9 @@ public enum ModuleDefinition {
     )),
 
     /**
-     * Custom App Builder (K-15 / Epic 3.0.B). The first module with {@code ownMigrations
-     * = true}: its tables ship under {@code db/migration/module/apps} and land in the
-     * tenant schema on activation (per-module Flyway history {@code
-     * flyway_schema_history_mod_apps}). {@code minPlan = FREE} — adoption is the point;
-     * plans separate by the {@link PlanDefinition} limits (maxApps / maxRecordsPerApp),
-     * enforced as a soft-block.
+     * First {@code ownMigrations=true} module: tables under {@code db/migration/module/apps},
+     * history {@code flyway_schema_history_mod_apps}. {@code minPlan=FREE} — tiers separate
+     * by plan limits (maxApps/maxRecordsPerApp, soft-block).
      */
     APPS("apps", "Custom App Builder", PlanDefinition.FREE, true, ProjectType.APPS, List.of(
             new PermissionCatalog.PermissionDefinition(PermissionCatalog.APPS_APP_READ, "Read tenant custom apps (definitions, properties, views)"),
@@ -58,15 +39,7 @@ public enum ModuleDefinition {
             new PermissionCatalog.PermissionDefinition(PermissionCatalog.APPS_RECORD_DELETE, "Delete custom app records")
     )),
 
-    /**
-     * Notes (K-44 / Epic 3.2) — standalone tenant-shared notes with categories and
-     * markdown content. {@code ownMigrations = true} (the APPS pattern): tables ship
-     * under {@code db/migration/module/notes} and land in the tenant schema on
-     * activation (per-module history {@code flyway_schema_history_mod_notes}).
-     * {@code minPlan = FREE}, no plan limits (pm convention). Visibility is
-     * tenant-shared ({@code notes:note:read} sees all tenant notes) — personal/ABAC
-     * notes were consciously deferred.
-     */
+    /** K-44: {@code ownMigrations=true} ({@code db/migration/module/notes}); visibility tenant-shared, personal/ABAC deferred. */
     NOTES("notes", "Notes", PlanDefinition.FREE, true, ProjectType.NOTES, List.of(
             new PermissionCatalog.PermissionDefinition(PermissionCatalog.NOTES_NOTE_READ, "Read tenant notes"),
             new PermissionCatalog.PermissionDefinition(PermissionCatalog.NOTES_NOTE_WRITE, "Create or update tenant notes"),
@@ -116,10 +89,7 @@ public enum ModuleDefinition {
         return permissions;
     }
 
-    /**
-     * Flyway location for the module's own tenant migrations, or {@code null} when the
-     * module's tables ship in the core tenant baseline (nothing extra to run).
-     */
+    /** Module migration location, or null when its tables ship in the core tenant baseline. */
     public String flywayLocation() {
         return ownMigrations ? FLYWAY_LOCATION_PATTERN.formatted(key) : null;
     }

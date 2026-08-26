@@ -13,11 +13,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Component;
 
-/**
- * Read side of the permission list (K-49): a flat, join-less Criteria DTO projection
- * over {@code t_permissions} — DTO rows instead of managed entities, running through
- * the shared filter engine like every other list.
- */
+/** Permission list read side (K-49): flat, join-less DTO projection. */
 @Component
 public class PermissionListQueryExecutor {
 

@@ -10,10 +10,9 @@ import java.util.Locale;
 import java.util.UUID;
 
 /**
- * Parses a wire string into the typed value a filter predicate needs, per the field's
- * registered {@link FilterFieldType}. Every parse failure is a 400
- * {@code validation_error} naming the field — an unparseable value must never surface
- * as a 500 or silently match nothing ([RISK-29] semantics).
+ * Parses a wire string into the typed value a filter predicate needs, per the
+ * field's {@link FilterFieldType}. Parse failure is always 400
+ * {@code validation_error} naming the field, never a 500 or a silent non-match.
  */
 final class FilterValueParser {
 

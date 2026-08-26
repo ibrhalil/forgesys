@@ -8,11 +8,9 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 
 /**
- * Maps a {@link SearchRequest} onto a {@link Pageable}, running the resulting sort
- * through {@link SortGuard} against the feature's {@link FilterFieldSet} — sorting a
- * POST /search body gets the same whitelist treatment as sorting the GET lists, so no
- * property-path injection path exists on either surface. Page/size bounds are enforced
- * upstream by Bean Validation on the DTO.
+ * Maps a {@link SearchRequest} onto a {@link Pageable}, running the sort through
+ * {@link SortGuard} — POST /search bodies get the same sort whitelist as the GET
+ * lists, so no property-path injection path exists on either surface.
  */
 public final class SearchRequests {
 

@@ -8,12 +8,10 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 /**
- * Create/update a property (column) of a custom app (K-15 / Epic 3.0.B). {@code type}
- * is immutable after creation (existing values would be meaningless after a change);
- * renaming or reconfiguring is allowed. {@code position} is optional: absent on
- * create appends at the end (max+1), absent on update keeps the current value.
- * {@code required} keeps its wrapper + compact-constructor default (Jackson 3 fails
- * null-into-primitive mapping for absent fields).
+ * Create/update a property (column) of a custom app (K-15). {@code type} is
+ * immutable after creation; {@code position} absent appends on create / keeps
+ * current on update. The {@code required} wrapper + compact-constructor default
+ * exists because Jackson 3 fails null-into-primitive mapping for absent fields.
  */
 public record AppPropertyRequest(
         @NotBlank(message = "Property name is required")

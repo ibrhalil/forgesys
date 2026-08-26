@@ -20,8 +20,8 @@ export interface ColumnFilterSpec {
   /** Fixed options for `select`/`multiselect` controls. */
   options?: SelectOption<string>[];
   /**
-   * Async option loader for `select`/`multiselect` (e.g. role/group membership
-   * pickers) — ignored when `options` is provided.
+   * Async option loader for `select`/`multiselect` (e.g. membership pickers) —
+   * ignored when `options` is provided.
    */
   optionsLoader?: (input: string) => Promise<SelectOption<string>[]>;
 }
@@ -68,12 +68,11 @@ interface ColumnFilterButtonProps {
 }
 
 /**
- * Per-column structured-filter trigger for DataTable headers (K-49): a small popover
- * with an operator select plus a type-appropriate value control, producing a backend
- * {@link FilterCriteria}. The state is controlled by the page (via
- * `useListPageState.filters`); clearing removes the clause. The popover renders as a
- * fixed-position body portal (like RowMenu/SelectInput menus) so container overflow
- * cannot clip it on short tables, and flips above the trigger near the viewport bottom.
+ * Per-column structured-filter trigger for DataTable headers (K-49): operator
+ * select + type-appropriate value control producing a backend {@link FilterCriteria}.
+ * State is controlled by the page (`useListPageState.filters`). The popover renders
+ * as a fixed-position body portal (z-60 of the menu scale) so overflow cannot clip
+ * it, and flips above the trigger near the viewport bottom.
  */
 export function ColumnFilterButton({ spec, header, active, onChange }: ColumnFilterButtonProps) {
   const { t } = useT();
@@ -134,9 +133,7 @@ export function ColumnFilterButton({ spec, header, active, onChange }: ColumnFil
       }
     };
     // Any scroll outside the popover (incl. the table's overflow-x container) closes
-    // it — simpler and more predictable than repositioning a fixed portal (same
-    // trade-off as RowMenu). Scrolls inside the panel or a SelectInput option menu
-    // keep the draft intact.
+    // it — simpler than repositioning a fixed portal (same trade-off as RowMenu).
     const onScroll = (e: Event) => {
       if (!(e.target instanceof HTMLElement) || !insideFilterSurface(e.target)) setOpen(false);
     };

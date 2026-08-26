@@ -11,12 +11,9 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * CORS configuration. {@code allowCredentials=true} is required because auth is
- * cookie-based (Chunk D sets an httpOnly cookie), which means the explicit
- * origin list cannot use the {@code *} wildcard.
- *
- * <p>Origins are configurable via {@code forgesys.security.cors.allowed-origins}
- * (comma-separated); the default covers the Vite dev server.
+ * CORS: {@code allowCredentials=true} is required by cookie-based auth, which forbids
+ * the {@code *} wildcard — explicit origin list via
+ * {@code forgesys.security.cors.allowed-origins} (default covers the Vite dev server).
  */
 @Configuration
 public class CorsConfig {

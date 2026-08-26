@@ -27,24 +27,15 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Read side of the audit subsystem (K-19). Returns paged views over a tenant's
- * {@code t_audit_logs} and {@code t_login_history}; the controller guards both with
- * {@code iam:audit:read}. Mapping to response records keeps the entity shape out of
- * the API contract.
- *
- * <p>The GET filter parameters are translated into filter-engine
- * {@link FilterCriteria} clauses and combined (AND) through the shared
- * {@link FilterSpecifications} machinery — no more first-match dispatch, so filters
- * compose and the engine is exercised by real traffic on every audit read.
+ * Read side of the audit subsystem (K-19): paged views over {@code t_audit_logs} +
+ * {@code t_login_history} ({@code iam:audit:read} in the controller). GET params are
+ * translated into filter-engine {@link FilterCriteria} clauses and AND-combined.
  */
 @Service
 @RequiredArgsConstructor
 public class AuditQueryService {
 
-    /**
-     * Filterable/sortable attributes of the audit log (K-49 — every displayed column);
-     * {@code q} matches actor/entity names, the action key, IP and trace id.
-     */
+    /** Filterable/sortable audit-log attributes (K-49); {@code q} matches actor/entity names, action, IP, trace id. */
     public static final FilterFieldSet AUDIT_LOG_FIELDS = FilterFieldSet.builder()
             .field(AuditLog_.ACTION, FilterFieldType.STRING, true)
             .field(AuditLog_.ENTITY_TYPE, FilterFieldType.STRING, false)
@@ -58,10 +49,7 @@ public class AuditQueryService {
             .field(AuditEntity_.UPDATED_AT, FilterFieldType.TEMPORAL, false)
             .build();
 
-    /**
-     * Filterable/sortable attributes of the login history (K-49 — every displayed
-     * column); {@code q} matches {@code username}, {@code reason}, IP and user agent.
-     */
+    /** Filterable/sortable login-history attributes (K-49); {@code q} matches username, reason, IP, user agent. */
     public static final FilterFieldSet LOGIN_HISTORY_FIELDS = FilterFieldSet.builder()
             .field(LoginHistory_.USER_ID, FilterFieldType.UUID, false)
             .field(LoginHistory_.USERNAME, FilterFieldType.STRING, true)

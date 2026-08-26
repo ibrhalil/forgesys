@@ -13,12 +13,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Component;
 
-/**
- * Read side of the project task list (K-49): flat Criteria DTO projection through the
- * shared filter engine — the list gains {@code q} search, structured filters and the
- * {@code dueDate} (DATE) / {@code assigneeId} / {@code description} columns the kanban
- * board renders. The project scoping predicate is supplied by the caller.
- */
+/** Project task list read side (K-49); the project scoping predicate comes from the caller. */
 @Component
 public class TaskListQueryExecutor {
 

@@ -13,11 +13,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Component;
 
-/**
- * Read side of the note-category list (K-49): flat, join-less Criteria DTO projection
- * over {@code t_note_categories} through the shared filter engine (adds {@code color}
- * as a filterable/sortable column).
- */
+/** Note-category list read side (K-49): flat, join-less projection ({@code color} filterable). */
 @Component
 public class NoteCategoryListQueryExecutor {
 

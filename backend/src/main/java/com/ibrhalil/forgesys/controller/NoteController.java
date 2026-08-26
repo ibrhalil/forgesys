@@ -29,10 +29,9 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Flat note surface (K-44, re-scoped by K-45): the cross-container list —
- * {@code ?projectId=} narrows it to one container. Writes without an explicit
- * {@code projectId} land in the tenant's default NOTES container. Container-nested
- * reads/writes live on {@link ProjectNoteController}.
+ * Flat cross-container note surface (K-44/K-45): {@code ?projectId=} narrows the
+ * list; writes without a {@code projectId} land in the default NOTES container.
+ * Container-nested reads/writes live on {@link ProjectNoteController}.
  */
 @RestController
 @RequestMapping("/api/v1/notes")
@@ -55,10 +54,7 @@ public class NoteController {
                 noteService.search(q, qFields, categoryId, pinned, projectId, pageable)));
     }
 
-    /**
-     * Filter-engine variant of the list: paging + multi-sort + structured filters +
-     * global {@code q} (optionally narrowed via {@code qFields}) in one POST body.
-     */
+    /** Filter-engine variant of the list: paging + multi-sort + filters + {@code q} in one POST body. */
     @PostMapping("/search")
     @PreAuthorize("hasAuthority('notes:note:read')")
     public ResponseEntity<PageResponse<NoteResponse>> search(@Valid @RequestBody SearchRequest request) {

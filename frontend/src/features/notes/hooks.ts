@@ -55,24 +55,3 @@ export function useCreateNoteCategory() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['note-categories'] }),
   });
 }
-
-export function useUpdateNoteCategory() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: NoteCategoryRequest }) =>
-      noteCategoriesApi.update(id, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['note-categories'] }),
-  });
-}
-
-export function useDeleteNoteCategory() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => noteCategoriesApi.delete(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['note-categories'] });
-      // Notes keep living (uncategorized) — refresh their rows too.
-      qc.invalidateQueries({ queryKey: ['notes'] });
-    },
-  });
-}

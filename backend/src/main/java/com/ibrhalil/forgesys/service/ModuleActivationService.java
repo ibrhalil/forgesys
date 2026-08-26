@@ -20,6 +20,7 @@ import com.ibrhalil.forgesys.persistence.repository.CompanyRepository;
 import com.ibrhalil.forgesys.persistence.repository.PermissionRepository;
 import com.ibrhalil.forgesys.persistence.repository.ProjectRepository;
 import com.ibrhalil.forgesys.persistence.repository.TenantModuleRepository;
+import com.ibrhalil.forgesys.tenant.TenantContextExecutor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
@@ -36,21 +37,12 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * Module activation (K-16 / Epic 3.0.A): plan check -&gt; module tenant migration -&gt;
- * permission seed -&gt; activation record. The activation record is written LAST — every
- * step before it is idempotent (Flyway history, ensure-permission), so a partial failure
- * is recovered by simply retrying (the DEBT-10 model).
- *
- * <p><strong>Transaction/session split (RISK-26, FK-deadlock avoidance):</strong> the
- * public-schema writes (checks, activation record) <em>join the caller's transaction</em>
- * — an activation triggered from tenant provisioning must insert its {@code t_tenant_modules}
- * row into the same transaction that holds the (not yet committed) {@code Company}, or the
- * FK would block on the uncommitted parent. Only the <em>permission seed</em> runs
- * {@code REQUIRES_NEW} on PostgreSQL, because it writes the <em>tenant</em> schema and the
- * provisioning outer session is pinned to {@code public} (the session resolves its schema
- * at open — RISK-26). {@link #activateForCompany}/{@link #resyncForCompany} wrap everything
- * in a set-and-restore {@link TenantContext} window so the REQUIRES_NEW seed and the audit
- * write resolve the tenant schema regardless of the caller's own context.
+ * Module activation (K-16): plan check → module tenant migration → permission seed →
+ * activation record (LAST — every earlier step is idempotent, so partial failure is
+ * recovered by retrying). Public-schema writes JOIN the caller's tx (an activation
+ * under provisioning would FK-block on the uncommitted Company); only the tenant-schema
+ * writes run REQUIRES_NEW (the outer session is public-pinned, RISK-26).
+ * Rationale: docs/CODE_NOTES.md (backend/service → ModuleActivationService).
  */
 @Slf4j
 @Service
@@ -73,11 +65,8 @@ public class ModuleActivationService {
     private final ObjectProvider<ModuleProperties> modulePropertiesProvider;
 
     /**
-     * Catalog listing for the current tenant (resolved from {@link TenantContext}):
-     * every {@link ModuleDefinition} with its activation state and plan eligibility.
-     * A tenant without an active subscription still gets the catalog with
-     * {@code allowedByPlan=false} (activation itself rejects with
-     * {@link ErrorCode#SUBSCRIPTION_NOT_FOUND}).
+     * Catalog listing with activation state + plan eligibility; a no-subscription
+     * tenant still gets the catalog with {@code allowedByPlan=false}.
      */
     @Transactional(readOnly = true)
     public List<ModuleResponse> listModules() {
@@ -95,12 +84,7 @@ public class ModuleActivationService {
                 .toList();
     }
 
-    /**
-     * Activates a module for the current tenant (HTTP path — module key from the
-     * request). Transactional so the activation record lands atomically; the session
-     * opens against the filter-set tenant context. Idempotent: an already-ACTIVE module
-     * returns success without redoing the work.
-     */
+    /** Activates by key (HTTP path); idempotent — an already-ACTIVE module is a no-op success. */
     @Transactional
     public ModuleResponse activate(String moduleKey) {
         ModuleDefinition module = ModuleDefinition.fromKey(moduleKey)
@@ -113,9 +97,8 @@ public class ModuleActivationService {
 
     /**
      * Activates the configured default modules ({@code forgesys.modules.default-keys})
-     * for a company — the single default-set entry point used by tenant provisioning
-     * (K-21 verify) and {@code ModuleSyncRunner} backfill. Unknown keys are logged and
-     * skipped; each activation is idempotent. Participates in the caller's transaction.
+     * for a company — the single default-set entry point (provisioning + sync runner).
+     * Unknown keys are logged + skipped; participates in the caller's transaction.
      */
     public void activateDefaultModules(Company company) {
         ModuleProperties properties = modulePropertiesProvider.getIfAvailable(() -> new ModuleProperties(null));
@@ -127,34 +110,24 @@ public class ModuleActivationService {
     }
 
     /**
-     * Activates a module for a known company (HTTP path, tenant provisioning,
-     * {@code ModuleSyncRunner}). Runs inside a set-and-restore {@link TenantContext}
-     * window (preserving the caller's context); public-schema writes join the caller's
-     * transaction, the permission seed opens its own (see class javadoc). Idempotent —
-     * returns the existing row for an already-ACTIVE module.
+     * Activates for a known company inside a set-and-restore {@link TenantContext}
+     * window; idempotent (returns the existing row when already ACTIVE).
      */
     public TenantModule activateForCompany(Company company, ModuleDefinition module) {
-        return inTenantContext(company, () -> doActivateForCompany(company, module));
+        return TenantContextExecutor.inTenantContext(company.getSchemaName(), () -> doActivateForCompany(company, module));
     }
 
-    /**
-     * Re-applies a module's migrations and permission seed to an ALREADY-activated
-     * tenant (used by {@code ModuleSyncRunner} so newly shipped module migrations /
-     * permissions propagate to existing tenants). Does not touch the activation record.
-     */
+    /** Re-applies migrations + permission seed to an ALREADY-activated tenant (ModuleSyncRunner). */
     public void resyncForCompany(Company company, ModuleDefinition module) {
-        inTenantContext(company, () -> {
+        TenantContextExecutor.inTenantContext(company.getSchemaName(), () -> {
             tenantMigrationSupport.migrateModule(company.getSchemaName(), module);
             self.getObject().seedModulePermissionsInNewTx(module);
-            return null;
         });
     }
 
     /**
-     * The activation flow. NOT transactional on its own — the caller's transaction
-     * scopes the public-schema writes (see class javadoc for why the record must join
-     * the provisioning transaction). Order: gate checks first, idempotent DDL +
-     * permission seed next, activation record LAST (partial failure is retriable).
+     * The activation flow. NOT transactional on its own — the caller's tx scopes the
+     * public-schema writes. Order: gates first, idempotent DDL + seeds next, record LAST.
      */
     @AuditLog(action = "module_activated", entityType = "Module", entityId = "#result.id", entityName = "#module.displayName()")
     public TenantModule doActivateForCompany(Company company, ModuleDefinition module) {
@@ -185,9 +158,8 @@ public class ModuleActivationService {
     }
 
     /**
-     * Permission seed in its own transaction — the ONLY tenant-schema write, isolated
-     * so it resolves the tenant schema regardless of the caller's (possibly
-     * {@code public}-pinned) outer session. Called through the self proxy.
+     * REQUIRES_NEW — the ONLY tenant-schema write, isolated so it resolves the tenant
+     * schema even under a {@code public}-pinned caller session.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void seedModulePermissionsInNewTx(ModuleDefinition module) {
@@ -203,13 +175,10 @@ public class ModuleActivationService {
     }
 
     /**
-     * Ensures the module's per-type default container ("Genel", K-45) exists — the
-     * migration already did the work on PostgreSQL (this becomes a no-op); this path
-     * covers re-activation after the default was soft-deleted and schemas where the
-     * module migration is a no-op. Content-collection types only (NOTES/APPS): a
-     * TASKS default would be meaningless noise — task boards are created explicitly.
-     * Same REQUIRES_NEW isolation as the permission seed (tenant-schema write under a
-     * possibly {@code public}-pinned caller session).
+     * Ensures the module's per-type default "Genel" container (K-45) — covers
+     * re-activation after a soft-delete and migration no-op schemas. Content-collection
+     * types only (a TASKS default would be meaningless noise). Same REQUIRES_NEW
+     * isolation as the permission seed.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void ensureDefaultProjectInNewTx(ModuleDefinition module) {
@@ -232,12 +201,8 @@ public class ModuleActivationService {
     }
 
     /**
-     * Rank of the tenant's ACTIVE subscription plan; empty when no subscription row
-     * exists or it is not ACTIVE (degraded state — list endpoints show it, activation
-     * rejects). Delegates to {@link PlanLimitService#tryActivePlan(Company)} — the
-     * single plan-resolution chain (K-40); the rank comes from the code-side
-     * {@link PlanDefinition} registry ({@code PlanSyncRunner} upserts the same values
-     * into {@code t_plans}).
+     * Rank of the ACTIVE subscription plan; empty in degraded states (list shows it,
+     * activation rejects). Single K-40 resolution chain via {@link PlanLimitService}.
      */
     private Optional<Integer> activePlanRank(Company company) {
         return planLimitService.tryActivePlan(company).map(PlanDefinition::rank);
@@ -248,16 +213,5 @@ public class ModuleActivationService {
                 .orElseThrow(() -> new TenantNotFoundException("Tenant context is not set"));
         return companyRepository.findBySchemaName(schemaName)
                 .orElseThrow(() -> new TenantNotFoundException("Unknown tenant schema: " + schemaName));
-    }
-
-    /** Runs the action inside the company's tenant context, restoring the caller's context afterward. */
-    private <T> T inTenantContext(Company company, java.util.function.Supplier<T> action) {
-        Optional<String> previous = TenantContext.getCurrentTenant();
-        TenantContext.setCurrentTenant(company.getSchemaName());
-        try {
-            return action.get();
-        } finally {
-            previous.ifPresentOrElse(TenantContext::setCurrentTenant, TenantContext::clear);
-        }
     }
 }

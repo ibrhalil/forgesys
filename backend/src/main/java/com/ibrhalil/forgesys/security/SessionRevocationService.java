@@ -20,22 +20,10 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Immediate session revocation for one or more users (Faz 1 — privilege-change revoke).
- *
- * <p>Authorities are embedded in the access token at issue time, so a role / permission /
- * group mutation otherwise keeps the affected users' tokens authoritative until the next
- * access-token issue (login / refresh) — up to the token TTL. To close that
- * privilege-retention window this service stamps {@code UserAccount.tokenInvalidBefore}
- * for every affected user (kills all outstanding access tokens — user-scoped revoke,
- * [RISK-21]) and drops their refresh tokens ({@link RefreshTokenStore#revokeAllForUser})
- * so a stolen refresh cannot mint a fresh access token whose {@code iat} post-dates the
- * revoke. The result: a revoked permission is enforced on the very next request, not at
- * TTL.
- *
- * <p>Caller responsibilities: resolve <em>who is affected</em> ({@link #revokeRoleHolders}
- * / {@link #revokeGroupMembers}) or pass explicit ids. The bulk access-token stamp is a
- * single conditional UPDATE (see {@code UserRepository.bulkSetTokenInvalidBefore}); the
- * refresh revoke is per-user (Redis) since the store is keyed per user.
+ * Immediate session revocation for privilege changes (Faz 1): stamps
+ * {@code UserAccount.tokenInvalidBefore} (kills outstanding access tokens, RISK-21) and
+ * drops refresh tokens so the revoked permission is enforced on the next request, not at TTL.
+ * rationale: docs/CODE_NOTES.md (backend/security → SessionRevocationService)
  */
 @Slf4j
 @Service
@@ -64,14 +52,9 @@ public class SessionRevocationService {
     }
 
     /**
-     * Stamps {@code UserAccount.tokenInvalidBefore = now} for a single user, killing all
-     * of the user's outstanding access tokens (their {@code iat} will precede the stamp)
-     * <em>without</em> touching refresh tokens. Used by single-session admin revoke so the
-     * targeted device's access token dies immediately (the device's own refresh token was
-     * already dropped) — the device is signed out on its next request rather than at
-     * access-token TTL. Other devices of the same user eat a single 401 + silent refresh
-     * (their refresh tokens are still valid) and recover automatically, so this is a
-     * momentary blip for siblings, not a sign-out.
+     * Stamps {@code tokenInvalidBefore} for one user WITHOUT touching refresh tokens —
+     * sibling devices eat a single 401 + silent refresh and recover; only the targeted
+     * (already-refresh-revoked) device is signed out.
      */
     @Transactional
     public void invalidateAccessTokens(UUID userId) {
@@ -81,12 +64,7 @@ public class SessionRevocationService {
         userRepository.bulkSetTokenInvalidBefore(List.of(userId), OffsetDateTime.now());
     }
 
-    /**
-     * Revokes sessions for every user in {@code userIds}: stamps
-     * {@code tokenInvalidBefore} and drops refresh tokens. Nulls and duplicates are
-     * collapsed; empty / blank input is a no-op. Refresh revoke only fires when a tenant
-     * is bound (the refresh store is tenant-scoped).
-     */
+    /** Stamps {@code tokenInvalidBefore} + drops refresh tokens; nulls/duplicates collapsed, empty input no-op. */
     @Transactional
     public void revokeUsers(Collection<UUID> userIds) {
         if (userIds == null) {
@@ -112,11 +90,7 @@ public class SessionRevocationService {
                 distinct.size(), updated);
     }
 
-    /**
-     * Revokes every user holding {@code roleId}, directly or via an active group. Use on
-     * role permission/name changes and role deletion so the permission delta is enforced
-     * immediately for all bearers.
-     */
+    /** Revokes every user holding {@code roleId}, directly or via an active group. */
     @Transactional
     public void revokeRoleHolders(UUID roleId) {
         if (roleId == null) {
@@ -126,11 +100,8 @@ public class SessionRevocationService {
     }
 
     /**
-     * Ids of every user holding {@code roleId}, directly or via an active group —
-     * resolved WITHOUT revoking. Used by role deletion to resolve bearers before the
-     * soft-delete (post-delete, {@code @SQLRestriction} hides the role and the lookup
-     * would return nobody) while deferring the actual revoke until after the
-     * last-admin guard, so a rejected delete leaves no Redis-side revoke behind.
+     * Holder ids resolved WITHOUT revoking — before the soft-delete ({@code @SQLRestriction}
+     * would hide the role) and before the last-admin guard (a rejected delete leaves no revoke behind).
      */
     public List<UUID> resolveRoleHolderIds(UUID roleId) {
         if (roleId == null) {
@@ -139,11 +110,7 @@ public class SessionRevocationService {
         return userRepository.findUserIdsByRole(roleId);
     }
 
-    /**
-     * Revokes every member of {@code groupId}. Use on group role / membership / active
-     * toggle changes and group deletion so the group's role delta is enforced immediately
-     * for all members.
-     */
+    /** Revokes every member of {@code groupId}. */
     @Transactional
     public void revokeGroupMembers(UUID groupId) {
         if (groupId == null) {
@@ -152,14 +119,7 @@ public class SessionRevocationService {
         revokeUsers(userRepository.findUserIdsByGroup(groupId));
     }
 
-    /**
-     * Revokes every user holding an <em>all-permissions</em> role (the built-in Admin and
-     * any user-defined "ALL" role), directly or via an active group. Used when a
-     * permission is created or renamed so the new/renamed name reaches those users on
-     * their next request — their outstanding tokens still embed the prior permission
-     * snapshot, and all-permissions users should "hear about" the new permission rather
-     * than waiting for their access-token TTL. No-op when no role carries the flag.
-     */
+    /** Revokes holders of any all-permissions role — fired on permission create/rename so they pick the new name up at next request, not at TTL. */
     @Transactional
     public void revokeAllPermissionsRoleHolders() {
         Set<UUID> userIds = new LinkedHashSet<>();
@@ -170,17 +130,9 @@ public class SessionRevocationService {
     }
 
     /**
-     * Faz 5 concurrent-session limit. Called after a new session is issued
-     * ({@code AuthService.login}): when the user now holds more than {@code maxSessions}
-     * active sessions the oldest ones are evicted (oldest {@code lastSeen} first) so a
-     * login always succeeds while the active-session count stays at/below the cap. A cap
-     * of {@code <=0} is unlimited (no-op). Implemented with the existing K-28 session
-     * primitives ({@link RefreshTokenStore#listSessions} / {@link RefreshTokenStore#revokeSession})
-     * so it needs no store-contract change; the evicted device's short-lived access token
-     * is left to expire at its TTL (the evicted session's refresh is gone, so the device
-     * is signed out at the next access-token expiry — this is a session-cap eviction, not
-     * an admin remote-revoke, so it does not stamp {@code tokenInvalidBefore}). Rotation never triggers this: it preserves the {@code sessionId},
-     * so it does not add a session.
+     * Faz 5 session cap: evicts the oldest sessions ({@code lastSeen} first) when a login
+     * pushes the user over {@code maxSessions} ({@code <=0} = unlimited). Rotation preserves
+     * {@code sessionId}, so it never adds a session.
      */
     public void enforceSessionLimit(UUID userId) {
         if (userId == null || maxSessions <= 0) {

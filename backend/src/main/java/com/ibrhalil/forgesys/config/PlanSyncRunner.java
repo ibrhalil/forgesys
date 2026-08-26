@@ -14,11 +14,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Idempotent upsert of the {@link PlanDefinition} registry into {@code t_plans} (public
- * schema) at startup (K-16 / Epic 3.0.A). Ordered to run before every other runner —
- * {@code SystemAdminBootstrapRunner} (tenant provisioning writes a subscription) and
- * {@code ModuleSyncRunner} (subscription backfill) depend on the plan rows existing.
- *
- * <p>Disabled in the {@code test} profile (tests build plan fixtures manually).
+ * schema) at startup. {@code @Order(0)} — {@code SystemAdminBootstrapRunner} and
+ * {@code ModuleSyncRunner} depend on the plan rows existing.
  */
 @Slf4j
 @Component

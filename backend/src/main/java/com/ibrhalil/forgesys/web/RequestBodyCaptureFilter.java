@@ -3,8 +3,6 @@ package com.ibrhalil.forgesys.web;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.ServletInputStream;
-import jakarta.servlet.ServletRequest;
-import jakarta.servlet.ServletResponse;
 import jakarta.servlet.ReadListener;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletRequestWrapper;
@@ -15,9 +13,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.AntPathMatcher;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.node.ObjectNode;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
@@ -29,11 +25,10 @@ import java.util.stream.Collectors;
 
 /**
  * Wraps mutating requests on high-risk paths with a cached body and publishes the
- * masked body to {@link AuditRequestContext} BEFORE delegating down the chain, so
- * both {@code AuditLogAspect} (during the request) and {@link RequestLogFilter}
- * (in its finally, the single clear point) can consume it. Registered inside
- * {@link RequestLogFilter} (order -94, see
- * {@code SecurityConfig#requestBodyCaptureFilterRegistration}).
+ * masked body to {@link AuditRequestContext} BEFORE delegating (order -94, inside
+ * the security chain) — consumed by {@code AuditLogAspect} during the request and
+ * {@link RequestLogFilter} in its finally.
+ * rationale: docs/CODE_NOTES.md (backend/web → RequestBodyCaptureFilter)
  */
 @Slf4j
 @Component
@@ -55,7 +50,6 @@ public class RequestBodyCaptureFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        // Only capture body for high-risk paths
         String path = request.getRequestURI();
         return highRiskPaths.stream().noneMatch(pattern -> pathMatcher.match(pattern, path));
     }
@@ -66,18 +60,14 @@ public class RequestBodyCaptureFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
         String method = request.getMethod();
 
-        // Only capture for mutating methods on high-risk paths
         if (!isMutatingMethod(method)) {
             chain.doFilter(request, response);
             return;
         }
 
-        // Wrap request to capture body
         CachedBodyHttpServletRequest wrappedRequest = new CachedBodyHttpServletRequest(request);
-        // Publish the masked body BEFORE delegating: downstream consumers
-        // (AuditLogAspect during the request, RequestLogFilter in its finally)
-        // read it from AuditRequestContext. The cached body is fully read at wrap
-        // time, so masking here needs no response data.
+        // Publish BEFORE delegating: AuditLogAspect (during the request) and
+        // RequestLogFilter (in its finally) both read it from AuditRequestContext.
         String body = wrappedRequest.getBody();
         if (StringUtils.hasText(body)) {
             try {
@@ -95,7 +85,6 @@ public class RequestBodyCaptureFilter extends OncePerRequestFilter {
 
     private String maskSensitiveFields(String jsonBody) {
         try {
-            // Convert to Map for version-agnostic iteration
             @SuppressWarnings("unchecked")
             java.util.Map<String, Object> map = objectMapper.readValue(jsonBody, java.util.Map.class);
             maskMap(map);
@@ -135,9 +124,7 @@ public class RequestBodyCaptureFilter extends OncePerRequestFilter {
         }
     }
 
-    /**
-     * HttpServletRequest wrapper that caches the request body so it can be read multiple times.
-     */
+    /** Caches the request body so it can be read multiple times. */
     private static class CachedBodyHttpServletRequest extends HttpServletRequestWrapper {
         private final byte[] cachedBody;
 

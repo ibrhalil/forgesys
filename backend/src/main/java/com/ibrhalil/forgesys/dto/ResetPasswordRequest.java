@@ -4,9 +4,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 /**
- * Request body of {@code POST /api/v1/auth/reset-password}. The token comes from the
- * mailed link (single-use, digest-stored); the new password replaces the old one and
- * every outstanding session of the user dies with it.
+ * Body of {@code POST /auth/reset-password}: consumes the mailed single-use
+ * token; every outstanding session of the user dies with the new password.
  */
 public record ResetPasswordRequest(
         @NotBlank(message = "Token is required")

@@ -19,11 +19,11 @@ import java.util.Arrays;
 import java.util.Optional;
 
 /**
- * Resolves the current tenant's plan limits (K-15 / Epic 3.0.B). Limit <em>values</em>
- * live in the code-side {@link PlanDefinition} registry — {@code t_plans} stores only
- * reference data (key/rank), so changing a limit ships with the code and needs no
- * migration. Enforcement is a caller-side soft-block: creating above the limit throws
- * 403 {@link ErrorCode#APP_LIMIT_REACHED}; existing data is never hidden or deleted.
+ * Resolves the current tenant's plan limits (K-15): limit <em>values</em> live in the
+ * code-side {@link PlanDefinition} registry ({@code t_plans} stores only key/rank —
+ * limit changes ship with code). Enforcement is a caller-side soft-block: creating
+ * above the limit throws 403 {@link ErrorCode#APP_LIMIT_REACHED}; existing data is
+ * never hidden. Rationale: docs/CODE_NOTES.md (backend/service → PlanLimitService).
  */
 @Service
 @RequiredArgsConstructor
@@ -44,11 +44,7 @@ public class PlanLimitService {
         return activePlan().maxRecordsPerApp();
     }
 
-    /**
-     * Throws {@link ErrorCode#APP_LIMIT_REACHED} when {@code current} is already at the
-     * plan limit. Unlimited ({@code -1}) always passes. Callers pass the live count
-     * (e.g. repository count) so the check and the message stay in one place.
-     */
+    /** Throws {@link ErrorCode#APP_LIMIT_REACHED} at the limit; {@code -1} (unlimited) always passes. */
     public void assertWithin(long current, long limit, String subject) {
         if (limit >= 0 && current >= limit) {
             throw new BusinessException(ErrorCode.APP_LIMIT_REACHED,
@@ -57,11 +53,8 @@ public class PlanLimitService {
     }
 
     /**
-     * The ACTIVE plan for a known company — the single plan-resolution chain
-     * (K-40): Subscription -&gt; {@code t_plans.key} -&gt; {@link PlanDefinition} registry.
-     * Empty when no ACTIVE subscription exists or the plan key is unknown to the
-     * registry (degraded state — callers decide whether that is an error; e.g.
-     * {@code ModuleActivationService} shows it in the catalog but rejects activation).
+     * ACTIVE plan for a known company — the single plan-resolution chain (K-40).
+     * Empty in degraded states (no ACTIVE subscription / unknown key); callers decide.
      */
     @Transactional(readOnly = true)
     public Optional<PlanDefinition> tryActivePlan(Company company) {
@@ -75,10 +68,8 @@ public class PlanLimitService {
     }
 
     /**
-     * The current tenant's ACTIVE plan (resolved from {@link TenantContext} -&gt; Company
-     * -&gt; {@link #tryActivePlan(Company)}). Throws 409
-     * {@link ErrorCode#SUBSCRIPTION_NOT_FOUND} in every degraded state (no tenant
-     * context and unknown schema raise {@link TenantNotFoundException}).
+     * The current tenant's ACTIVE plan; throws 409 {@link ErrorCode#SUBSCRIPTION_NOT_FOUND}
+     * in every degraded state (no/unknown context raises {@link TenantNotFoundException}).
      */
     @Transactional(readOnly = true)
     public PlanDefinition activePlan() {

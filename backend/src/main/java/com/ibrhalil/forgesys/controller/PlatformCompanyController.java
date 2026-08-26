@@ -32,10 +32,7 @@ public class PlatformCompanyController {
 
     private final PlatformCompanyService platformCompanyService;
 
-    /**
-     * Paged, engine-filtered platform company list (K-49 — was an unpaged {@code List},
-     * the last K-37 paging violation). {@code schemaName} is never exposed.
-     */
+    /** Paged engine-filtered list (K-49); {@code schemaName} is never exposed. */
     @GetMapping
     @PreAuthorize("hasAuthority('platform:company:read')")
     public ResponseEntity<PageResponse<CompanyResponse>> list(

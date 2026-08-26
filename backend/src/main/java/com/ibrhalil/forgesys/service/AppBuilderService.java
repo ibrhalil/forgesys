@@ -47,14 +47,10 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Custom app definition CRUD (K-15 / Epic 3.0.B, re-scoped by K-45): apps living in
- * APPS-type project containers, their properties (columns) and their views. Record
- * (row) CRUD lives in {@link AppRecordService}. Plan limits are soft-blocked on app
- * creation ({@link PlanLimitService}) and stay TENANT-level (not per container); the
- * flat list is the cross-container view ({@code ?projectId=} narrows it), writes
- * without an explicit {@code projectId} land in the default APPS container. Same
- * TOCTOU posture as the other services: {@code existsBy*} pre-check +
- * {@code DataIntegrityViolationException} constraint-map fallback (RISK-28).
+ * Custom app definition CRUD (K-15/K-45): apps in APPS-type containers, their
+ * properties (columns) and views; record CRUD lives in {@link AppRecordService}.
+ * Plan limits are tenant-level soft-blocks ({@link PlanLimitService}); same TOCTOU
+ * posture as the other services (RISK-28). Rationale: docs/CODE_NOTES.md (backend/service → AppBuilderService).
  */
 @Service
 @RequiredArgsConstructor
@@ -65,9 +61,8 @@ public class AppBuilderService {
 
     /**
      * Filterable/sortable attributes of the app list (K-49); {@code q} matches
-     * {@code name}, {@code description} and the resolved APPS container name.
-     * {@code projectName} is a correlated scalar subquery over the plain
-     * {@code project_id} column (K-45 convention).
+     * {@code name}, {@code description} and the resolved container name
+     * ({@code projectName} — correlated subquery, K-45 convention).
      */
     public static final FilterFieldSet FILTER_FIELDS = FilterFieldSet.builder()
             .field(App_.NAME, FilterFieldType.STRING, true)
@@ -300,9 +295,9 @@ public class AppBuilderService {
     // ── definition validation ───────────────────────────────────────────
 
     /**
-     * Type-vs-config validation at definition time: SELECT must carry a non-empty,
-     * distinct, bounded option set; RELATION must carry an existing target app;
- * other types carry no config. FORMULA is rejected outright (deferred type).
+     * Type-vs-config validation: SELECT needs a non-empty, distinct, bounded option
+     * set; RELATION an existing target app; other types take no config; FORMULA is
+     * rejected outright (deferred).
      */
     private void validatePropertyDefinition(AppPropertyRequest request) {
         if (request.type() == PropertyType.FORMULA) {
@@ -381,8 +376,7 @@ public class AppBuilderService {
         property.setName(request.name());
         property.setType(request.type());
         property.setRequired(request.required());
-        // Null position = keep the current value (partial-PUT semantics on update;
-        // create assigns max+1 in addProperty before this persists).
+        // Null position = keep the current value (partial-PUT semantics).
         if (request.position() != null) {
             property.setPosition(request.position());
         }

@@ -27,11 +27,10 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Read-only views over the tenant's audit log, login history and request/trace log (K-19 + K-27).
- * All endpoints require the {@code iam:audit:read} permission (seeded into the {@code Admin} role)
- * and default to newest-first paging. GET parameters are translated into filter-engine
- * criteria by the respective query services (composable AND filters); each surface also
- * carries a full filter-engine {@code POST /search} variant (K-49).
+ * Read-only views over the tenant's audit log, login history and request log
+ * (K-19/K-27), all behind {@code iam:audit:read}, newest-first. GET params are
+ * translated into filter-engine criteria by the query services; each surface
+ * also carries a full filter-engine {@code POST /search} variant (K-49).
  */
 @RestController
 @RequestMapping("/api/v1")

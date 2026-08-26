@@ -6,7 +6,6 @@ import com.ibrhalil.forgesys.security.RestAuthenticationEntryPoint;
 import com.ibrhalil.forgesys.security.jwt.JwtAuthenticationFilter;
 import com.ibrhalil.forgesys.security.ratelimit.RateLimitFilter;
 import com.ibrhalil.forgesys.tenant.TenantFilter;
-import com.ibrhalil.forgesys.web.AuditRequestContext;
 import com.ibrhalil.forgesys.web.RequestBodyCaptureFilter;
 import com.ibrhalil.forgesys.web.RequestLogFilter;
 import com.ibrhalil.forgesys.web.RequestMetadataFilter;
@@ -25,22 +24,10 @@ import org.springframework.util.StringUtils;
 
 
 /**
- * Spring Security core setup (Epic 2.3). Stateless, CSRF-less API with cookie-based
- * JWT auth (tokens arrive in Chunk C/D). {@code /api/v1/auth/**} stays public (tenant
- * signup + login); everything else requires authentication.
- *
- * <p>{@link PasswordEncoder} is a {@link PepperingPasswordEncoder}: BCrypt strength 12
- * (RISK-13) keyed with a global pepper via HMAC-SHA256 pre-hash (K-23). The pepper
- * defends against a standalone DB leak — the hashes are uncrackable without the
- * pepper, which lives outside the DB (env var / secret manager). Legacy pepper-less
- * BCrypt hashes (pre-K-23) still validate and are lazily rehashed to the peppered
- * format on the next successful login. The pepper is read from
- * {@code forgesys.security.password-pepper}; a blank value fails startup fast
- * (the {@code test}/{@code dev} profiles ship a non-secret default).
- *
- * <p>{@link TenantFilter} is registered to run BEFORE the Spring Security filter chain
- * (security order -100) so that tenant context is resolved for every request before the
- * JWT authentication filter (Chunk C) executes.
+ * Spring Security core: stateless, CSRF-less chain with cookie JWT auth and JSON 401/403
+ * handlers. Password encoder is a {@link PepperingPasswordEncoder} (BCrypt 12 + HMAC-SHA256
+ * pepper, K-23 — legacy hashes migrate lazily on login); a blank pepper fails startup.
+ * rationale: docs/CODE_NOTES.md (backend/config → SecurityConfig)
  */
 @Configuration
 @EnableMethodSecurity
@@ -63,18 +50,11 @@ public class SecurityConfig {
                                 "/api/v1/auth/verify-email",
                                 "/api/v1/auth/forgot-password",
                                 "/api/v1/auth/reset-password").permitAll()
-                        // K-41: OpenAPI spec + Swagger UI. Unconditional permitAll is
-                        // safe because prod disables springdoc outright (the endpoints
-                        // don't exist -> 404); dev/test keep them open for developers.
+                        // K-41: safe unconditionally — prod disables springdoc outright (404); dev/test stay open.
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers("/actuator/health/**", "/actuator/info").permitAll()
-                        // K-43: Prometheus scrape endpoint. Accepted unauthenticated in the
-                        // dev/test same-port layout — it carries only numerical system
-                        // metrics (JVM/HTTP/tenant count), no PII or secrets. In prod the
-                        // management endpoints move to their own port (management.server.port,
-                        // application-prod.yaml) which runs WITHOUT this filter chain (child
-                        // context) and is never published off-host (compose exposes it on the
-                        // internal network only), so this matcher is a no-op there.
+                        // K-43: dev/test same-port scrape (numerical metrics only). In prod the
+                        // management port runs outside this chain, so this matcher is a no-op there.
                         .requestMatchers("/actuator/prometheus").permitAll()
                         .anyRequest().authenticated())
                 .headers(headers -> headers
@@ -86,8 +66,7 @@ public class SecurityConfig {
                                 + "style-src 'self' 'unsafe-inline'; script-src 'self'; "
                                 + "connect-src 'self'; frame-ancestors 'none'")))
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-                // Faz 3: rate-limit the public auth endpoints before JWT decode so a blocked
-                // request short-circuits with 429 and never pays the BCrypt cost.
+                // Faz 3: rate-limit before JWT decode — a blocked request short-circuits 429 and never pays the BCrypt cost.
                 .addFilterBefore(rateLimitFilter, JwtAuthenticationFilter.class)
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint(authenticationEntryPoint)
@@ -109,10 +88,9 @@ public class SecurityConfig {
     }
 
     /**
-     * Runs {@link TenantFilter} before the Spring Security chain (the security
-     * DelegatingFilterProxy registers at order -100), so the tenant schema is
-     * resolved before authentication. Defining this registration also prevents the
-     * default low-precedence auto-registration of the {@code @Component TenantFilter}.
+     * TenantFilter before the security chain (-100) so the tenant schema is resolved
+     * before authentication; the registration also suppresses the {@code @Component}
+     * auto-registration.
      */
     @Bean
     public FilterRegistrationBean<TenantFilter> tenantFilterRegistration(TenantFilter tenantFilter) {
@@ -121,13 +99,7 @@ public class SecurityConfig {
         return registration;
     }
 
-    /**
-     * Runs {@link RequestMetadataFilter} before the tenant filter (order -102) and
-     * the Spring Security chain (-100), so the trace id, client IP and User-Agent
-     * are available to every downstream filter and service (and error responses
-     * carry a stable trace id). Defining this registration also prevents the
-     * default low-precedence auto-registration of the {@code @Component} filter.
-     */
+    /** RequestMetadataFilter before tenant + security (-102) so traceId/IP reach every downstream filter. */
     @Bean
     public FilterRegistrationBean<RequestMetadataFilter> requestMetadataFilterRegistration(
             RequestMetadataFilter requestMetadataFilter) {
@@ -137,15 +109,10 @@ public class SecurityConfig {
     }
 
     /**
-     * Runs {@link RequestLogFilter} INSIDE the security chain (order -95, after the
-     * security DelegatingFilterProxy at -100): the write happens in the filter's
-     * {@code finally}, which unwinds BEFORE the security/tenant/metadata filters
-     * clear their ThreadLocals — so the tenant schema, authentication and request
-     * metadata are still live when the {@code t_request_logs} row is written.
-     * (Registering it outside the chain made the write land after those clears:
-     * public schema, no user/trace — every insert failed and was swallowed.)
-     * Requests rejected inside the security chain itself (401 before reaching -95)
-     * are not logged; failed logins are covered by {@code t_login_history} instead.
+     * RequestLogFilter INSIDE the security chain (-95): its finally-write must unwind
+     * before the outer filters clear their ThreadLocals — registered outside the chain,
+     * the write landed in the public schema with null user/trace and failed silently.
+     * 401s rejected before -95 are not logged (failed logins go to t_login_history).
      */
     @Bean
     public FilterRegistrationBean<RequestLogFilter> requestLogFilterRegistration(RequestLogFilter requestLogFilter) {
@@ -154,13 +121,7 @@ public class SecurityConfig {
         return registration;
     }
 
-    /**
-     * Runs {@link RequestBodyCaptureFilter} inside {@link RequestLogFilter}
-     * (order -94): it wraps mutating high-risk requests with a cached body and
-     * publishes the masked body to {@link AuditRequestContext} BEFORE delegating,
-     * so both {@code AuditLogAspect} (during the request) and
-     * {@link RequestLogFilter} (in its finally) can consume it.
-     */
+    /** BodyCaptureFilter inside RequestLogFilter (-94): publishes the masked body to AuditRequestContext before delegating. */
     @Bean
     public FilterRegistrationBean<RequestBodyCaptureFilter> requestBodyCaptureFilterRegistration(
             RequestBodyCaptureFilter requestBodyCaptureFilter) {
@@ -173,6 +134,6 @@ public class SecurityConfig {
     /** The Spring Security filter chain (DelegatingFilterProxy) order. */
     private static final int SECURITY_FILTER_ORDER = -100;
 
-    /** {@link RequestLogFilter} — inside the security chain (see its registration). */
+    /** {@link RequestLogFilter} order — inside the security chain (see its registration). */
     private static final int REQUEST_LOG_FILTER_ORDER = -95;
 }

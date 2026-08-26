@@ -13,18 +13,10 @@ import lombok.Setter;
 import lombok.ToString;
 
 /**
- * A tenant's custom app (K-15 / Epic 3.0.B, Notion/Airtable-style): a user-defined
- * "table" made of {@link AppProperty definitions} (columns), {@link AppRecord records}
- * (rows) and {@link AppView views} (saved renderings). Ships with the {@code apps}
- * module ({@code db/migration/module/apps}, ownMigrations — activated per tenant).
- * An APPS-type project hosts a COLLECTION of apps (K-45 amend — {@code module/apps/V2}
- * anchors {@code project_id}); the app's own tree (properties/records/views) is
- * unchanged.
- *
- * <p>Soft-deletable, optimistic-locked, tenant-audited — same base as the other tenant
- * product entities. Name uniqueness is a partial index ({@code WHERE is_deleted =
- * false}); the entity-side {@code unique = true} only shapes H2 create-drop in tests
- * (same as {@link Project}).
+ * A tenant's custom app (K-15, Notion/Airtable-style): {@link AppProperty} columns,
+ * {@link AppRecord} rows, {@link AppView} saved renderings. Hosted in an APPS-type
+ * project collection (K-45). Name uniqueness is a partial index in PG; the entity
+ * {@code unique = true} only shapes H2 create-drop (same as {@link Project}).
  */
 @Entity
 @Getter

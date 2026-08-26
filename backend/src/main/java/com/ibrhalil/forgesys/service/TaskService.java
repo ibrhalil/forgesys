@@ -28,20 +28,17 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Task operations scoped to a project (Faz 3 Stage 2). A task is always reached through
- * its owning project ({@code /projects/{projectId}/tasks}); a task belonging to another
- * project is not addressable here (404, no leak). Project + assignee existence are
- * validated explicitly so an invalid id yields a clean 404 rather than a DB integrity 500.
+ * Task CRUD scoped to a project: a task of another project is not addressable here
+ * (404, no leak). Project + assignee existence validated explicitly → clean 404s
+ * instead of DB integrity 500s.
  */
 @Service
 @RequiredArgsConstructor
 public class TaskService {
 
     /**
-     * Filterable/sortable attributes of the project's task list (K-49 — now fully
-     * engine-wired); {@code q} matches {@code title} and {@code description}. The
-     * kanban columns ({@code status}/{@code priority}) filter and sort; {@code dueDate}
-     * is a DATE (ISO {@code yyyy-MM-dd}); {@code assigneeId} filters by the plain FK.
+     * Filterable/sortable attributes of the task list (K-49); {@code q} matches
+     * {@code title}/{@code description}. {@code dueDate} is a DATE (ISO {@code yyyy-MM-dd}).
      */
     public static final FilterFieldSet FILTER_FIELDS = FilterFieldSet.builder()
             .field(Task_.TITLE, FilterFieldType.STRING, true)

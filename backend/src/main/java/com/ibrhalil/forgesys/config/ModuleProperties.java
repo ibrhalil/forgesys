@@ -5,10 +5,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import java.util.List;
 
 /**
- * Module system configuration (K-16 / Epic 3.0.A). {@code forgesys.modules.default-keys}
- * lists the modules every tenant gets activated at provisioning (and backfilled at
- * startup for pre-module-system tenants). Keys must exist in {@link ModuleDefinition};
- * unknown keys are logged and skipped by the consumers.
+ * {@code forgesys.modules.default-keys} (K-16): modules activated per tenant at
+ * provisioning and backfilled at startup. Keys must exist in {@link ModuleDefinition};
+ * unknown keys are logged + skipped.
  */
 @ConfigurationProperties(prefix = "forgesys.modules")
 public record ModuleProperties(List<String> defaultKeys) {

@@ -19,13 +19,10 @@ import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 
 /**
- * JWT infrastructure (RS256). Produces a shared {@link KeyPair} (so the encoder and
- * decoder always agree), plus {@link JwtEncoder}/{@link JwtDecoder} beans.
- *
- * <p>The oauth2-resource-server auto-config filter is intentionally NOT enabled
- * ([RISK-14](../../../../../docs/DECISIONS.md#risk-14)) — a custom
- * {@code JwtAuthenticationFilter} handles decoding + context population so that
- * revocation (tokenInvalidBefore / Redis blacklist) can be layered on later.
+ * JWT infrastructure (RS256): one shared {@link KeyPair} so encoder and decoder always
+ * agree. The oauth2-resource-server auto-config filter is intentionally NOT enabled
+ * (RISK-14) — the custom {@code JwtAuthenticationFilter} layers revocation
+ * ({@code tokenInvalidBefore} / jti blacklist) on top of decoding.
  */
 @Configuration
 @EnableConfigurationProperties({RsaKeyProperties.class, JwtCookieProperties.class})

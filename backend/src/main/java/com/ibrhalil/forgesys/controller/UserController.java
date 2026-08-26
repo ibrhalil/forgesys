@@ -54,11 +54,7 @@ public class UserController {
         return ResponseEntity.ok(PageResponse.of(userService.search(q, qFields, pageable)));
     }
 
-    /**
-     * Reference endpoint of the filter engine: paging + multi-sort + structured filters
-     * + global {@code q} in one POST body. The GET list above stays for bookmarkable
-     * reads ({@code q} + sort query params).
-     */
+    /** Filter-engine variant of the list: paging + multi-sort + filters + {@code q} in one POST body. */
     @PostMapping("/search")
     @PreAuthorize(READ_USERS)
     public ResponseEntity<PageResponse<UserDirectoryViewResponse>> search(@Valid @RequestBody SearchRequest request) {
@@ -105,10 +101,7 @@ public class UserController {
         return ResponseEntity.noContent().build();
     }
 
-    /**
-     * Clears an active brute-force lockout ahead of its expiry ([RISK-22] admin unlock).
-     * An action, not a resource deletion — POST (K-37; was {@code DELETE /{id}/lock}).
-     */
+    /** Clears an active brute-force lockout ahead of expiry ([RISK-22]); an action, not a deletion — POST (K-37). */
     @PostMapping("/{id}/unlock")
     @PreAuthorize("hasAuthority('iam:user:write')")
     public ResponseEntity<Void> unlock(@PathVariable UUID id) {
@@ -116,10 +109,7 @@ public class UserController {
         return ResponseEntity.noContent().build();
     }
 
-    /**
-     * Re-sends the email-verification mail to an unverified user (optional-policy
-     * flow). 409 {@code user_already_verified} when the address is verified.
-     */
+    /** Re-sends the verification mail; 409 {@code user_already_verified} when already verified. */
     @PostMapping("/{id}/resend-verification")
     @PreAuthorize("hasAuthority('iam:user:write')")
     public ResponseEntity<Void> resendVerification(@PathVariable UUID id) {

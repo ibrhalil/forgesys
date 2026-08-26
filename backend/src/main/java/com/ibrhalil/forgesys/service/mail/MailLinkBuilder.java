@@ -6,15 +6,12 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
- * Builds tenant-anchored action links for mailed flows (email verification, password
- * reset): {@code {scheme}://{subdomain}.{host}[:{port}]{path}?token=...}. Derived from
- * {@code forgesys.security.app-base-url} — the frontend origin — by prefixing the
- * tenant subdomain onto its host, so the link lands on the tenant's own subdomain and
- * {@code TenantFilter} resolves the schema when the browser POSTs the token back.
- *
- * <p>The subdomain is derived from the tenant schema name ({@code tenant_<sub>} with
- * dashes folded to underscores at provisioning); the inverse fold is unique because
- * subdomains reject underscores.
+ * Builds tenant-anchored action links: {@code {scheme}://{subdomain}.{host}[:{port}]{path}?token=...}
+ * from {@code forgesys.security.app-base-url} (the frontend origin) — the link lands
+ * on the tenant's own subdomain so {@code TenantFilter} resolves the schema when the
+ * browser POSTs the token back. The subdomain derives from {@code tenant_<sub>}
+ * (underscores folded from dashes at provisioning); the inverse fold is unique
+ * because subdomains reject underscores.
  */
 @Component
 public class MailLinkBuilder {

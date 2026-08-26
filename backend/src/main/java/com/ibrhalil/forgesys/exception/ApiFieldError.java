@@ -1,9 +1,6 @@
 package com.ibrhalil.forgesys.exception;
 
-/**
- * A single bean-validation field violation. The {@code rejectedValue} is
- * sanitized for sensitive fields (password/token/secret) before being exposed.
- */
+/** A single field violation; {@code rejectedValue} is sanitized for sensitive fields. */
 public record ApiFieldError(
         String field,
         Object rejectedValue,

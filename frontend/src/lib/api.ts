@@ -24,12 +24,9 @@ export class ApiError extends Error {
 const BASE_URL = '';
 
 // --- Transparent refresh-on-401 -------------------------------------------
-// The 15-min access token expires while the SPA is open. On a 401 we transparently
-// call /api/v1/auth/refresh (the httpOnly sf_refresh_token cookie is sent by the
-// browser automatically) and retry the original request once. The refresh token is
-// never read by JS (cookie-only). Concurrent 401s coalesce into a single /refresh
-// via the shared refreshPromise. Auth endpoints are excluded so a real auth failure
-// there is not mistaken for an expirable token.
+// On a 401 (non-auth endpoints) call /api/v1/auth/refresh once (the httpOnly
+// sf_refresh_token cookie is sent by the browser, never read by JS) and retry the
+// original request; concurrent 401s coalesce into one /refresh via refreshPromise.
 
 /** Paths whose 401 is a genuine auth failure (not an expired access token). */
 const REFRESH_SKIP_EXACT = new Set([
@@ -68,9 +65,8 @@ async function refreshSession(): Promise<boolean> {
 }
 
 /**
- * Invoked when the session can no longer be refreshed (refresh token absent/expired/
- * revoked). Decoupled via a setter so {@link apiFetch} never imports the auth store
- * (avoids a circular dependency: lib/api <- store/authStore <- api/auth <- lib/api).
+ * Session-expired callback, injected via setter so this module never imports the
+ * auth store (avoids the circular dep lib/api <- authStore <- api/auth <- lib/api);
  * {@link useAuthStore} registers the handler at module load.
  */
 let sessionExpiredHandler: (() => void) | null = null;
@@ -80,9 +76,7 @@ export function setSessionExpiredHandler(handler: () => void): void {
 }
 
 async function sendRequest(path: string, options: RequestInit): Promise<Response> {
-  // Single source of truth: the tenant subdomain lives in the tenant store
-  // (which mirrors localStorage + subdomain detection). Sent as X-Tenant-ID
-  // so the dev-profile TenantFilter can resolve the tenant schema.
+  // X-Tenant-ID from the tenant store — the dev-profile TenantFilter resolves the schema.
   const tenantId = useTenantStore.getState().tenantId;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -104,15 +98,13 @@ export async function apiFetch<T>(
 ): Promise<T> {
   let response = await sendRequest(path, options);
 
-  // Expired access token: refresh once (shared), then retry the original request.
+  // Expired access token: refresh once (shared), then retry.
   if (response.status === 401 && !shouldSkipRefresh(path)) {
     if (await refreshSession()) {
-      // Request bodies here are always JSON strings (see api.post/put/patch) — safe
-      // to resend on retry; GET/DELETE carry no body.
+      // Bodies here are always JSON strings (see api.post/put/patch) — safe to resend.
       response = await sendRequest(path, options);
     } else {
-      // Refresh failed: the session is gone. Signal the store so RequireAuth
-      // redirects to /login, then surface the original 401 to the caller.
+      // Session is gone — signal the store (RequireAuth redirects), surface the 401.
       sessionExpiredHandler?.();
     }
   }
@@ -144,10 +136,9 @@ export async function apiFetch<T>(
 }
 
 /**
- * Builds a `?page=&size=&sort=&q=&qFields=` query string from {@link PageParams} (empty
- * string if none). Structured `sorts[]` is serialized as repeated `sort=field,dir`
- * params (Spring Data multi-sort), alongside the legacy raw `sort` string; `qFields[]`
- * as repeated params (smart-search field targeting, K-49).
+ * Builds a `?page=&size=&sort=&q=&qFields=` query string from {@link PageParams}
+ * (empty string if none). `sorts[]` serializes as repeated `sort=field,dir` params
+ * (Spring Data multi-sort); `qFields[]` as repeated params (smart-search targeting).
  */
 export function toQuery(params: PageParams = {}): string {
   const sp = new URLSearchParams();
@@ -161,11 +152,7 @@ export function toQuery(params: PageParams = {}): string {
   return qs ? `?${qs}` : '';
 }
 
-/**
- * Normalizes a backend {@link PageResponse} into the UI-facing {@link PageResult},
- * reading metadata from the API-owned `data[] + meta` shape, falling back to the
- * legacy Spring Data layouts during rollout.
- */
+/** Normalizes a backend {@link PageResponse} into {@link PageResult} — API `data[] + meta` shape with legacy Spring Data fallbacks. */
 export function normalizePage<T>(raw: PageResponse<T>): PageResult<T> {
   const meta = raw.meta;
   return {
@@ -179,7 +166,6 @@ export function normalizePage<T>(raw: PageResponse<T>): PageResult<T> {
   };
 }
 
-// Convenience methods
 export const api = {
   get: <T>(path: string) => apiFetch<T>(path, { method: 'GET' }),
   post: <T>(path: string, body?: unknown) =>
@@ -191,11 +177,7 @@ export const api = {
   delete: <T>(path: string) => apiFetch<T>(path, { method: 'DELETE' }),
 };
 
-/**
- * `POST /{resource}/search` helper for the filter-engine endpoints (K-49): sends the
- * {@link SearchRequestBody} and normalizes the `PageResponse` into the UI-facing
- * {@link PageResult}.
- */
+/** `POST /{resource}/search` helper (K-49 filter engine) — sends the body, normalizes the page. */
 export function searchPost<T>(path: string, body: SearchRequestBody): Promise<PageResult<T>> {
   return api.post<PageResponse<T>>(path, body).then(normalizePage);
 }

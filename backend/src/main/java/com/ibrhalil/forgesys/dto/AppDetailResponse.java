@@ -5,9 +5,8 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * A custom app with its full definition (K-15 / Epic 3.0.B): properties (columns) and
- * views, each in stable order. Returned by {@code GET /api/v1/apps/{id}}. Carries the
- * APPS container id/name (K-45) for the detail breadcrumb.
+ * A custom app with its full definition (properties + views, stable order) for
+ * {@code GET /apps/{id}}; carries the APPS container id/name (K-45).
  */
 public record AppDetailResponse(
         UUID id,

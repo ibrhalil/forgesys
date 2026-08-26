@@ -13,12 +13,9 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Redis-backed {@link RateLimiter} (dev/prod, Faz 3). Each bucket is a Redis hash
- * {@code rl:{key}} carrying {@code tokens} + {@code last} (refill epoch second); an atomic
- * Lua script refills (capped at {@code capacity}) and consumes one token, returning
- * {@code [allowed, retryAfterSeconds]}. The script closes the read-modify-write race two
- * concurrent requests from the same key would otherwise open (mirrors the refresh-token
- * rotation Lua in {@code RedisRefreshTokenStore}). TTL caps unbounded key growth.
+ * Redis token bucket (dev/prod): hash {@code rl:{key}} with {@code tokens}/{@code last};
+ * an atomic Lua refill+consume closes the concurrent-request race (same pattern as the
+ * refresh-rotation Lua). TTL caps idle key growth.
  */
 @Component
 @Profile("!test")
@@ -26,10 +23,7 @@ public class RedisRateLimiter implements RateLimiter {
 
     private static final Logger log = LoggerFactory.getLogger(RedisRateLimiter.class);
 
-    /**
-     * Atomic refill + consume. ARGV: capacity, refillTokens, refillPeriodSeconds, nowEpochSec, ttlSec.
-     * Returns {allowed(0/1), retryAfterSeconds}.
-     */
+    /** Atomic refill + consume. ARGV: capacity, refillTokens, refillPeriodSeconds, nowEpochSec, ttlSec; returns {allowed, retryAfterSeconds}. */
     private static final RedisScript<List> CONSUME = new DefaultRedisScript<>("""
             local cap = tonumber(ARGV[1])
             local rate = tonumber(ARGV[2])
@@ -85,15 +79,13 @@ public class RedisRateLimiter implements RateLimiter {
                     String.valueOf(now),
                     String.valueOf(TTL_SECONDS));
         } catch (DataAccessException e) {
-            // Redis down (connection refused etc.) — fail OPEN so a Redis blip never takes
-            // auth down (defense-in-depth must not become a self-DoS). Logged for alerting;
-            // the per-account lockout ([RISK-22]) still applies.
+            // Redis down → fail OPEN by design (RISK-36): defense-in-depth must not
+            // self-DoS auth; the per-account lockout (RISK-22) still applies.
             log.warn("Rate-limit Redis unavailable for key {}; failing open: {}", key, e.getMostSpecificCause().getMessage());
             return new RateLimitResult(true, 0L);
         }
         if (res == null || res.size() < 2) {
-            // Redis unavailable / unexpected reply — fail OPEN so a Redis blip never takes
-            // auth down (defense-in-depth must not become a self-DoS). Logged for alerting.
+            // Unexpected reply — fail open (see above).
             log.warn("Rate-limit Lua returned no result for key {}; failing open", key);
             return new RateLimitResult(true, 0L);
         }

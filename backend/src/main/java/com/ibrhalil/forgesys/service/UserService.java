@@ -79,12 +79,9 @@ import java.util.UUID;
 public class UserService {
 
     /**
-     * Filterable/sortable attributes of the user directory list (K-49). {@code q}
-     * matches email, username, first and last name; {@code qFields} can narrow it.
-     * Joined columns (profile/account) resolve through to-one LEFT joins, counts
-     * through correlated subqueries, and {@code roleIds}/{@code groupIds} are
-     * collection-membership filters (IN = has any of these, IS_NULL = none at all).
-     * Also the sort whitelist for both {@code GET /users} and {@code POST /users/search}.
+     * Filterable/sortable attributes of the user directory list (K-49) — also the sort
+     * whitelist for {@code GET /users} and {@code POST /users/search}. {@code q} matches
+     * email, username, first and last name. Rationale: docs/CODE_NOTES.md (backend/service → UserService).
      */
     public static final FilterFieldSet FILTER_FIELDS = FilterFieldSet.builder()
             .field(User_.EMAIL, FilterFieldType.STRING, true)
@@ -135,11 +132,8 @@ public class UserService {
     // ── visibility scope (iam:user:read vs iam:group-member:read) ──
 
     /**
-     * Narrows a directory {@link Specification} to what the caller may see:
-     * {@code iam:user:read} holders are unrestricted; callers holding only
-     * {@code iam:group-member:read} see the members of their own groups plus
-     * themselves. Tenant-schema isolation is untouched — this is row-level visibility
-     * inside the tenant, resolved as one extra {@code IN} predicate in the same query.
+     * Narrows a directory spec to row-level visibility: {@code iam:user:read} is
+     * unrestricted; {@code iam:group-member:read} sees own-group members + self.
      */
     private Specification<User> applyVisibilityScope(Specification<User> spec) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -157,11 +151,8 @@ public class UserService {
     }
 
     /**
-     * Detail-scope guard: throws 403 {@code auth_access_denied} when the caller (who by
-     * construction lacks {@code iam:user:read}) is neither the target, a member of one
-     * of the target's groups, nor the target itself. Applied to {@code findById} and
-     * {@code effectivePermissions}; self-service {@code /users/me} passes trivially
-     * (self is always in scope).
+     * Detail-scope guard: 403 {@code auth_access_denied} when the caller (lacking
+     * {@code iam:user:read}) is neither the target nor a member of the target's groups.
      */
     private void assertViewable(UUID targetId) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -205,11 +196,8 @@ public class UserService {
     }
 
     /**
-     * Sorted effective permission names for a user: direct roles + active-group roles +
-     * transitive parent inheritance, resolved to permission wire strings. Backs
-     * {@code GET /users/{id}/effective-permissions} so the UI can surface what the user
-     * can actually do (including group-granted / inherited authority). Scope-guarded
-     * like the detail endpoint.
+     * Sorted effective permission names for a user (direct + active-group roles +
+     * transitive parent inheritance); scope-guarded like the detail endpoint.
      */
     @Transactional(readOnly = true)
     public List<String> effectivePermissions(UUID id) {
@@ -219,11 +207,8 @@ public class UserService {
     }
 
     /**
-     * Temporal account-activity summary for the user detail view: audit stamps from
-     * the user entity, last login from the account row, and the latest failed attempt
-     * from the append-only login history (K-19). Scope-guarded like the detail
-     * endpoint. One extra indexed single-row query — kept OUT of {@code toResponse}
-     * so mutation responses don't pay for it.
+     * Temporal account-activity summary for the detail view; the login-history lookup
+     * is kept OUT of {@code toResponse} so mutation responses don't pay for it.
      */
     @Transactional(readOnly = true)
     public UserActivityResponse activity(UUID id) {
@@ -272,8 +257,7 @@ public class UserService {
         user.setUserProfile(profile);
 
         User saved = userRepository.save(user);
-        // Optional roles/groups assigned at creation. No session revoke needed — the user
-        // has no outstanding tokens yet. Validates ids up front (404 if any are unknown).
+        // No session revoke needed: a brand-new user has no outstanding tokens (404 on unknown ids).
         List<Role> roles = resolveRoles(request.roleIds());
         if (!roles.isEmpty()) {
             user.getRoles().addAll(roles);
@@ -285,9 +269,7 @@ public class UserService {
         if (!roles.isEmpty() || !groups.isEmpty()) {
             userRepository.save(user);
         }
-        // Email verification is optional-policy: the user can log in immediately; the
-        // mail only verifies the address. Best-effort AFTER commit — user creation
-        // must never depend on SMTP (admin can resend from the detail page).
+        // Optional-policy verify mail: best-effort AFTER commit — creation must never depend on SMTP.
         scheduleVerificationMail(saved);
         return toResponse(saved);
     }
@@ -295,12 +277,9 @@ public class UserService {
     // ── email verification (optional policy) ──
 
     /**
-     * Consumes an email-verification token and marks the user's address verified.
-     * Idempotent on the end state: a re-clicked link whose token is already consumed
-     * succeeds silently WHEN the user is already verified (the common case — the first
-     * click did the work); only a genuinely unusable token surfaces an error. Runs
-     * WITHOUT an authenticated caller (public endpoint) — tenant scope comes from
-     * {@code TenantFilter} (the link is subdomain-anchored).
+     * Consumes an email-verification token and marks the address verified. Idempotent
+     * for a re-clicked link whose user is already verified; public (unauthenticated) —
+     * tenant scope comes from {@code TenantFilter} (subdomain-anchored link).
      */
     @Transactional
     public void verifyEmail(String rawToken) {
@@ -324,12 +303,7 @@ public class UserService {
         }
     }
 
-    /**
-     * Idempotency probe for a re-clicked link: the token resolves (by digest) to a
-     * consumed EMAIL_VERIFY token whose user is already verified. Any other outcome
-     * (unknown token, wrong purpose, unverified user) means the caller deserves the
-     * original error.
-     */
+    /** Idempotency probe: a consumed EMAIL_VERIFY token whose user is already verified. */
     private boolean alreadyVerifiedWithoutConsuming(String rawToken) {
         return userTokenService.peek(rawToken)
                 .filter(t -> t.getPurpose() == UserAuthTokenPurpose.EMAIL_VERIFY && t.isUsed())
@@ -340,9 +314,8 @@ public class UserService {
     }
 
     /**
-     * Admin-triggered resend of the verification mail. Fail-loud (unlike the
-     * best-effort send at creation): the caller explicitly asked for the mail, so an
-     * SMTP failure should surface — the transaction (and the fresh token) rolls back.
+     * Admin-triggered resend; fail-loud (unlike creation's best-effort send): the caller
+     * explicitly asked, so an SMTP failure rolls back the tx + fresh token.
      */
     @Transactional
     @AuditLog(action = "user_verification_resent", entityType = "User", entityId = "#id", entityName = "")
@@ -372,12 +345,8 @@ public class UserService {
     // ── self-service password reset (forgot-password / reset-password) ──
 
     /**
-     * Handles a {@code forgot-password} request. ALWAYS returns normally — an unknown
-     * email, a disabled account and a failed mail send are indistinguishable to the
-     * caller (no account enumeration; the SMTP-down path must not leak existence via
-     * a 500-vs-200 difference either, so even mail errors are swallowed + logged).
-     * The mailed link is subdomain-anchored; the token is single-use with the
-     * configured short TTL.
+     * Forgot-password: ALWAYS returns normally — unknown/disabled address and mail
+     * failure are indistinguishable (no account enumeration, no 500-vs-200 leak).
      */
     @Transactional
     public void requestPasswordReset(String email) {
@@ -403,11 +372,8 @@ public class UserService {
     }
 
     /**
-     * Consumes a password-reset token and applies the new password. Kills every
-     * outstanding session of the user afterwards ([RISK-21]/K-34 — same revoke chain
-     * as admin reset): outstanding access tokens die via {@code tokenInvalidBefore},
-     * refresh tokens are dropped. Audited as {@code user_password_reset_self} (actor
-     * is unauthenticated → the "system" fallback).
+     * Consumes a reset token, applies the new password and kills ALL of the user's
+     * sessions (RISK-21/K-34 revoke chain — same as admin reset).
      */
     @Transactional
     @AuditLog(action = "user_password_reset_self", entityType = "User", entityId = "", entityName = "")
@@ -421,8 +387,7 @@ public class UserService {
         log.info("Self-service password reset completed: userId={}", user.getId());
     }
 
-    /** After-commit wrapper so creation never rolls back on a mail failure. */
-
+    /** Best-effort wrapper: mail failures are logged, never propagated (admin can resend). */
     private void sendVerificationMailSafe(User user) {
         try {
             sendVerificationMail(user);
@@ -473,16 +438,13 @@ public class UserService {
         if (request.enabled() != null) {
             user.getUserAccount().setEnabled(request.enabled());
         }
-        // Last-admin guard BEFORE save: the JPQL existence check auto-flushes the
-        // pending enabled=false, so this sees the post-mutation state. Re-enable and
-        // no-op toggles fall through (guard is a no-op when an admin remains).
+        // Guard BEFORE save: the existence query auto-flushes the pending enabled=false,
+        // so it sees the post-mutation state.
         if (disabling) {
             lastAdminGuard.assertActiveAdminExists();
         }
         User saved = userRepository.save(user);
-        // Side-fix 2: a disabled user's outstanding tokens must die now, not at TTL
-        // (login-side enable check is [side-fix 1]; the JWT filter does not re-read
-        // account flags per request).
+        // Disabled user's tokens must die now, not at TTL (the JWT filter does not re-read account flags).
         if (disabling) {
             sessionRevocationService.revokeUser(saved.getId());
         }
@@ -495,25 +457,19 @@ public class UserService {
         if (!userRepository.existsById(id)) {
             throw new ResourceNotFoundException("User not found: " + id);
         }
-        // Self-delete is forbidden unconditionally — the historical cause of tenant
-        // lockouts (admin soft-deleting themselves left zero admins).
+        // Self-delete forbidden unconditionally — the historical cause of tenant lockouts.
         lastAdminGuard.assertNotSelf(id);
         userRepository.deleteById(id);
-        // Last-admin check AFTER the soft-delete flush — the existence query sees the
-        // post-delete state; on violation the whole tx rolls back (delete undone) and
-        // the revoke below never fires (no Redis-side session carnage on rejection).
+        // Guard AFTER the soft-delete flush: violation rolls back the whole tx and the
+        // revoke below never fires (no Redis-side carnage on rejection).
         lastAdminGuard.assertActiveAdminExists();
-        // Side-fix 2: the deleted user's outstanding tokens must die now, not at TTL
-        // (the bulk stamp targets the row directly, independent of the soft-delete).
         sessionRevocationService.revokeUser(id);
     }
 
     /**
-     * Clears an active brute-force lockout ([RISK-22]) ahead of its expiry: resets the
-     * failed-attempt counter and clears {@code lockedUntil}. The lock leaves refresh
-     * tokens in place (they work again once unlocked), so no session revive is needed —
-     * the user can log in immediately. No-op state-wise for an account that is not
-     * currently locked (still audited).
+     * Clears an active brute-force lockout ([RISK-22]): resets the counter and
+     * {@code lockedUntil}; refresh tokens were left intact by the lock, so no session
+     * revive is needed. No-op state-wise when not locked (still audited).
      */
     @Transactional
     @AuditLog(action = "user_unlocked", entityType = "User", entityId = "#result.id", entityName = "#result.email")
@@ -535,14 +491,11 @@ public class UserService {
         Set<String> beforeNames = user.getRoles().stream().map(Role::getName).collect(java.util.stream.Collectors.toSet());
         user.getRoles().clear();
         user.getRoles().addAll(roles);
-        // Last-admin guard: stripping the target's admin-carrying role may drop the
-        // tenant below one active admin — the existence query auto-flushes the join-row
-        // removal, so this sees the post-mutation closure.
+        // Guard: stripping an admin-carrying role may drop below the one-active-admin
+        // floor (the existence query auto-flushes the join-row removal first).
         lastAdminGuard.assertActiveAdminExists();
         User saved = userRepository.save(user);
-        // Faz 1: a role-set change can drop permissions the user's outstanding tokens
-        // still carry — kill their sessions so the delta is enforced immediately, not at
-        // the next access-token TTL.
+        // Kill sessions so the permission delta is enforced immediately, not at access-token TTL.
         sessionRevocationService.revokeUser(saved.getId());
         // Faz 2b: set delta values for AOP aspect
         AuditDeltaContext.setOldValue(AuditService.namesJson(beforeNames));
@@ -559,12 +512,10 @@ public class UserService {
         Set<String> beforeNames = user.getGroups().stream().map(Group::getName).collect(java.util.stream.Collectors.toSet());
         user.getGroups().clear();
         user.getGroups().addAll(groups);
-        // Last-admin guard: removing the user from an admin-carrying group may drop
-        // the tenant below one active admin (auto-flushed before the check).
+        // Guard: removing the user from an admin-carrying group may drop below the floor (auto-flushed first).
         lastAdminGuard.assertActiveAdminExists();
         User saved = userRepository.save(user);
-        // Faz 1: a group-set change can drop group-granted permissions the user's
-        // outstanding tokens still carry — kill their sessions immediately.
+        // Kill sessions so the permission delta is enforced immediately, not at access-token TTL.
         sessionRevocationService.revokeUser(saved.getId());
         // Faz 2b: set delta values for AOP aspect
         AuditDeltaContext.setOldValue(AuditService.namesJson(beforeNames));
@@ -572,10 +523,7 @@ public class UserService {
         return toResponse(saved);
     }
 
-    /**
-     * Self-service profile update. Patch semantics: only non-null request fields are
-     * applied (null = leave unchanged); an empty string clears a field.
-     */
+    /** Self-service profile update; patch semantics (null = unchanged, empty string clears). */
     @Transactional
     public UserResponse updateProfile(UUID userId, UserProfileUpdateRequest request) {
         User user = getUserOrThrow(userId);
@@ -596,12 +544,8 @@ public class UserService {
     }
 
     /**
-     * Self-service password change. Verifies the current password before applying the
-     * new one, then stamps {@code tokenInvalidBefore = now()} so every access token
-     * issued before this change is rejected by {@code JwtAuthenticationFilter}
-     * ([RISK-21]). Multi-device logout side effect: ALL of the user's outstanding
-     * sessions are killed, not just the current one. Granular (single-session) revoke
-     * arrives with Redis-backed blacklist (Epic 2.6).
+     * Self-service change (current password verified); kills ALL outstanding sessions
+     * — multi-device logout via {@code tokenInvalidBefore} ([RISK-21]).
      */
     @Transactional
     @AuditLog(action = "user_password_changed", entityType = "User", entityId = "#userId", entityName = "#user.email")
@@ -616,10 +560,8 @@ public class UserService {
     }
 
     /**
-     * Admin-issued password reset. No current password is verified — the caller already
-     * holds {@code iam:user:write}. {@code tokenInvalidBefore = now()} stamps the reset
-     * time so the user's previous tokens (if any) no longer authenticate
-     * ([RISK-21] — same multi-device logout note as {@link #changePassword}).
+     * Admin reset — no current password verified (caller holds {@code iam:user:write});
+     * same multi-device revoke chain as {@link #changePassword}.
      */
     @Transactional
     @AuditLog(action = "user_password_reset", entityType = "User", entityId = "#userId", entityName = "#user.email")
@@ -630,13 +572,7 @@ public class UserService {
         userRepository.save(user);
     }
 
-    /**
-     * [RISK-21] Logout hook: stamps {@code tokenInvalidBefore = now()} for the user.
-     * Called by {@code AuthController.logout} with the authenticated principal's id.
-     * Revokes every outstanding access token for the user (multi-device logout);
-     * granular per-session revoke is deferred to Epic 2.6 (Redis blacklist). The cookie
-     * is also expired client-side by the controller so the browser drops it.
-     */
+    /** [RISK-21] Logout hook: stamps {@code tokenInvalidBefore} for the user. */
     @Transactional
     public void revokeTokens(UUID userId) {
         User user = getUserOrThrow(userId);
@@ -645,12 +581,9 @@ public class UserService {
     }
 
     /**
-     * [RISK-21 + K-34 + Faz 1] Centralized session revoke for this user: delegates to
-     * {@link SessionRevocationService#revokeUser(UUID)}, which stamps
-     * {@code tokenInvalidBefore} (kills all outstanding access tokens) and drops the
-     * user's refresh tokens (so a stolen refresh cannot mint a fresh access token whose
-     * {@code iat} post-dates the revoke). Invoked on password change/reset and explicit
-     * token revoke — multi-device, all sessions.
+     * Centralized session revoke ([RISK-21 + K-34 + Faz 1]): stamps
+     * {@code tokenInvalidBefore} AND drops refresh tokens — a stolen refresh cannot
+     * mint a fresh access token whose {@code iat} post-dates the revoke.
      */
     private void invalidateTokens(User user) {
         sessionRevocationService.revokeUser(user.getId());

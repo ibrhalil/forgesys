@@ -18,6 +18,11 @@ import java.lang.reflect.Method;
 import java.util.UUID;
 import java.util.function.Consumer;
 
+/**
+ * AOP aspect behind {@link AuditLog}: resolves the SpEL expressions against the
+ * method's args/return value and delegates to {@link AuditService} — best-effort,
+ * never breaks the business op.
+ */
 @Slf4j
 @Aspect
 @Component
@@ -77,11 +82,9 @@ public class AuditLogAspect {
             }
 
             // Peek (not get-and-clear): RequestLogFilter's finally is the single clear
-            // point for AuditRequestContext — consuming here would leave the request-log
-            // row without its body, and the value must survive until that finally runs.
+            // point — consuming here would strip the request-log row of its body.
             String requestBody = AuditRequestContext.getRequestBody().orElse(null);
 
-            // Notify test hook if registered (for unit tests without Spring context)
             Consumer<AuditCapture> hook = testHook;
             if (hook != null) {
                 hook.accept(new AuditCapture(auditLog.action(), auditLog.entityType(),
@@ -120,14 +123,4 @@ public class AuditLogAspect {
         }
     }
 
-    private void updateLatestAuditLogRequestBody(String requestBody) {
-        // Note: This is a best-effort update. The audit log was already saved in REQUIRES_NEW.
-        // We cannot easily update it without another REQUIRES_NEW transaction and finding the
-        // exact log entry (by traceId + actor + action + entity). For now, request body capture
-        // is primarily handled by RequestLogFilter for request logs. Audit logs get request body
-        // only when the aspect runs within the same request context where RequestBodyCaptureFilter
-        // already stored it. Since AuditService.record runs in REQUIRES_NEW, the request body
-        // would need to be passed at record time. This is a known limitation for now.
-        // The main request body capture is in RequestLog via RequestLogFilter.
-    }
 }

@@ -10,20 +10,10 @@ import io.swagger.v3.oas.annotations.info.Info;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * OpenAPI metadata (K-41). springdoc generates the spec from the controllers at
- * runtime ({@code /v3/api-docs}, Swagger UI at {@code /swagger-ui.html}) — enabled
- * in dev/test, disabled in prod via {@code springdoc.*} flags in
- * {@code application-prod.yaml}.
- *
- * <p><strong>Auth model documented, not operated:</strong> the API authenticates
- * with an httpOnly JWT cookie ({@code sf_access_token}) set by
- * {@code POST /api/v1/auth/login}; the browser attaches it automatically and JS
- * never reads it. The {@code cookieAuth} security scheme documents this — the
- * Swagger UI "Authorize" button is informational (an httpOnly cookie cannot be
- * pasted into it). To try authenticated endpoints from Swagger UI, call
- * {@code /auth/login} first in the same browser session (cookies flow same-origin)
- * — or use a tenant subdomain host plus the dev-only {@code X-Tenant-ID} header
- * when hitting {@code localhost} directly.
+ * springdoc metadata (K-41) — served in dev/test only; prod disables springdoc via
+ * yaml flags. The {@code cookieAuth} scheme documents the httpOnly cookie; the
+ * Authorize button is informational (an httpOnly cookie cannot be pasted into it) —
+ * call {@code /auth/login} in the same browser session to try authenticated endpoints.
  */
 @Configuration
 @OpenAPIDefinition(

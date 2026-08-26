@@ -1,18 +1,11 @@
 package com.ibrhalil.forgesys.config;
 
 /**
- * Code-side registry of subscription plans (K-16 / Epic 3.0.A). The single source of
- * truth for plan metadata — {@code PlanSyncRunner} upserts these into {@code t_plans}
- * (public schema) at startup. Financial flows (payment, upgrade/downgrade) arrive in
- * Faz 6; until then the rows are reference data gating module activation only.
- *
- * <p>{@link #rank} orders the plans (FREE &lt; PRO &lt; ENTERPRISE): a module's
- * {@code minPlan} rank gates activation — the tenant's plan rank must be &gt;= it.
- *
- * <p>Plan <em>limits</em> (K-15 / Epic 3.0.B) also live here — the code registry is the
- * single source of truth, so no {@code t_plans} migration is needed when limits change.
- * {@code -1} means unlimited. Enforcement is a soft-block (403 {@code app_limit_reached}):
- * creating above the limit is rejected, existing data is never hidden.
+ * Code-side plan registry (K-16), upserted into {@code t_plans} at startup; financial
+ * flows arrive in Faz 6. {@link #rank} orders plans (FREE &lt; PRO &lt; ENTERPRISE) and
+ * gates module activation (tenant rank &gt;= module minPlan). Limits (K-15) live here —
+ * no migration when they change; {@code -1} = unlimited, enforced as a soft-block
+ * (403 {@code app_limit_reached}) that never hides existing data.
  */
 public enum PlanDefinition {
 

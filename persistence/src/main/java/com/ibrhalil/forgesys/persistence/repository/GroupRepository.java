@@ -23,30 +23,19 @@ public interface GroupRepository extends JpaRepository<Group, UUID>, JpaSpecific
     Optional<Group> findByName(String name);
 
     /**
-     * Groups carrying {@code roleId} ({@code t_group_roles}). Used by
-     * {@code RoleService.delete} to detach the role from every carrier's collection
-     * before the soft-delete — leaving the join rows in place keeps managed
-     * {@code Group.roles} collections referencing a deleted role, which fails the
-     * flush with {@code TransientPropertyValueException}.
+     * Groups carrying {@code roleId} — detached from the role before its soft-delete;
+     * stale join rows in managed collections fail the flush
+     * ({@code TransientPropertyValueException}).
      */
     @Query("select g from Group g join g.roles r where r.id = :roleId")
     List<Group> findGroupsByRole(@Param("roleId") UUID roleId);
 
-    /**
-     * List lookup redeclared to attach an {@link EntityGraph} (roles) so the paginated
-     * list query avoids N+1 when building {@code GroupResponse}. Serves both plain and
-     * Specification-driven (filter engine) list reads.
-     */
+    /** List with roles attached — N+1-free for plain and Specification reads. */
     @Override
     @EntityGraph(attributePaths = "roles")
     Page<Group> findAll(Specification<Group> spec, Pageable pageable);
 
-    /**
-     * Same {@link EntityGraph} as {@link #findAll(Pageable)} for the single-row lookup.
-     * {@code GroupService.findById}/{@code getGroupOrThrow} resolve a {@code Group} and
-     * then read {@code roles} when building {@code GroupResponse}; without this override
-     * that accessor fires an extra SELECT on the tenant schema.
-     */
+    /** Single-row lookup with the same graph as {@link #findAll(Specification, Pageable)}. */
     @Override
     @EntityGraph(attributePaths = "roles")
     Optional<Group> findById(UUID id);

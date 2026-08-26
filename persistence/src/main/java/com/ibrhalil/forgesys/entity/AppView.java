@@ -15,15 +15,10 @@ import lombok.ToString;
 import java.util.UUID;
 
 /**
- * A saved view of a custom {@link App} (K-15 / Epic 3.0.B): a {@link ViewType} plus a
- * <em>structured</em> {@code config} JSON ({@code filters/sorts/groupBy} referencing
- * property ids — validated against the app's property set; deliberately NOT a free-text
- * expression language, so the injection surface is structural, see ROADMAP 3.0.B spike).
- *
- * <p>NOTE on naming: this is a writable domain entity named after its K-15 table
- * {@code t_app_views} — not a read-model projection (the former
- * {@code @Immutable @Subselect} {@code UserDirectoryView} read model moved to an
- * in-code Criteria DTO projection, K-49).
+ * A saved view of a custom {@link App} (K-15): {@link ViewType} + <em>structured</em>
+ * {@code config} JSON ({@code filters/sorts/groupBy} on property ids — deliberately
+ * not a free-text expression language). A writable domain entity, not a read-model
+ * projection (K-49).
  */
 @Entity
 @Getter

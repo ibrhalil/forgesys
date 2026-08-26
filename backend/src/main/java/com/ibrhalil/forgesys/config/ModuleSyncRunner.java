@@ -22,25 +22,13 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
-import java.util.List;
 import java.util.UUID;
 
 /**
- * Startup module sync (K-16 / Epic 3.0.A). Per company (try/catch isolation, mirroring
- * {@code TenantMigrationRunner}/{@code RbacSeeder}):
- * <ol>
- *   <li><strong>Subscription backfill</strong> — tenants provisioned before the module
- *       system get a FREE subscription (preserves the pre-3.0.A behavior where every
- *       tenant had every module).</li>
- *   <li><strong>Default modules</strong> — {@code forgesys.modules.default-keys} ensured
- *       ACTIVE (idempotent activation; pm backfills every existing tenant).</li>
- *   <li><strong>Re-sync</strong> — every already-ACTIVE module gets its migrations +
- *       permission seed re-applied, so newly shipped module migrations/permissions
- *       propagate to existing tenants.</li>
- * </ol>
- *
- * <p>Runs after {@link PlanSyncRunner} ({@code @Order(0)} — plan rows must exist for
- * the FREE backfill). Disabled in the {@code test} profile.
+ * Startup module sync (K-16), per company with try/catch isolation: FREE-subscription
+ * backfill for pre-module tenants, default-module activation, and migration/permission
+ * re-sync of ACTIVE modules (newly shipped migrations propagate to existing tenants).
+ * Runs after {@link PlanSyncRunner} — the FREE backfill needs the plan rows.
  */
 @Slf4j
 @Component
@@ -76,7 +64,7 @@ public class ModuleSyncRunner implements ApplicationRunner {
         ensureFreeSubscription(company);
         moduleActivationService.activateDefaultModules(company);
         
-        // Ensure the system tenant gets the 'apps' module activated (for request logs, K-27)
+        // System tenant gets 'apps' activated (request logs, K-27).
         if ("tenant_system".equals(company.getSchemaName())) {
             ModuleDefinition appsModule = ModuleDefinition.fromKey("apps").orElse(null);
             if (appsModule != null) {

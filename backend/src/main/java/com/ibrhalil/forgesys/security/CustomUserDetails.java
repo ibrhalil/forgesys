@@ -10,16 +10,8 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Tenant-aware Spring Security principal. The auth identifier (Spring's
- * {@code username}) is the user's <strong>email</strong> (login is email-based).
- *
- * <p>Two construction paths:
- * <ul>
- *   <li>{@link CustomUserDetailsService} builds it from the DB at login (with real
- *       account flags and resolved authorities).</li>
- *   <li>{@code JwtAuthenticationFilter} rebuilds it from token claims on each
- *       request (no DB hit; account flags assumed valid for the short-lived token).</li>
- * </ul>
+ * Tenant-aware principal; Spring's "username" is the user's email (login is email-based).
+ * Built from the DB at login; rebuilt from JWT claims per request (no DB hit).
  */
 public class CustomUserDetails implements UserDetails {
 
@@ -65,15 +57,10 @@ public class CustomUserDetails implements UserDetails {
     }
 
     /**
-     * [RISK-22] The brute-force lockout writes {@code lockedUntil} only — the
-     * {@code accountNonLocked} column is never touched (it stays {@code true}). An
-     * active lock window ({@code lockedUntil} in the future) must therefore make
-     * {@code isAccountNonLocked()} false here, otherwise a locked account with a live
-     * refresh token could keep minting fresh access tokens through
-     * {@code /auth/refresh} for the whole lock duration — bypassing the lockout
-     * (only the access tokens are killed via {@code tokenInvalidBefore}, and refresh
-     * immediately issues new ones). Lock expiry is lazy: a past {@code lockedUntil}
-     * still counts as non-locked (the login path clears it on the next attempt).
+     * [RISK-22] Lockout writes {@code lockedUntil} only, so an active window must count
+     * as locked here — otherwise a locked account with a live refresh token could keep
+     * minting access tokens via /auth/refresh for the whole lock duration. Expiry is
+     * lazy (past {@code lockedUntil} = non-locked; login clears it on next attempt).
      */
     private static boolean isEffectivelyNonLocked(UserAccount account) {
         return account.isAccountNonLocked()
@@ -92,11 +79,7 @@ public class CustomUserDetails implements UserDetails {
         return email;
     }
 
-    /**
-     * The JWT id ({@code jti}) of the access token this principal was reconstructed from
-     * (K-34). Used by per-session logout to blacklist the single token. {@code null} on
-     * principals built at login time (before a token exists).
-     */
+    /** jti of the token this principal was rebuilt from (K-34, per-session logout); null at login time. */
     public String getJti() {
         return jti;
     }

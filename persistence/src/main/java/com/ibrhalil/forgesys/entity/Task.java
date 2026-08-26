@@ -16,13 +16,9 @@ import java.time.LocalDate;
 import java.util.UUID;
 
 /**
- * A task belonging to a {@link Project} (the TASKS project type module, Faz 3 Stage 2).
- * Project and assignee are plain {@code UUID} columns (not {@code @ManyToOne}) to avoid
- * lazy-proxy/N+1 issues and to keep task queries cheap; validity is enforced in the
- * service (project/assignee existence) and by FK constraints in the migration.
- *
- * <p>Soft-deletable, optimistic-locked, tenant-audited — same base as the other tenant
- * entities. No uniqueness constraint (task titles may repeat).
+ * A task belonging to a {@link Project} (TASKS module). Project and assignee are plain
+ * {@code UUID} columns (no {@code @ManyToOne}) — validity enforced in the service and
+ * by FKs in the migration. No uniqueness (titles may repeat).
  */
 @Entity
 @Getter

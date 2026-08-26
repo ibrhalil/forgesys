@@ -48,10 +48,8 @@ public class MultiTenancyJpaConfig {
     }
 
     /**
-     * Resolves the audit actor ({@code created_by}/{@code updated_by}) from the Spring
-     * Security context: the authenticated user's id ([RISK-33], closes [RISK-3]). When
-     * there is no authenticated principal — tenant signup, provisioning, startup
-     * runners — it falls back to {@code "system"}.
+     * Audit actor from the SecurityContext (RISK-33); falls back to {@code "system"}
+     * for signup, provisioning and startup runners.
      */
     @Bean
     public AuditorAware<String> auditorAwareProvider() {

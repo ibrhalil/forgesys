@@ -21,10 +21,9 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * View endpoints nested under their owning app (K-15 / Epic 3.0.B). Config is a
- * structured DSL validated against the app's property set (see
- * {@code AppViewConfigValidator}). Covered by {@code apps:app:write} — views are part
- * of the app definition, not record data.
+ * Views nested under their owning app (K-15); a view of another app yields 404.
+ * Config is a structured DSL re-validated against the app's property set; covered
+ * by {@code apps:app:write}.
  */
 @RestController
 @RequestMapping("/api/v1/apps/{appId}/views")

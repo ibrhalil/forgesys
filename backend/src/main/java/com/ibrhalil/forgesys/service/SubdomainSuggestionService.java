@@ -13,13 +13,10 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Generates unique subdomain slug candidates from an organization name (K-21). Used by
- * the signup form so the user can pick one during tenant creation. Turkish characters
- * are ASCII-folded before slugification.
- *
- * <p>Algorithm: normalize → slugify → validate pattern → confirm availability against
- * active + provisioning tenants. If the primary slug is taken, numeric suffixes
- * ({@code -2}, {@code -3}, ...) are tried up to {@link #MAX_SUGGESTIONS} candidates.
+ * Generates unique subdomain slug candidates from an organization name (K-21).
+ * Turkish characters are ASCII-folded before slugification. Algorithm: normalize →
+ * slugify → validate pattern → availability; numeric suffixes ({@code -2}, {@code -3},
+ * ...) up to {@link #MAX_SUGGESTIONS} candidates.
  */
 @Service
 @RequiredArgsConstructor
@@ -56,11 +53,7 @@ public class SubdomainSuggestionService {
         return new SubdomainSuggestionResponse(List.copyOf(suggestions));
     }
 
-    /**
-     * Validates a user-supplied subdomain against the pattern. Used by the provisioning
-     * service to reject malformed values early (the DTO pattern already constrains the
-     * request, but the runtime check keeps the service self-contained).
-     */
+    /** Pattern check — keeps the provisioning service self-contained (DTO already constrains). */
     public boolean isValidSubdomain(String subdomain) {
         return subdomain != null && SubdomainRules.PATTERN.matcher(subdomain).matches();
     }

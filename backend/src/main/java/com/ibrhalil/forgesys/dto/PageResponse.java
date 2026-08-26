@@ -5,11 +5,9 @@ import org.springframework.data.domain.Page;
 import java.util.List;
 
 /**
- * Uniform envelope for every paged list endpoint: {@code data[] + meta}. Replaces the
- * raw Spring Data {@code Page<T>} serialization so the wire contract is owned by the
- * API rather than the framework (Boot's flat/nested Page layout drift) — the same
- * philosophy as {@code ApiErrorResponse}/{@code ErrorCode}. {@code meta.page} is
- * 0-based, consistent with the previous Spring Data wire format.
+ * Uniform {@code data[] + meta} envelope for every paged list — the API owns the
+ * wire contract instead of Spring Data's {@code Page} serialization.
+ * {@code meta.page} is 0-based.
  */
 public record PageResponse<T>(List<T> data, PageMetadata meta) {
 

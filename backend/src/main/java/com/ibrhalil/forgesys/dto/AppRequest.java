@@ -6,10 +6,9 @@ import jakarta.validation.constraints.Size;
 import java.util.UUID;
 
 /**
- * Create/update a custom app (K-15 / Epic 3.0.B). {@code projectId} (K-45): on
- * create, optional — absent lands the app in the default APPS container; on update,
- * {@code null} means "leave unchanged" and a value moves the app between APPS
- * containers.
+ * Create/update a custom app (K-15); absent {@code projectId} on create lands in
+ * the default APPS container, on update {@code null} keeps and a value moves the
+ * app between APPS containers (K-45).
  */
 public record AppRequest(
         @NotBlank(message = "App name is required")

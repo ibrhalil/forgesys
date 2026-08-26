@@ -8,30 +8,11 @@ import org.springframework.http.ResponseCookie;
 import java.util.Arrays;
 
 /**
- * Cookie attributes + refresh-token TTL for JWT auth. The access token is delivered
- * both in the response body (API clients) and as an HTTP-only cookie
- * ({@code sf_access_token}, browser sessions); the refresh token likewise uses its own
- * {@code sf_refresh_token} cookie scoped to {@code /api/v1/auth} (K-34). These
- * properties drive the cookie halves.
- *
- * <ul>
- *   <li>{@code cookieName} / {@code refreshCookieName} — cookie keys.</li>
- *   <li>{@code cookieSecure} / {@code refreshCookieSecure} — {@code Secure} attribute.
- *       Dev/test default {@code false} (HTTP); {@code true} is forced by
- *       {@code application-prod.yaml} ([RISK-24](../../../../docs/DECISIONS.md#risk-24)
- *       — cleartext leakage over HTTP downgrade / mixed content).</li>
- *   <li>{@code cookieSameSite} — {@code SameSite} attribute (default {@code Lax}).</li>
- *   <li>{@code refreshTokenTtlDays} — refresh-token lifetime (default 7). Drives the
- *       Redis TTL and the refresh-cookie {@code Max-Age}.</li>
- *   <li>{@code refreshCookiePath} — refresh-cookie {@code Path} (default
- *       {@code /api/v1/auth} so the cookie is sent only to auth endpoints).</li>
- * </ul>
- *
- * <p>Bound under the {@code jwt.*} prefix; the {@code jwt.rsa.*} subkeys are owned by
- * {@link RsaKeyProperties} and are ignored here (record has no matching field).
- * Beyond the raw attributes, this record also carries the {@code Set-Cookie}
- * build/expire/read helpers (K-40) — the single cookie construction path shared by
- * the auth and session controllers.
+ * Cookie attributes + refresh TTL under {@code jwt.*} (K-34): access token in body +
+ * HTTP-only {@code sf_access_token} cookie; refresh in {@code sf_refresh_token} scoped
+ * to {@code /api/v1/auth}. {@code Secure} defaults false in dev/test, forced true in
+ * prod (RISK-24); {@code refreshTokenTtlDays} drives the Redis TTL and cookie Max-Age.
+ * Also the single Set-Cookie build/expire/read path (K-40).
  */
 @ConfigurationProperties(prefix = "jwt")
 public record JwtCookieProperties(
@@ -85,11 +66,7 @@ public record JwtCookieProperties(
         return effectiveRefreshTokenTtlDays() * 86_400L;
     }
 
-    /**
-     * Builds the {@code Set-Cookie} header for the access-token cookie. Single
-     * source for cookie construction (K-40) — controllers never assemble
-     * {@code ResponseCookie}s themselves.
-     */
+    /** Access-token Set-Cookie header — the single construction path (K-40). */
     public String buildAccessTokenCookie(String token, long expiresInSeconds) {
         return ResponseCookie.from(effectiveCookieName(), token)
                 .httpOnly(true)
@@ -113,11 +90,7 @@ public record JwtCookieProperties(
                 .toString();
     }
 
-    /**
-     * Builds a {@code Max-Age=0} expire header for the given cookie name.
-     * Both cookies expire with the access-cookie {@code Secure} flag — preserved
-     * pre-K-40 behavior (the access flag is the strictest default).
-     */
+    /** Max-Age=0 expire header; both cookies use the access-cookie Secure flag (pre-K-40 behavior). */
     public String expireCookie(String name, String path) {
         return ResponseCookie.from(name, "")
                 .httpOnly(true)

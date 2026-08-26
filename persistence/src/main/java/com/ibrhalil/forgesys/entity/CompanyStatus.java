@@ -4,10 +4,9 @@ import java.util.EnumSet;
 import java.util.Map;
 
 /**
- * Company lifecycle status. Allowed transitions for the platform-admin manual
- * {@code PATCH /platform/companies/{id}/status} are constrained by {@link #canTransitionTo}
- * ([RISK-32]); {@code PROVISIONING} is completed only via the verify flow (schema + admin
- * user), never by a manual status flip, and {@code TERMINATED} is terminal.
+ * Company lifecycle. Manual platform-admin transitions are constrained by
+ * {@link #canTransitionTo} (RISK-32): {@code PROVISIONING} completes only via the
+ * verify flow (never a manual flip), {@code TERMINATED} is terminal.
  */
 public enum CompanyStatus {
     PROVISIONING,
