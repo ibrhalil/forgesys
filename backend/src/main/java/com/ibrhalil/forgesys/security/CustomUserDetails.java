@@ -25,11 +25,21 @@ public class CustomUserDetails implements UserDetails {
     private final Set<GrantedAuthority> authorities;
     private final String tenantSchema;
     private final String jti;
+    /** K-50: {@code "platform"} for platform-identity tokens; null for tenant users. */
+    private final String scope;
 
     public CustomUserDetails(UUID userId, String email, String password, boolean enabled,
                              boolean accountNonExpired, boolean accountNonLocked,
                              boolean credentialsNonExpired, Set<GrantedAuthority> authorities,
                              String tenantSchema, String jti) {
+        this(userId, email, password, enabled, accountNonExpired, accountNonLocked,
+                credentialsNonExpired, authorities, tenantSchema, jti, null);
+    }
+
+    public CustomUserDetails(UUID userId, String email, String password, boolean enabled,
+                             boolean accountNonExpired, boolean accountNonLocked,
+                             boolean credentialsNonExpired, Set<GrantedAuthority> authorities,
+                             String tenantSchema, String jti, String scope) {
         this.userId = userId;
         this.email = email;
         this.password = password;
@@ -40,6 +50,7 @@ public class CustomUserDetails implements UserDetails {
         this.authorities = authorities;
         this.tenantSchema = tenantSchema;
         this.jti = jti;
+        this.scope = scope;
     }
 
     public static CustomUserDetails from(User user, UserAccount account, Set<GrantedAuthority> authorities, String tenantSchema) {
@@ -82,6 +93,15 @@ public class CustomUserDetails implements UserDetails {
     /** jti of the token this principal was rebuilt from (K-34, per-session logout); null at login time. */
     public String getJti() {
         return jti;
+    }
+
+    /** K-50: {@code "platform"} or null (tenant user). */
+    public String getScope() {
+        return scope;
+    }
+
+    public boolean isPlatform() {
+        return "platform".equals(scope);
     }
 
     @Override

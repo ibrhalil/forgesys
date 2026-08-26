@@ -65,3 +65,10 @@ forgesys:
       password: ${FORGESYS_BOOTSTRAP_SYSTEM_ADMIN_PASSWORD:change-me-system-admin}
       first-name: ${FORGESYS_BOOTSTRAP_SYSTEM_ADMIN_FIRST_NAME:System}
       last-name: ${FORGESYS_BOOTSTRAP_SYSTEM_ADMIN_LAST_NAME:Administrator}
+    # K-50: initial platform superadmin (t_platform_users, public schema). Placeholder
+    # password — never deploy to prod with it.
+    platform-admin:
+      enabled: ${FORGESYS_BOOTSTRAP_PLATFORM_ADMIN_ENABLED:true}
+      email: ${FORGESYS_BOOTSTRAP_PLATFORM_ADMIN_EMAIL:platform-admin@forgesys.dev}
+      password: ${FORGESYS_BOOTSTRAP_PLATFORM_ADMIN_PASSWORD:change-me-platform-admin}
+      display-name: ${FORGESYS_BOOTSTRAP_PLATFORM_ADMIN_DISPLAY_NAME:Platform Admin}

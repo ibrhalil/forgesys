@@ -69,6 +69,17 @@ abstract class AbstractRbacWebTest {
     }
 
     /**
+     * K-50: a signed platform-identity token cookie ({@code scope=platform}, no tenant
+     * claim) — HUMAN superadmins implicitly carry the full platform catalog.
+     */
+    Cookie authPlatform(UUID userId, String email) {
+        String token = jwtTokenProvider.generatePlatformAccessToken(
+                userId.toString(), email,
+                com.ibrhalil.forgesys.config.PlatformPermissionCatalog.ALL_NAMES);
+        return new Cookie("sf_platform_access_token", token);
+    }
+
+    /**
      * Seeds the last-admin invariant baseline: an {@code all_permissions} role held by
      * an enabled user. Most write paths now run {@code LastAdminGuard}, which requires
      * at least one active admin-capable user to REMAIN after the mutation — tests that
