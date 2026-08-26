@@ -28,7 +28,7 @@
 - **Custom App Builder (K-15 + K-42):** tenant'ların kendi mini-uygulamalarını yaratması — JSONB EAV modeli (app/property/view/record CRUD, native PG JSONB search, plan limitleri) + tam UI (property/view/record editörleri, TABLE/BOARD/CALENDAR/LIST/GALLERY görünüm renderer'ları, satır bazlı filtre/sort DSL UI'ı, User/Relation picker'ları, plan kullanım göstergeleri)
 - **Admin console (frontend):** login/register/tenant-verify; users/roles/groups/permissions/sessions/audit/login-history/request-logs/projects/modules/notes/apps (App Builder) sayfaları; permission-gated lazy navigation
 - **Self-service:** `/users/me/**` (profil + şifre değiştirme) — her authenticated user kendi hesabını yönetir
-- **Platform admin:** `/platform/companies` cross-tenant yönetim (K-25) + rezerve `system` tenant bootstrap (K-24)
+- **Platform süperadmin + servis hesapları (K-50):** ayrı platform auth yüzeyi (`/platform/login` — bare host) + `sf_platform_*` cookie'leri; global kimlikler `public` şemasında (`t_platform_users`/`t_platform_api_keys`/`t_platform_audit_logs`). Süperadmin: tenant yaşam döngüsü (plan/modül/status), cross-tenant rapor, **tenant'a giriş** (impersonation — tek kullanımlık kod + `act` claim'li JWT, API mirroring yok). Servis hesapları: `X-API-Key` stateless auth, scope'lu agent erişimi, raw key yalnız bir kez gösterilir. (K-24 `system` tenant bootstrap kaldırıldı; RISK-18 `platform:*` tenant seed'i kapanış.)
 - **İki fazlı tenant signup (K-21):** `POST /api/v1/auth/company/register` → 202 + PROVISIONING + doğrulama maili → `POST /verify` → şema + Flyway + admin user → ACTIVE
 - Entity hiyerarşisi: UUID, soft delete, optimistic locking, Spring Data auditing
 - Merkezi hata yönetimi (`ApiErrorResponse` + `ErrorCode` — stable wire codes)
@@ -88,6 +88,7 @@ npm run dev                          # /api -> http://localhost:8080 proxy
 > Proje `package-lock.json` kullanmaz (`.npmrc`: `package-lock=false`). Doğrudan bağımlılık sürümleri `package.json` içinde tam sürüm olarak sabittir; Maven ve Docker da `npm install --include=optional --no-package-lock` çalıştırır. Böylece native optional paketler kurulumu yapan işletim sistemine göre seçilir.
 
 - Uygulama: http://localhost:8080 · Frontend: http://localhost:3000
+- **Platform konsolu:** http://localhost:3000/platform/login (dev: `platform-admin@forgesys.dev` / `change-me-platform-admin`) — bare host, subdomain yok
 - Veritabanı: `localhost:5432` (default: `forgesys` / `forgeadmin` / `forgepassword`) · Redis: `localhost:6379`
 
 > **Build Docker gerektirmez.** Testler `test` profilinde (H2 in-memory) çalışır. Docker yalnızca dev infra'sı (db+redis), prod deploy ve **opsiyonel** gerçek-PG isolation testi (`CrossTenantIsolationTest`, `-Dforgesys.pg.it=true` gate'i ile) için gerekli.
@@ -110,6 +111,12 @@ Konfigürasyon **profile-based** çalışır. Aktif profil `SPRING_PROFILES_ACTI
 | `SPRING_DATASOURCE_URL` | DB bağlantı URL'i |
 | `SPRING_DATASOURCE_USERNAME` / `SPRING_DATASOURCE_PASSWORD` | DB credential'ları |
 | `SPRING_DATA_REDIS_HOST` / `SPRING_DATA_REDIS_PORT` | Redis |
+| `FORGESYS_BOOTSTRAP_PLATFORM_ADMIN_ENABLED` | Platform süperadmin bootstrap (default `false`) |
+| `FORGESYS_BOOTSTRAP_PLATFORM_ADMIN_EMAIL` | Bootstrap süperadmin e-postası |
+| `FORGESYS_BOOTSTRAP_PLATFORM_ADMIN_PASSWORD` | Bootstrap süperadmin şifresi |
+| `FORGESYS_BOOTSTRAP_PLATFORM_ADMIN_DISPLAY_NAME` | Bootstrap süperadmin görünen adı |
+
+> Dev profili: `platform-admin@forgesys.dev` / `change-me-platform-admin` (placeholder) — `.env` gerektirmez.
 
 > `PASSWORD_PEPPER` (K-23 — `.env.example`'te tanımlı) compose `environment:` listesinde **iletilmez**; `infra/config/application-prod.yaml` overlay'i üzerinden konteynere ulaşır (`SPRING_CONFIG_ADDITIONAL_LOCATION`). Pepper'ı overlay ile set etmeden prod ayağa kalkmaz (fail-fast).
 >
@@ -232,7 +239,26 @@ Tüm endpoint'ler `/api/v1/*` prefix'i altında. Hata yanıtları tek tip `ApiEr
 | `POST` | `/api/v1/auth/company/register` | K-21 faz 1 — `PROVISIONING` Company + doğrulama token'ı yaratır, linki mail ile gönderir (202 Accepted) |
 | `POST` | `/api/v1/auth/company/verify` | K-21 faz 2 — token'ı consume eder, senkron şema + Flyway + admin user → `ACTIVE` (200 OK) |
 | `POST` | `/api/v1/auth/company/suggest-subdomain` | K-21 — org adından slug önerileri (Türkçe karakter normalize) |
-| `POST` | `/api/v1/auth/login` | Email+şifre → JWT (cookie + body) |
+| `POST` | `/api/v1/auth/login` | Email+şifre → JWT (cookie + body) — tenant login |
+| `POST` | `/api/v1/platform/auth/login` | K-50 platform login — bare host, `sf_platform_*` cookie'leri |
+| `POST` | `/api/v1/platform/auth/refresh` | K-50 platform refresh rotasyonu |
+| `POST` | `/api/v1/auth/platform-switch` | K-50 impersonation exchange — tenant-scoped (hedef subdomain), permitAll |
+
+**Platform (süperadmin, `scope=platform` + `platform:*`):**
+
+| Method | Path | Açıklama |
+|--------|------|----------|
+| `GET` | `/api/v1/platform/me` | Platform kimliği self view |
+| `GET` | `/api/v1/platform/companies` · `GET /{id}` | Company liste/detay |
+| `PATCH` | `/api/v1/platform/companies/{id}/status` | Status lifecycle (ACTIVE ↔ SUSPENDED/TERMINATED) |
+| `GET`/`PUT` | `/api/v1/platform/companies/{id}/subscription` | Plan görüntüle/değiştir |
+| `GET`/`PUT` | `/api/v1/platform/companies/{id}/modules` | Modül aktivasyon seti |
+| `GET` | `/api/v1/platform/companies/{id}/report` | Kullanım raporu (users/projects/apps/notes) |
+| `POST` | `/api/v1/platform/companies/{id}/switch` | Tenant'a giriş — tek kullanımlık kod (30 sn) + targetUrl |
+| `POST`/`GET`/`DELETE` | `/api/v1/platform/service-accounts` | Servis hesabı oluştur (raw key 1 kez) / liste / revoke |
+| `GET` | `/api/v1/platform/audit-logs` | Platform audit trail (filtreli sayfalama) |
+
+> `/api/v1/platform/**` `TenantFilter`'dan muaf (`shouldNotFilter` — platform API tenant-agnostiktir). `/api/v1/auth/platform-switch` izin verilir ama NORMAL tenant akışında kalır (hedef tenant subdomain'inde koşur). Tenant login tenant'a özgü (subdomain çözümleme).
 
 **Tenant signup örneği (K-21 iki fazlı):**
 

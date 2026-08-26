@@ -2,7 +2,7 @@
 
 ## Project
 
-**ForgeSys** — modular multi-tenant SaaS platform. Java 21 + Spring Boot 4.1, PostgreSQL 16, Redis 7.4, Flyway. Hybrid model: built-in modules (pm: Projects & Tasks, apps: App Builder, notes — Odoo/ERPNext style) + tenant custom apps (Notion/Airtable style, JSONB EAV). **Schema-per-tenant** isolation; **user-per-tenant** (no global users); RBAC (User-Role + Group-Role + Role-Permission, inheritance, `all_permissions` flag).
+**ForgeSys** — modular multi-tenant SaaS platform. Java 21 + Spring Boot 4.1, PostgreSQL 16, Redis 7.4, Flyway. Hybrid model: built-in modules (pm: Projects & Tasks, apps: App Builder, notes — Odoo/ERPNext style) + tenant custom apps (Notion/Airtable style, JSONB EAV). **Schema-per-tenant** isolation; **tenant *users* live in tenant schemas; *platform* identities live in `public`** (K-50); RBAC (User-Role + Group-Role + Role-Permission, inheritance, `all_permissions` flag).
 
 ## Language Policy (token optimization)
 
@@ -103,8 +103,7 @@ to re-explain context. State lives in files, not in conversation.
 - **Status log.** Append a line to the plan file's status log whenever a phase lands, a
   decision refines, or a blocker appears. Epic-level outcomes (ADR, ROADMAP, module docs) are
   recorded as phases land, not deferred to the end.
-- Plans live in `docs/plans/`, never in code comments (#21). When an epic completes, its plan
-  file stays as history; decision/impact records graduate to `DECISIONS.md`.
+- Plans live in `docs/plans/`, never in code comments (#21). When an epic completes, its plan file is **deleted**; decision/impact records graduate to `DECISIONS.md`.
 
 ## Test
 

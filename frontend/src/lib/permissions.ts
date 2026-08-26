@@ -21,8 +21,6 @@ export const PERMISSIONS = {
   AUDIT_READ: 'iam:audit:read',
   MODULE_READ: 'iam:module:read',
   MODULE_WRITE: 'iam:module:write',
-  COMPANY_READ: 'platform:company:read',
-  COMPANY_WRITE: 'platform:company:write',
   PROJECT_READ: 'pm:project:read',
   PROJECT_WRITE: 'pm:project:write',
   PROJECT_DELETE: 'pm:project:delete',
@@ -45,3 +43,21 @@ export const PERMISSIONS = {
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
+
+/**
+ * Platform permission catalog (K-50), mirroring the backend
+ * {@code PlatformPermissionCatalog} — in-code only, never seeded to tenants
+ * (RISK-18). HUMAN platform users hold ALL of these; the platform console routes
+ * and nav gate on them.
+ */
+export const PLATFORM_PERMISSIONS = {
+  COMPANY_READ: 'platform:company:read',
+  COMPANY_WRITE: 'platform:company:write',
+  TENANT_ACCESS: 'platform:tenant:access',
+  TENANT_LIFECYCLE: 'platform:tenant:lifecycle',
+  TENANT_REPORT: 'platform:tenant:report',
+  SERVICE_ACCOUNT_MANAGE: 'platform:service-account:manage',
+  AUDIT_READ: 'platform:audit:read',
+} as const;
+
+export type PlatformPermission = (typeof PLATFORM_PERMISSIONS)[keyof typeof PLATFORM_PERMISSIONS];

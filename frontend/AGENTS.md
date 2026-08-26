@@ -42,42 +42,51 @@ src/
   main.tsx                 # entry (StrictMode + ErrorBoundary + Toaster)
   app/App.tsx              # providers (QueryClient) + router; shell children are
                            # generated from app/Routes.ts (public routes + layout explicit)
-  app/Routes.ts            # SHELL_ROUTES config list: path/Component/authority per route —
-                           # App maps it to <Route> + RequirePermission (authorities mirror
-                           # app/Navigation.ts). Pages are React.lazy chunks; AppShell's
-                           # <Suspense> around <Outlet/> covers chunk loading
+app/Routes.ts            # SHELL_ROUTES config list: path/Component/authority per route —
+                            # App maps it to <Route> + RequirePermission (authorities mirror
+                            # app/Navigation.ts). Pages are React.lazy chunks; AppShell's
+                            # <Suspense> around <Outlet/> covers chunk loading
+  app/App.tsx              # providers (QueryClient) + router; tenant shell + platform shell wired
+                            # in parallel: authStore.fetchMe() + platformAuthStore.fetchPlatformMe();
+                            # /platform/login static route + /platform subtree (RequirePlatformAuth →
+                            # PlatformShell → RequirePlatformPermission per route; index → companies)
   app/Navigation.ts        # data-driven sidebar config: NAV_ITEMS + NAV_GROUPS
                            # (labelKey/to/icon/authority per item; authority-less groups
                            # hide entirely)
-  lib/permissions.ts       # PERMISSIONS constants — the built-in catalog mirrored from
-                           # the backend PermissionCatalog (single frontend source)
-  components/              # cross-feature/shared components
+lib/permissions.ts       # PERMISSIONS constants — the built-in tenant catalog mirrored from
+                            # the backend PermissionCatalog (IAM_PERMISSIONS) + PLATFORM_PERMISSIONS
+                            # mirror (7 names, K-50 PlatformPermissionCatalog); single frontend source
+components/              # cross-feature/shared components
     AppShell.tsx           #   viewport-locked shell (lg:h-screen): fixed sidebar + fixed
-                           #   breadcrumb topbar; page scrolls inside its own container.
-                           #   Sidebar renders Navigation.ts (authority-filtered, empty
-                           #   groups hidden), react-icons/lu icons, user chip, LanguageToggle
+                            #   breadcrumb topbar; page scrolls inside its own container.
+                            #   Sidebar renders Navigation.ts (authority-filtered, empty
+                            #   groups hidden), react-icons/lu icons, user chip, LanguageToggle
     RequireAuth.tsx        #   auth redirect guard
     RequirePermission.tsx  #   permission route guard — inline 403 state (no redirect)
+    RequirePlatformAuth.tsx # K-50 platform auth guard (bare host, checks platformAuthStore)
+    RequirePlatformPermission.tsx # K-50 platform permission guard
     Page.tsx               #   page scaffold: head (title/description/actions) over body —
-                           #   every routed screen renders through this; breadcrumb portals
-                           #   into the AppShell topbar (inline fallback without a shell)
+                            #   every routed screen renders through this; breadcrumb portals
+                            #   into the AppShell topbar (inline fallback without a shell)
     Breadcrumb.tsx         #   `Identity & Access > Groups > Developer` path line (last
-                           #   segment = current page; `to` segments are links)
+                            #   segment = current page; `to` segments are links)
     BreadcrumbTargetContext.ts # portal target exposed by AppShell, consumed by Page
     LanguageToggle.tsx     #   TR/EN segmented switch
     ErrorBoundary.tsx, Toaster.tsx
+    ImpersonationBanner.tsx # K-50 tenant-shell banner when `/me` reports impersonation info
+                            #   (warning strip + `[imp]` document.title prefix; exit via logout)
     detail/                #   DetailPanel/DetailField/PermissionBadges + AssignSection (IAM detail pages)
     pickers/               #   reference-data selects: UserPicker/RolePicker/GroupPicker/ProjectPicker/
-                           #   AppPicker (async `q` typeahead over list endpoints, single or isMulti,
-                           #   id→label bookkeeping with fallback ids) + useDebouncedLoadOptions
-                           #   (debounce + stale-response guard). Reference-data selects use these —
-                           #   never capped one-page list fetches.
+                            #   AppPicker (async `q` typeahead over list endpoints, single or isMulti,
+                            #   id→label bookkeeping with fallback ids) + useDebouncedLoadOptions
+                            #   (debounce + stale-response guard). Reference-data selects use these —
+                            #   never capped one-page list fetches.
     ui/                    #   design system: Badge, Button, CheckboxList, ConfirmDialog,
-                           #   DataTable (sortable headers + per-column filter popovers + `toolbar` slot + SearchInput),
-                           #   EmptyState, Field, Modal, RowMenu (row/page-head overflow menu —
-                           #   callers filter items by permission; empty items = no trigger),
-                           #   SelectInput, TextArea, Spinner (single animate-spin source),
-                           #   Toggle (boolean-setting switch)
+                            #   DataTable (sortable headers + per-column filter popovers + `toolbar` slot + SearchInput),
+                            #   EmptyState, Field, Modal, RowMenu (row/page-head overflow menu —
+                            #   callers filter items by permission; empty items = no trigger),
+                            #   SelectInput, TextArea, Spinner (single animate-spin source),
+                            #   Toggle (boolean-setting switch)
   features/<name>/         # ONE folder per domain: pages + api.ts + hooks.ts + types.ts (+ components/)
     auth/                  #   Login/Register/VerifyTenant/VerifyEmail/ForgotPassword/ResetPassword
                            #   pages, authApi, registrationApi, types (K-21 tenant signup + K-48
@@ -99,23 +108,29 @@ src/
                            #   User/Relation pickers + id→label resolvers, plan usage indicators
                            #   (GET /apps/plan-limits — numbers from the backend registry) +
                            #   components/ProjectAppsPanel (the APPS container body)
-     audit/                 #   AuditLogs + LoginHistory (iam:audit:read)
-     sessions/              #   self/admin/all sessions pages + SessionList component (K-28)
-     notes/                 #   Notes module (K-44, K-45 project-scoped): NotesPage (DataTable +
-                            #   category filter + pinned toggle + project column), NoteEditorPage
-                            #   (target-project selector for new notes — ?projectId= or the catalog
-                            #   default; categories follow the chosen container; markdown preview via
-                            #   react-markdown, raw HTML never rendered) and components/ProjectNotesPanel
-                            #   (the NOTES container body inside ProjectDetailPage).
-     demo/                  #   DEV-only UI style-guide/pattern demos (lazy-imported behind
-                            #   import.meta.env.DEV in app/App.tsx — tree-shaken from prod builds):
+audit/                 #   AuditLogs + LoginHistory (iam:audit:read)
+      sessions/              #   self/admin/all sessions pages + SessionList component (K-28)
+      notes/                 #   Notes module (K-44, K-45 project-scoped): NotesPage (DataTable +
+                             #   category filter + pinned toggle + project column), NoteEditorPage
+                             #   (target-project selector for new notes — ?projectId= or the catalog
+                             #   default; categories follow the chosen container; markdown preview via
+                             #   react-markdown, raw HTML never rendered) and components/ProjectNotesPanel
+                             #   (the NOTES container body inside ProjectDetailPage).
+      platform/              #   K-50 platform console (bare host, NO X-Tenant-ID): Login/Companies/
+                             #   CompanyDetail/ServiceAccounts/PlatformAuditLogs pages + PlatformShell/
+                             #   RequirePlatformAuth/RequirePlatformPermission + platformAuthStore +
+                             #   platformApi.ts (createApiClient factory, no tenant header) + i18n platform.*/impersonation.*
+      demo/                  #   DEV-only UI style-guide/pattern demos (lazy-imported behind
+                             #   import.meta.env.DEV in app/App.tsx — tree-shaken from prod builds):
                             #   component showcase pages + pages/patterns/* list/detail/form/dashboard
                             #   pattern references. Not in Routes.ts; unreferenced in prod.
-  lib/                     # api (fetch + 401 refresh), i18n (t/useT + messages), notify, format, select, cn,
-                           # useListPageState (list-page scaffold: page/sort/search + debounce + page-reset),
-                           # useClientPagination, useDebouncedValue
+lib/                     # api (fetch + 401 refresh), i18n (t/useT + messages), notify, format, select, cn,
+                            # useListPageState (list-page scaffold: page/sort/search + debounce + page-reset),
+                            # useClientPagination, useDebouncedValue
+                            # apiClient.ts  — shared `createApiClient` factory (tenant + platform clients)
+                            # platformApi.ts  — platform instance (refresh `/api/v1/platform/auth/refresh`, NO X-Tenant-ID)
   store/                   # zustand: authStore (session + authorities), tenantStore (X-Tenant-ID),
-                           # localeStore (sf_locale, TR/EN)
+                            # localeStore (sf_locale, TR/EN), platformAuthStore (parallel platform session)
   test/                    # Vitest suite (K-39): setup.ts + feature/primitive tests (api refresh, LoginPage,
                             # DataTable, Modal, useListPageState, apps/notes/projects feature pages — see src/test/)
   types/index.ts           # shared-only types: RBAC summaries, ApiErrorResponse, pagination
@@ -137,7 +152,8 @@ src/
 - Access/refresh tokens are **httpOnly cookies** (`sf_access_token`, `sf_refresh_token`); JS never reads them.
 - `lib/api.ts` `apiFetch`: on 401 (non-auth endpoints) transparently calls `/api/v1/auth/refresh` once (concurrent 401s coalesce via `refreshPromise`) and retries. If refresh fails, `sessionExpiredHandler` (wired by `authStore`) clears the session → `RequireAuth` redirects to `/login`.
 - `tenantStore` resolves tenant from localStorage (`sf_tenant_id`) or subdomain; every request carries `X-Tenant-ID` (dev-profile `TenantFilter`).
-- `authStore.hasAuthority('iam:user:write')` gates UI; the backend enforces the real security.
+- **Platform auth (K-50):** parallel session via `platformAuthStore` + `platformApi.ts` (createApiClient factory). Platform requests (`/api/v1/platform/**`) NEVER carry `X-Tenant-ID`; platform cookies (`sf_platform_access_token`/`sf_platform_refresh_token`, path `/api/v1/platform`) are separate. Platform login at `/platform/login` (bare host); tenant console at subdomains.
+- `authStore.hasAuthority('iam:user:write')` gates tenant UI; `platformAuthStore.hasAuthority('platform:company:read')` gates platform UI; the backend enforces the real security.
 
 ## Error/notification flow
 
