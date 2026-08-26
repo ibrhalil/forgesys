@@ -3,11 +3,12 @@ package com.ibrhalil.forgesys.config;
 import java.util.List;
 
 /**
- * Built-in CORE permission catalog seeded into every tenant: {@code iam:*} (tenant
- * admin) + {@code platform:*} (cross-tenant, system tenant). Product-module
- * permissions (pm/apps/notes) are owned by their {@link ModuleDefinition} and seed on
- * activation. The Admin role holds everything via {@code all_permissions} — no grant
- * rows to keep in sync.
+ * Built-in IAM permission catalog seeded into every tenant ({@code iam:*} only).
+ * {@code platform:*} lives in {@link PlatformPermissionCatalog} (code-only, never
+ * seeded into tenant schemas — RISK-18 closed by K-50). Product-module permissions
+ * (pm/apps/notes) are owned by their {@link ModuleDefinition} and seed on
+ * activation. The Admin role holds everything via {@code all_permissions} — no
+ * grant rows to keep in sync.
  */
 public final class PermissionCatalog {
 
@@ -30,9 +31,6 @@ public final class PermissionCatalog {
     public static final String IAM_AUDIT_READ = "iam:audit:read";
     public static final String IAM_MODULE_READ = "iam:module:read";
     public static final String IAM_MODULE_WRITE = "iam:module:write";
-
-    public static final String PLATFORM_COMPANY_READ = "platform:company:read";
-    public static final String PLATFORM_COMPANY_WRITE = "platform:company:write";
 
     // pm:* — definitions live in ModuleDefinition.PM (module-owned); constants here
     // are the single naming source referenced by controllers.
@@ -63,7 +61,7 @@ public final class PermissionCatalog {
     public record PermissionDefinition(String name, String description) {
     }
 
-    public static final List<PermissionDefinition> CORE = List.of(
+    public static final List<PermissionDefinition> IAM_PERMISSIONS = List.of(
             new PermissionDefinition(IAM_USER_READ, "Read tenant users"),
             new PermissionDefinition(IAM_USER_WRITE, "Create or update tenant users"),
             new PermissionDefinition(IAM_USER_DELETE, "Delete tenant users"),
@@ -79,9 +77,7 @@ public final class PermissionCatalog {
             new PermissionDefinition(IAM_GROUP_DELETE, "Delete tenant groups"),
             new PermissionDefinition(IAM_AUDIT_READ, "Read tenant audit logs and login history"),
             new PermissionDefinition(IAM_MODULE_READ, "Read tenant modules (catalog + activation state)"),
-            new PermissionDefinition(IAM_MODULE_WRITE, "Activate tenant modules"),
-            new PermissionDefinition(PLATFORM_COMPANY_READ, "Read platform companies"),
-            new PermissionDefinition(PLATFORM_COMPANY_WRITE, "Update platform company status")
+            new PermissionDefinition(IAM_MODULE_WRITE, "Activate tenant modules")
     );
 
     private PermissionCatalog() {

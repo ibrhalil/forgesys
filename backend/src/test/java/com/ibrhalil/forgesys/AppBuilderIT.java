@@ -27,6 +27,7 @@ import com.ibrhalil.forgesys.service.AppBuilderService;
 import com.ibrhalil.forgesys.service.AppRecordService;
 import com.ibrhalil.forgesys.service.ModuleActivationService;
 import com.ibrhalil.forgesys.service.TenantProvisioningService;
+import com.ibrhalil.forgesys.service.mail.InMemoryMailSender;
 import org.hibernate.dialect.PostgreSQLDialect;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -106,6 +107,7 @@ class AppBuilderIT {
     @Autowired private PlanRepository planRepository;
     @Autowired private PermissionRepository permissionRepository;
     @Autowired private TenantProvisioningService provisioningService;
+    @Autowired private InMemoryMailSender mailSender;
     @Autowired private ModuleActivationService moduleActivationService;
     @Autowired private AppBuilderService appBuilderService;
     @Autowired private AppRecordService appRecordService;
@@ -127,8 +129,9 @@ class AppBuilderIT {
             plan.setActive(true);
             planRepository.save(plan);
         }
-        provisioningService.provisionSystemTenant(new CompanyRegisterRequest(
-                "App Builder IT", SUBDOMAIN, "admin@appit.test", "Secret123!", "Admin", "IT"));
+        TenantProvisioningTestSupport.provisionViaTwoPhaseFlow(provisioningService, mailSender,
+                new CompanyRegisterRequest(
+                        "App Builder IT", SUBDOMAIN, "admin@appit.test", "Secret123!", "Admin", "IT"));
         company = companyRepository.findBySubdomain(SUBDOMAIN).orElseThrow();
         schemaName = company.getSchemaName();
     }
@@ -223,8 +226,9 @@ class AppBuilderIT {
     @Test
     void appsAreIsolatedPerTenantSchema() {
         activateApps(company);
-        provisioningService.provisionSystemTenant(new CompanyRegisterRequest(
-                "App Builder IT 2", SUBDOMAIN_2, "admin@appit2.test", "Secret123!", "Admin", "IT"));
+        TenantProvisioningTestSupport.provisionViaTwoPhaseFlow(provisioningService, mailSender,
+                new CompanyRegisterRequest(
+                        "App Builder IT 2", SUBDOMAIN_2, "admin@appit2.test", "Secret123!", "Admin", "IT"));
         Company company2 = companyRepository.findBySubdomain(SUBDOMAIN_2).orElseThrow();
         activateApps(company2);
 

@@ -5,9 +5,9 @@ import java.util.List;
 /**
  * K-50 platform permission catalog — lives in code only (frozen #2 pattern), NEVER
  * seeded into tenant schemas. HUMAN platform users implicitly hold ALL of these;
- * SERVICE accounts carry an explicit subset as API-key scopes. {@code platform:*}
- * names in {@link PermissionCatalog} are being narrowed to this registry (RISK-18,
- * epic F3).
+ * SERVICE accounts carry an explicit subset as API-key scopes. The single owner of
+ * {@code platform:*} names since F3 (RISK-18 closed) — {@link PermissionCatalog}
+ * seeds {@code iam:*} only.
  */
 public final class PlatformPermissionCatalog {
 

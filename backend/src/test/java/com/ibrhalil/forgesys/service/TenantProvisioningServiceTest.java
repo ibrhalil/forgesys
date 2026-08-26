@@ -59,8 +59,8 @@ import static org.mockito.Mockito.when;
 /**
  * Unit tests for the K-21 two-phase provisioning flow. The DDL ({@link DataSource}) and
  * programmatic Flyway ({@link TenantMigrationSupport}) are mocked so the tests stay
- * H2-free and run in milliseconds. The phase 1 → phase 2 contract, token lifecycle and
- * the auto-verify bootstrap path are the focus.
+ * H2-free and run in milliseconds. The phase 1 → phase 2 contract and the token
+ * lifecycle are the focus.
  */
 @ExtendWith(MockitoExtension.class)
 class TenantProvisioningServiceTest {
@@ -321,15 +321,21 @@ class TenantProvisioningServiceTest {
         verify(tenantMigrationSupport, never()).migrateSchema(anyString());
     }
 
+    /**
+     * End-to-end phase 1 → phase 2 chain ([RISK-30]): the raw token exists ONLY in the
+     * mailed action URL; {@code verifyAndProvision} hashes it back to the digest phase 1
+     * persisted and claims exactly that digest. Replaces the former K-24 bootstrap
+     * auto-verify path (removed by K-50 F3).
+     */
     @Test
-    void provisionSystemTenant_autoVerifiesWithoutSendingMail() throws Exception {
+    void verifyAndProvision_claimRunsAgainstTheDigestPhase1Persisted() throws Exception {
         when(companyRepository.findBySubdomain(SUBDOMAIN)).thenReturn(Optional.empty());
         when(companyRepository.findBySchemaName(SCHEMA_NAME)).thenReturn(Optional.empty());
         when(companyRepository.save(any(Company.class))).thenAnswer(inv -> withId(inv.getArgument(0)));
         when(passwordEncoder.encode("secret-pw")).thenReturn("{sf-peppered}hash");
-        // [RISK-30] phase 1 hands the raw token to phase 2 in memory; phase 2 hashes it
-        // for lookup/claim. Capture the actually-issued digest so the stubs follow the
-        // production chain instead of a fabricated one.
+        // [RISK-30] phase 1 hands the raw token to phase 2 only via the emailed link;
+        // phase 2 hashes it for lookup/claim. Capture the actually-issued digest so
+        // the stubs follow the production chain instead of a fabricated one.
         AtomicReference<TenantVerificationToken> issued = new AtomicReference<>();
         when(tokenRepository.save(any(TenantVerificationToken.class))).thenAnswer(inv -> {
             TenantVerificationToken saved = withTokenId(inv.getArgument(0));
@@ -341,23 +347,26 @@ class TenantProvisioningServiceTest {
         when(tokenRepository.claimToken(anyString(), any(OffsetDateTime.class))).thenReturn(1);
         stubCreateSchema();
         stubFreePlan();
-        when(companyRepository.findById(any(UUID.class)))
-                .thenAnswer(inv -> Optional.of(companyWithStatus(CompanyStatus.ACTIVE)));
         stubAdminUserSave();
 
-        Company result = service.provisionSystemTenant(request());
+        service.createPendingCompany(request());
+        // The raw token lives only in the emailed link — extract it like a recipient.
+        ArgumentCaptor<MailMessage> mailCaptor = ArgumentCaptor.forClass(MailMessage.class);
+        verify(mailSender).send(mailCaptor.capture());
+        String url = mailCaptor.getValue().actionUrl();
+        String rawToken = url.substring(url.indexOf("token=") + "token=".length());
 
-        assertThat(result).isNotNull();
+        CompanyVerifyResponse response = service.verifyAndProvision(rawToken);
+
+        assertThat(response.status()).isEqualTo(CompanyStatus.ACTIVE);
+        assertThat(TokenHasher.sha256Hex(rawToken)).isEqualTo(issued.get().getToken());
         // The claim must run against the digest phase 1 actually persisted (not a
         // re-read of the row — the raw token never returns from the DB).
         verify(tokenRepository).claimToken(eq(issued.get().getToken()), any(OffsetDateTime.class));
-        // Bootstrap auto-verify must NOT email the verification link.
-        verify(mailSender, never()).send(any(MailMessage.class));
         verify(tenantMigrationSupport).migrateSchema(SCHEMA_NAME);
         verify(subscriptionRepository).save(any(Subscription.class));
         verify(moduleActivationService).activateDefaultModules(any(Company.class));
-        // K-47: the bootstrap path runs the same afterCommit seed — the system tenant
-        // gets sample data too (closeable via the config gate).
+        // K-47: provisioning runs the afterCommit sample-data seed with the admin id.
         commitProvisioning();
         verify(sampleDataService).seedForCompany(any(Company.class), eq(ADMIN_ID));
     }

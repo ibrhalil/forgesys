@@ -13,6 +13,7 @@ import com.ibrhalil.forgesys.persistence.repository.PlanRepository;
 import com.ibrhalil.forgesys.persistence.repository.UserRepository;
 import com.ibrhalil.forgesys.service.TenantMigrationSupport;
 import com.ibrhalil.forgesys.service.TenantProvisioningService;
+import com.ibrhalil.forgesys.service.mail.InMemoryMailSender;
 import org.hibernate.dialect.PostgreSQLDialect;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -43,8 +44,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * never exercised there. This class provisions two real tenant schemas in PostgreSQL via
  * Testcontainers and asserts that data in one tenant is invisible from the other.
  *
- * <p>It also validates [RISK-26]: {@code provisionSystemTenant} must land the admin user
- * in the correct tenant schema (the REQUIRES_NEW mid-transaction context switch).
+ * <p>It also validates [RISK-26]: the two-phase provisioning flow must land the admin
+ * user in the correct tenant schema (the REQUIRES_NEW mid-transaction context switch).
  *
  * <p><strong>Gated:</strong> skipped unless {@code -Dforgesys.pg.it=true} is set, so the
  * default Docker-free build ({@code mvn clean install}) stays green. Run with:
@@ -91,6 +92,7 @@ class CrossTenantIsolationTest {
     @Autowired private PlanRepository planRepository;
     @Autowired private TenantMigrationSupport tenantMigrationSupport;
     @Autowired private TenantProvisioningService provisioningService;
+    @Autowired private InMemoryMailSender mailSender;
     @Autowired private DataSource dataSource;
 
     @BeforeAll
@@ -106,10 +108,12 @@ class CrossTenantIsolationTest {
             plan.setActive(true);
             planRepository.save(plan);
         }
-        // Tenant A via the full bootstrap flow (also exercises RISK-26): the admin user
-        // must land in tenant_tenanta despite the mid-transaction TenantContext switch.
-        provisioningService.provisionSystemTenant(new CompanyRegisterRequest(
-                "Tenant A", "tenanta", ADMIN_A_EMAIL, "Secret123!", "Admin", "A"));
+        // Tenant A via the full two-phase signup flow (also exercises RISK-26): the
+        // admin user must land in tenant_tenanta despite the mid-transaction
+        // TenantContext switch.
+        TenantProvisioningTestSupport.provisionViaTwoPhaseFlow(provisioningService, mailSender,
+                new CompanyRegisterRequest(
+                        "Tenant A", "tenanta", ADMIN_A_EMAIL, "Secret123!", "Admin", "A"));
         // Tenant B via the lower-level path (CREATE SCHEMA + programmatic tenant Flyway).
         seedActiveTenant("tenantb");
     }

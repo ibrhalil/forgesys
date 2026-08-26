@@ -14,8 +14,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Idempotent upsert of the {@link PlanDefinition} registry into {@code t_plans} (public
- * schema) at startup. {@code @Order(0)} — {@code SystemAdminBootstrapRunner} and
- * {@code ModuleSyncRunner} depend on the plan rows existing.
+ * schema) at startup. {@code @Order(0)} — {@code ModuleSyncRunner} and tenant
+ * provisioning depend on the plan rows existing.
  */
 @Slf4j
 @Component

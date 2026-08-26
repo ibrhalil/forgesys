@@ -17,6 +17,7 @@ import com.ibrhalil.forgesys.persistence.repository.PermissionRepository;
 import com.ibrhalil.forgesys.service.ModuleActivationService;
 import com.ibrhalil.forgesys.service.TenantMigrationSupport;
 import com.ibrhalil.forgesys.service.TenantProvisioningService;
+import com.ibrhalil.forgesys.service.mail.InMemoryMailSender;
 import org.hibernate.dialect.PostgreSQLDialect;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -89,6 +90,7 @@ class ModuleActivationIT {
     @Autowired private TenantModuleRepository tenantModuleRepository;
     @Autowired private PermissionRepository permissionRepository;
     @Autowired private TenantProvisioningService provisioningService;
+    @Autowired private InMemoryMailSender mailSender;
     @Autowired private ModuleActivationService moduleActivationService;
     @Autowired private TenantMigrationSupport tenantMigrationSupport;
     @Autowired private DataSource dataSource;
@@ -108,8 +110,9 @@ class ModuleActivationIT {
             plan.setActive(true);
             planRepository.save(plan);
         }
-        provisioningService.provisionSystemTenant(new CompanyRegisterRequest(
-                "Module IT", SUBDOMAIN, "admin@modit.test", "Secret123!", "Admin", "IT"));
+        TenantProvisioningTestSupport.provisionViaTwoPhaseFlow(provisioningService, mailSender,
+                new CompanyRegisterRequest(
+                        "Module IT", SUBDOMAIN, "admin@modit.test", "Secret123!", "Admin", "IT"));
         company = companyRepository.findBySubdomain(SUBDOMAIN).orElseThrow();
         schemaName = company.getSchemaName();
     }

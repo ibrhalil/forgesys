@@ -9,6 +9,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -35,7 +36,8 @@ class PlatformCompanyControllerTest extends AbstractRbacWebTest {
 
     @Test
     void listForbiddenWithoutReadPermission() throws Exception {
-        mockMvc.perform(get("/api/v1/platform/companies").cookie(auth("nop@tenant.test")))
+        mockMvc.perform(get("/api/v1/platform/companies")
+                        .cookie(authPlatform(UUID.randomUUID(), "reader@platform.test", List.of())))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("auth_access_denied"));
     }
@@ -44,8 +46,22 @@ class PlatformCompanyControllerTest extends AbstractRbacWebTest {
     void updateStatusForbiddenWithoutWritePermission() throws Exception {
         mockMvc.perform(patch("/api/v1/platform/companies/" + UUID.randomUUID() + "/status")
                         .contentType(JSON)
-                        .cookie(auth("reader@tenant.test", "platform:company:read"))
+                        .cookie(authPlatform(UUID.randomUUID(), "reader@platform.test",
+                                List.of("platform:company:read")))
                         .content("{\"status\":\"SUSPENDED\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("auth_access_denied"));
+    }
+
+    /**
+     * RISK-18 closure (K-50 F3): a TENANT JWT — even one still carrying the legacy
+     * {@code platform:company:read} authority — no longer reaches the platform
+     * surface; the endpoints accept {@code scope=platform} tokens only.
+     */
+    @Test
+    void tenantJwtWithLegacyPlatformAuthorityIsForbidden() throws Exception {
+        mockMvc.perform(get("/api/v1/platform/companies")
+                        .cookie(auth("platform_reader@tenant.test", "platform:company:read")))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("auth_access_denied"));
     }
@@ -57,7 +73,7 @@ class PlatformCompanyControllerTest extends AbstractRbacWebTest {
         Company company = seedCompany("testcompany", CompanyStatus.ACTIVE);
 
         mockMvc.perform(get("/api/v1/platform/companies")
-                        .cookie(auth("platform_reader@tenant.test", "platform:company:read")))
+                        .cookie(authPlatform(UUID.randomUUID(), "platform_reader@platform.test")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.meta.totalElements").value(1))
                 .andExpect(jsonPath("$.data[?(@.id == '" + company.getId() + "')].name").value("testcompany"))
@@ -72,7 +88,7 @@ class PlatformCompanyControllerTest extends AbstractRbacWebTest {
 
         mockMvc.perform(post("/api/v1/platform/companies/search")
                         .contentType(JSON)
-                        .cookie(auth("platform_reader@tenant.test", "platform:company:read"))
+                        .cookie(authPlatform(UUID.randomUUID(), "platform_reader@platform.test"))
                         .content("""
                                 {"filters":[{"field":"status","operator":"EQ","values":["SUSPENDED"]}]}"""))
                 .andExpect(status().isOk())
@@ -83,7 +99,7 @@ class PlatformCompanyControllerTest extends AbstractRbacWebTest {
     @Test
     void getUnknownReturns404() throws Exception {
         mockMvc.perform(get("/api/v1/platform/companies/" + UUID.randomUUID())
-                        .cookie(auth("platform_reader@tenant.test", "platform:company:read")))
+                        .cookie(authPlatform(UUID.randomUUID(), "platform_reader@platform.test")))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("resource_not_found"));
     }
@@ -93,7 +109,7 @@ class PlatformCompanyControllerTest extends AbstractRbacWebTest {
         Company company = seedCompany("singlecompany", CompanyStatus.ACTIVE);
 
         mockMvc.perform(get("/api/v1/platform/companies/" + company.getId())
-                        .cookie(auth("platform_reader@tenant.test", "platform:company:read")))
+                        .cookie(authPlatform(UUID.randomUUID(), "platform_reader@platform.test")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("singlecompany"))
                 .andExpect(jsonPath("$.status").value("ACTIVE"));
@@ -107,7 +123,7 @@ class PlatformCompanyControllerTest extends AbstractRbacWebTest {
 
         mockMvc.perform(patch("/api/v1/platform/companies/" + company.getId() + "/status")
                         .contentType(JSON)
-                        .cookie(auth("platform_writer@tenant.test", "platform:company:write"))
+                        .cookie(authPlatform(UUID.randomUUID(), "platform_writer@platform.test"))
                         .content("{\"status\":\"SUSPENDED\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("SUSPENDED"));
@@ -123,7 +139,7 @@ class PlatformCompanyControllerTest extends AbstractRbacWebTest {
 
         mockMvc.perform(patch("/api/v1/platform/companies/" + company.getId() + "/status")
                         .contentType(JSON)
-                        .cookie(auth("platform_writer@tenant.test", "platform:company:write"))
+                        .cookie(authPlatform(UUID.randomUUID(), "platform_writer@platform.test"))
                         .content("{\"status\":\"ACTIVE\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("business_error"));
@@ -135,7 +151,7 @@ class PlatformCompanyControllerTest extends AbstractRbacWebTest {
 
         mockMvc.perform(patch("/api/v1/platform/companies/" + company.getId() + "/status")
                         .contentType(JSON)
-                        .cookie(auth("platform_writer@tenant.test", "platform:company:write"))
+                        .cookie(authPlatform(UUID.randomUUID(), "platform_writer@platform.test"))
                         .content("{}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("validation_error"));
@@ -147,30 +163,26 @@ class PlatformCompanyControllerTest extends AbstractRbacWebTest {
 
         mockMvc.perform(patch("/api/v1/platform/companies/" + company.getId() + "/status")
                         .contentType(JSON)
-                        .cookie(auth("platform_writer@tenant.test", "platform:company:write"))
+                        .cookie(authPlatform(UUID.randomUUID(), "platform_writer@platform.test"))
                         .content("{\"status\":\"NOT_A_REAL_STATUS\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("validation_error"));
     }
 
     /**
-     * Reproduces the real cross-tenant scenario: the request thread already has an active
-     * tenant context (set by TenantFilter in dev). The platform admin's token is bound to
-     * that same tenant ([RISK-19]), and PlatformCompanyService must clear it to reach the
-     * public schema; if it didn't, the query would run against the tenant schema (which
-     * has no t_companies) and return nothing / fail.
+     * K-50: platform tokens are valid ONLY where no tenant context was resolved — a
+     * platform cookie presented under an active tenant context is rejected with 401
+     * (RISK-19 symmetry from the tenant side). In production {@code /api/v1/platform/**}
+     * is exempt from {@code TenantFilter}, so the context stays empty on platform paths.
      */
     @Test
-    void listReturnsCompaniesEvenWithActiveTenantContext() throws Exception {
-        Company company = seedCompany("ctxtest", CompanyStatus.ACTIVE);
-        String tenant = "tenant_does_not_exist";
-
-        TenantContext.setCurrentTenant(tenant);
+    void platformTokenRejectedWhenTenantContextIsActive() throws Exception {
+        TenantContext.setCurrentTenant("tenant_does_not_exist");
         try {
             mockMvc.perform(get("/api/v1/platform/companies")
-                            .cookie(authTenant(tenant, "platform_reader@tenant.test", "platform:company:read")))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data[?(@.id == '" + company.getId() + "')].name").value("ctxtest"));
+                            .cookie(authPlatform(UUID.randomUUID(), "platform_reader@platform.test")))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.code").value("auth_unauthenticated"));
         } finally {
             TenantContext.clear();
         }
