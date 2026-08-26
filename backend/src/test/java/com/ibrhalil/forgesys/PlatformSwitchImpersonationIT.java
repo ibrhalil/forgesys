@@ -100,6 +100,9 @@ class PlatformSwitchImpersonationIT {
         registry.add("spring.flyway.enabled", () -> "true");
         registry.add("spring.flyway.schemas", () -> "public");
         registry.add("spring.flyway.locations", () -> "classpath:db/migration/public");
+        // Mirror of the dev/prod JDBC URLs: binds Strings as unspecified so PG casts
+        // them into jsonb columns (the switch flow's tenant-side audit writes).
+        registry.add("spring.datasource.hikari.data-source-properties.stringtype", () -> "unspecified");
     }
 
     @Autowired private WebApplicationContext context;

@@ -82,7 +82,7 @@ Standart haline gelmiş kararlar. Yeni gereksinim bunlardan biriyle çelişirse 
 ### K-21
 **İki Fazlı Tenant Signup**
 - **Bağlam:** Open endpoint'te ağır DDL (schema + Flyway) + subdomain squatting riski.
-- **Karar:** Faz 1 `register` — hafif (PROVISIONING Company + `TenantVerificationToken`; admin credential'ları token'a pre-hash gömülür) + doğrulama linki maili. Faz 2 `verify` — kullanıcının linke tıklamasıyla senkron: CREATE SCHEMA + Flyway + admin user → ACTIVE. `suggest-subdomain` (Türkçe-aware slug). Bootstrap yolu: `provisionSystemTenant` (K-24 — auto-verify, mail yok).
+- **Karar:** Faz 1 `register` — hafif (PROVISIONING Company + `TenantVerificationToken`; admin credential'ları token'a pre-hash gömülür) + doğrulama linki maili. Faz 2 `verify` — kullanıcının linke tıklamasıyla senkron: CREATE SCHEMA + Flyway + admin user → ACTIVE. `suggest-subdomain` (Türkçe-aware slug).
 - **Durum:** UYGULANDI.
 - **Etki:** Token consume atomic conditional UPDATE (RISK-25). `CREATE SCHEMA` implicit commit → DEBT-10 kısmi. Mail gönderimi K-48 ile SMTP'ye geçti (prod `SmtpMailSender`; dev log, test in-memory).
 
@@ -100,9 +100,9 @@ Standart haline gelmiş kararlar. Yeni gereksinim bunlardan biriyle çelişirse 
 - **Etki:** Pepper rotasyonu desteklenmez (rotasyon = tüm pepper'lı hash'ler resetlenir; gerekirse özel akış tasarlanır — runbook ROADMAP'te). Pepper asla loglanmaz/commit edilmez.
 
 ### K-24
-**System Tenant Bootstrap**
+**System Tenant Bootstrap (K-50 ile KALDIRILDI)**
 - **Karar:** `SystemAdminBootstrapRunner` startup'ta rezerve `system` tenant'ını + platform admin'ini idempotent provision eder (`provisionSystemTenant` auto-verify). Normal signup `system` subdomain'ini alamaz. Bootstrap hatası startup'ı durdurmaz (log + swallow).
-- **Durum:** UYGULANDI.
+- **Durum:** KALDIRILDI (K-50, 2026-08-26). `SystemAdminBootstrapRunner` + `SystemAdminBootstrapProperties` + `provisionSystemTenant` silindi; mevcut `system` tenant DB satırı dokunulmadan bırakıldı. Yerine platform kimlikleri (`public` şeması) + `PlatformAdminBootstrapRunner` (K-50).
 
 ### K-25
 **Platform Admin Namespace**
@@ -233,7 +233,7 @@ Standart haline gelmiş kararlar. Yeni gereksinim bunlardan biriyle çelişirse 
 **Provisioning'te Sample Data Seeding (Linear deseni)**
 - **Karar:** Yeni tenant ilk login'de bomboş ekranlarla değil, öğretici örnek veriyle karşılaşır. Seeding Java tarafında (`TenantSampleDataService`), provisioning akışında — mevcut service'ler yeniden kullanılır (authority kontrolleri controller katmanında olduğundan sistem-context çağrı 403 üretmez; `@AuditLog` actor fallback `"system"`). Dil EN sabit string (tenant verisi, UI değil → i18n bilinçli YOK). Kapsam: pm (1 TASKS proje + 4 görev), notes (2 kategori + 2 not), apps (1 app + 3 property + 2 view + 4 kayıt) — FREE plan limitleri içinde.
 - **Zamanlama (kritik):** Seed provisioning transaction'ı COMMIT ettikten sonra koşar (`TransactionSynchronization.afterCommit`, senkron — aynı istek). Seed kendi REQUIRES_NEW tx'ini açar (RISK-26 — outer session public-pinli) ve bu tx'in `t_tenant_modules` aktivasyon kayıtları ile `t_subscriptions` FREE satırını GÖRMESİ gerekir (`ProjectService.assertTypeActivatable` + `PlanLimitService.activePlan` kapıları); read-committed altında aynı-tx çağrı bu satırları göremez → sessiz MODULE_NOT_ACTIVE / SUBSCRIPTION_NOT_FOUND başarısızlığı.
-- **Gate + fail-safe:** `forgesys.provisioning.sample-data.enabled` (`FORGESYS_SAMPLE_DATA`, default true; test profili false). İki katman fail-safe: `seedForCompany` içi catch (warn log) + afterCommit callback'inde catch — seeding hatası provisioning'i asla kırmaz. `provisionSystemTenant` yolu aynı hook'u tetikler → system tenant da seed edilir (bilinçli; gate ile kapatılabilir).
+- **Gate + fail-safe:** `forgesys.provisioning.sample-data.enabled` (`FORGESYS_SAMPLE_DATA`, default true; test profili false). İki katman fail-safe: `seedForCompany` içi catch (warn log) + afterCommit callback'inde catch — seeding hatası provisioning'i asla kırmaz.
 - **Reddedilen alternatifler:** Flyway `afterMigrate`/seed migration — `TenantMigrationRunner` tüm eski tenantlara uygular (mevcut tenantların verisi değişmez ilkesi ihlal); frontend mock — gerçek veri değil, kalıcı değil, öğretici değil.
 - **Durum:** UYGULANDI (2026-08-24).
 
@@ -266,7 +266,7 @@ Standart haline gelmiş kararlar. Yeni gereksinim bunlardan biriyle çelişirse 
 **Platform Süperadmin + Servis Hesapları (global kimlik)**
 - **Bağlam:** K-24'ün system tenant admin'i sıradan bir tenant kullanıcısıdır; tenant'lara giremez, abonelik/modül yönetemez, programatik (agent) erişim sunamaz. Kullanıcı ihtiyacı: tüm kapsamda (tenant yaşam döngüsü + tenant içine tam erişim + rapor + impersonation) platform süperadmin'i ve API ajanı servis hesapları.
 - **Karar:** "User-per-tenant" kuralı *tenant verisi* için korunur; **platform kimlikleri** `public` şemasında global yaşar. (1) `public/V4__platform_identity.sql`: `t_platform_users` (HUMAN|SERVICE) + `t_platform_api_keys` (prefix + SHA-256 hash, `TokenHasher` reuse; raw key yalnızız bir kez gösterilir) + `t_platform_audit_logs` (append-only). (2) Ayrı auth yüzeyi `/api/v1/platform/auth/*` + `sf_platform_*` cookie'leri (path `/api/v1/platform`); JWT'de `scope=platform`, `tenant` claim YOK; Redis refresh store `tenant="platform"` marker'ıyla paylaşılır. Platform bootstrap K-24 pattern'i (`forgesys.bootstrap.platform-admin.*`; self-signup yok). (3) Platform permission kataloğu kodda (7 isim); v1'de her HUMAN implicit süperadmin, SERVICE scope'lu. (4) Cross-tenant erişim **token exchange** ile — API mirroring YOK: switch code (Redis, 30sn, tek kullanım) → `/auth/platform-switch` → hedef tenant'ın en eski admin-capable kullanıcısını bürüyen kısa ömürlü JWT (`act` claim = gerçek aktör, `tenant` claim = hedef şema → RISK-19 doğal geçer; refresh YOK; çıkış jti blacklist). Planlanan ADMIN/FULL modları çöktü: `all_permissions` admin zaten tüm tenant yetkilerini çözdüğünden ikinci mod ölü kod olurdu (#21). (5) Servis hesapları `X-API-Key` ile stateless auth (JWT yaşam döngüsü yok). (6) **K-24 kaldırılır** (`SystemAdminBootstrapRunner` + `provisionSystemTenant`; mevcut `system` tenant DB satırı dokunulmadan kalır) ve **RISK-18 kapanır** (`platform:*` tenant seed'i durur + mevcut şemalardan temizlenir). Kullanıcı onayı: global kimlik (public şema) + impersonation + tam kapsam (lifecycle/iç erişim/rapor) + UI dahil.
-- **Durum:** PLANLANDI (2026-08-26) — plan ve faz listesi: [`docs/plans/k50-platform-superadmin.md`](plans/k50-platform-superadmin.md).
+- **Durum:** UYGULANDI (2026-08-27).
 - **Etki:** `JwtAuthenticationFilter`'a `scope=platform` dalı — tenant `tokenInvalidBefore` lookup'ı `public.t_users`'ı hedefler, platform token'ında tablo yok hatası verir; dal lookup'tan ÖNCE ayrılmalı. `TenantFilter.shouldNotFilter` += `/api/v1/platform/**` (platform API tenant-agnostik). `/auth/platform-switch` normal tenant akışında kalır (permitAll, hedef subdomain host'ta koşar). H2'de switch akışı test edilemez (search_path yok) → gated PG IT (`forgesys.pg.it`). Yeni public migration K-50 kapsamında onaylı (ask-first kuralı yerine getirildi).
 
 ---
@@ -303,10 +303,10 @@ Standart haline gelmiş kararlar. Yeni gereksinim bunlardan biriyle çelişirse 
 - **Durum:** ÇÖZÜLDÜ. Pattern: `CREATE UNIQUE INDEX ... WHERE is_deleted = false` tüm soft-delete entity'lerde (baseline `V1.x` içinde). Join tabloları + `GeneratedIdAuditEntity` normal UNIQUE.
 
 ### RISK-18
-**`platform:*` permission'ları tüm tenantlara seed ediliyor — AÇIK**
+**`platform:*` permission'ları tüm tenantlara seed ediliyor**
 - **Bağlam:** `RbacSeeder` Admin'e tüm katalogu verir; liste `platform:company:*` içerir → her tenant Admin'i teorik olarak platform endpoint'lerine yetkili (pratikte TenantFilter + public şema erişimi sınırlandırır — defense-in-depth açığı).
 - **Karar:** `platform:*` yalnızca platform kimliklerine ait olacak; katalog `IAM_PERMISSIONS` + `PLATFORM_PERMISSIONS` olarak bölünür, tenant şemalarındaki mevcut `platform:*` satırları seeder tarafından temizlenir. [K-50](#k-50) Faz 3'te kapanır.
-- **Durum:** Açık — K-50 (plan: [`docs/plans/k50-platform-superadmin.md`](plans/k50-platform-superadmin.md)).
+- **Durum:** ÇÖZÜLDÜ (K-50, 2026-08-26).
 
 ### RISK-19
 **JWT tenant claim doğrulanmıyor (P0, cross-tenant escalation)**
@@ -356,7 +356,7 @@ Standart haline gelmiş kararlar. Yeni gereksinim bunlardan biriyle çelişirse 
 **Verification token plain-text + stale retention (P2)**
 - **Bağlam:** `TenantVerificationToken.token` plain-text DB'de; unused token DB leak'inde replay edilebilir; expired/used token purge yok; `adminPasswordHash` consume sonrası kalıyor.
 - **Karar:** Token hash-at-rest (SHA-256) + scheduled purge job + `adminPasswordHash` null'lama.
-- **Durum:** ÇÖZÜLDÜ (2026-08-25). `public/V3__token_hash_at_rest.sql` backfill (`encode(sha256(token::bytea),'hex')` — bekleyen linkler hash-lookup ile çalışmaya devam eder, consumed satırlar da hash'lenir ki yeniden sunulan token `TENANT_TOKEN_ALREADY_USED` versin) + `admin_password_hash DROP NOT NULL`. `TokenHasher` utility (refresh store'lardaki iki private kopya da buna birleştirildi); issue anında digest yazılır, `findByToken`/`claimToken` sunulan raw token'ın digest'i ile çalışır; `provisionSystemTenant` raw token'ı bellekte taşır (`PendingSignup` record), `findByCompanyId` kaldırıldı. `verifyAndProvision`, admin user oluştuktan sonra `adminPasswordHash`'i null'lar (managed entity — commit'te flush; tx rollback'ünde null da döner, DEBT-10 recovery retry hash'i bulmaya devam eder). `TokenPurgeJob` (ilk `@EnableScheduling`, `@Profile("!test")`, `config/SchedulingConfig`) günlük 03:00 UTC; retention `forgesys.security.verification-token-retention-days` (default 7 gün).
+- **Durum:** ÇÖZÜLDÜ (2026-08-25). `public/V3__token_hash_at_rest.sql` backfill (`encode(sha256(token::bytea),'hex')` — bekleyen linkler hash-lookup ile çalışmaya devam eder, consumed satırlar da hash'lenir ki yeniden sunulan token `TENANT_TOKEN_ALREADY_USED` versin) + `admin_password_hash DROP NOT NULL`. `TokenHasher` utility (refresh store'lardaki iki private kopya da buna birleştirildi); issue anında digest yazılır, `findByToken`/`claimToken` sunulan raw token'ın digest'i ile çalışır; `verifyAndProvision`, admin user oluştuktan sonra `adminPasswordHash`'i null'lar (managed entity — commit'te flush; tx rollback'ünde null da döner, DEBT-10 recovery retry hash'i bulmaya devam eder). `TokenPurgeJob` (ilk `@EnableScheduling`, `@Profile("!test")`, `config/SchedulingConfig`) günlük 03:00 UTC; retention `forgesys.security.verification-token-retention-days` (default 7 gün).
 
 ### RISK-31
 **K-21 HTTP test coverage (P1)**

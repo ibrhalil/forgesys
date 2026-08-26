@@ -1,6 +1,6 @@
 # Mimari
 
-ForgeSys — modüler çok-kiracılı (multi-tenant) SaaS platformu. Schema-per-tenant izolasyonu, UUID PK, soft-delete + optimistic locking, Spring Data auditing. Hibrit ürün modeli: built-in modüller (pm: Projects & Tasks, apps: App Builder, notes — üçü aktif; Warehouse/Logistics planlı) + tenant custom app'leri (Notion-style App Builder, `apps` modülü). Bu doküman **mevcut sistemi** belgeler: auth (K-34), RBAC (K-26), audit/login/request log (K-19/K-27), plan/modül sistemi (K-16), app builder (K-15/K-42) ve metrics expose (K-43) uygulanmış durumdadır; kalan işler [`ROADMAP.md`](ROADMAP.md)'de.
+ForgeSys — modüler çok-kiracılı (multi-tenant) SaaS platformu. Schema-per-tenant izolasyonu, UUID PK, soft-delete + optimistic locking, Spring Data auditing. Hibrit ürün modeli: built-in modüller (pm: Projects & Tasks, apps: App Builder, notes — üçü aktif; Warehouse/Logistics planlı) + tenant custom app'leri (Notion-style App Builder, `apps` modülü). Bu doküman **mevcut sistemi** belgeler: auth (K-34), RBAC (K-26), audit/login/request log (K-19/K-27), plan/modül sistemi (K-16), app builder (K-15/K-42), metrics expose (K-43) ve platform süperadmin + servis hesapları (K-50) uygulanmış durumdadır; kalan işler [`ROADMAP.md`](ROADMAP.md)'de.
 
 ## Sistem Bileşenleri
 
@@ -34,7 +34,7 @@ flowchart LR
 
 ## HTTP Request Yaşam Döngüsü
 
-Tenant bağlamlı bir isteğin (`/api/v1/...`) sistemden geçiş akışı. `/api/v1/auth/**` ve `/actuator/**` yolları `TenantFilter.shouldNotFilter()` ile muaf tutulur — tenant bağlamı kurmaz.
+Tenant bağlamlı bir isteğin (`/api/v1/...`) sistemden geçiş akışı. `/api/v1/auth/**`, `/api/v1/platform/**` ve `/actuator/**` yolları `TenantFilter.shouldNotFilter()` ile muaf tutulur — tenant bağlamı kurmaz (platform API tenant-agnostiktir; `/api/v1/auth/platform-switch` ise hedef tenant'ın subdomain host'unda koştuğu için bilinçli olarak NORMAL tenant akışında kalır, K-50).
 
 ```mermaid
 sequenceDiagram
@@ -81,6 +81,62 @@ sequenceDiagram
 - `@Async` thread'lerde `TenantContext` otomatik taşınmaz — `TaskDecorator` gerekir ([RISK-10](DECISIONS.md#risk-10)).
 - Tenant context null ise resolver `"public"` döner → public şema verisine (Company) erişilir.
 
+### Platform Auth Akışı (K-50)
+
+Platform kimlikleri (süperadmin + servis hesapları) `public` şemasında global yaşar — tenant kullanıcıları tenant şemasında kuralı değişmez. Ayrı bir auth yüzeyi: `/api/v1/platform/auth/*` + `/api/v1/platform/me`.
+
+```mermaid
+sequenceDiagram
+    participant B as Browser (bare host)
+    participant PAC as PlatformAuthController
+    participant PAS as PlatformAuthService
+    participant R as Redis
+    participant DB as PostgreSQL (public)
+
+    B->>PAC: POST /api/v1/platform/auth/login {email, password}
+    PAC->>PAS: login()
+    PAS->>DB: t_platform_users lookup (lockout: 5 deneme/15 dk)
+    PAS->>R: refresh token store (tenant="platform" marker)
+    PAS-->>B: scope=platform JWT (tenant claim YOK)<br/>sf_platform_* cookie'leri (path=/api/v1/platform)
+    Note over PAS,DB: Refresh rotasyonu + reuse detection + logout jti blacklist<br/>tenant auth stack'iyle aynı desen (K-34)
+    Note over B,DB: Servis hesapları stateless: X-API-Key header'ı<br/>(prefix lookup → SHA-256 karşılaştırma → scope'lar authority olur)
+```
+
+**Kritik noktalar:**
+
+- Platform JWT'sinde `scope=platform` claim'i vardır ve `tenant` claim'i YOK — `JwtAuthenticationFilter` bu dalda `PlatformUserRepository.findTokenInvalidBefore` kullanır (tenant `t_users` tablosu `public` şemasında yoktur).
+- Cookie'ler: `sf_platform_access_token` / `sf_platform_refresh_token` (httpOnly, path `/api/v1/platform`) — tenant cookie'lerinden ayrı; her iki cookie mevcutsa platform cookie'si kazanır.
+- Her platform endpoint'i `authentication.principal.scope == 'platform'` şartıyla gated'dir — `platform:*` yetkisi taşıyan tenant JWT'si bile 403 alır (RISK-18 kapanışı).
+- Platform bootstrap: `PlatformAdminBootstrapRunner` (`forgesys.bootstrap.platform-admin.*`, idempotent, default kapalı — dev profilinde açıktır).
+
+### Tenant Switch / Impersonation Akışı (K-50)
+
+Cross-tenant tenant-içi erişim **token exchange** ile — API mirroring YOK. Süperadmin, hedef tenant'ın en eski admin-capable kullanıcısı kimliğine bürünür.
+
+```mermaid
+sequenceDiagram
+    participant P as Platform süperadmin<br/>(bare host)
+    participant SC as PlatformSwitchController
+    participant R as Redis
+    participant T as Tenant frontend<br/>({sub}.host)
+    participant AE as /auth/platform-switch
+
+    P->>SC: POST /api/v1/platform/companies/{id}/switch {reason}
+    SC->>R: switch:code:<sha256> (tek kullanım, 30 sn TTL)<br/>switch:active:<actorId> guard (SET NX)
+    SC-->>P: {switchCode, targetUrl}
+    P->>T: targetUrl?switchCode=... (yeni sekme)
+    T->>AE: POST /api/v1/auth/platform-switch {code}
+    AE->>R: Lua GETDEL (atomic claim) + guard=jti
+    AE-->>T: Impersonation JWT (TTL ~30 dk, refresh YOK)<br/>claims: sub=hedef admin, tenant=hedef şema,<br/>act=platform aktör, imp=true
+    Note over T,AE: RISK-19 tenant==context kontrolü değişmeden geçerli.<br/>AuditorAware act claim'ini tercih eder; çıkış = mevcut logout<br/>(jti blacklist + guard temizliği). Aktif tenant başına 1 impersonation.
+```
+
+**Kritik noktalar:**
+
+- Switch kodu tek kullanımlıktır; schema uyuşmazlığı (kod hedef şeması ≠ Host'tan çözülen tenant) durumunda bile yakılır → 401.
+- Tenant tarafında `/users/me` impersonation bilgisini döner (`act` aktör) → frontend `ImpersonationBanner` gösterir.
+- Servis hesapları da `platform:tenant:access` scope'uyla aynı akışı programatik kullanabilir (token body'de de döner).
+
 ## Schema-per-Tenant Modeli
 
 Tek PostgreSQL cluster, tek connection pool. Her tenant fiziksel olarak ayrı bir şemada (`tenant_<subdomain>`). Hibrid yaklaşım: schema isolation (data separation) + shared connection pool (operational simplicity).
@@ -90,6 +146,7 @@ flowchart TB
     subgraph PG[PostgreSQL]
         subgraph Public[public schema]
             TC[t_companies]
+            TPU[t_platform_users<br/>t_platform_api_keys<br/>t_platform_audit_logs]
         end
         subgraph T1[tenant_acme]
             TU1[t_users]
@@ -131,6 +188,9 @@ flowchart TB
 | `public`         | `t_plans`           | Plan kataloğu (FREE/PRO/ENTERPRISE; `PlanSyncRunner` upsert — registry kodda, [K-16](DECISIONS.md#k-16)) | `public/V2__plans_subscriptions_modules.sql` |
 | `public`         | `t_subscriptions`   | Tenant→plan aboneliği (FREE default) | `public/V2__plans_subscriptions_modules.sql` |
 | `public`         | `t_tenant_modules`  | Tenant modül aktivasyon kayıtları   | `public/V2__plans_subscriptions_modules.sql` |
+| `public`         | `t_platform_users`  | Platform kimlikleri (K-50): HUMAN süperadmin + SERVICE hesaplar (sentetik e-mail, `enabled`/lockout/`token_invalid_before`) | `public/V4__platform_identity.sql` |
+| `public`         | `t_platform_api_keys` | Servis hesabı API key'leri (K-50: prefix + SHA-256 hash; raw key yalnız oluşturmada bir kez gösterilir) | `public/V4__platform_identity.sql` |
+| `public`         | `t_platform_audit_logs` | Platform audit trail (K-50: append-only trigger; actor/action/target) | `public/V4__platform_identity.sql` |
 | `tenant_<sub>`   | `t_users`           | Kullanıcı hesabı (credential'lar)    | `tenant/V1__iam_users.sql` |
 | `tenant_<sub>`   | `t_auth_tokens`     | Kullanıcı lifecycle token'ları (email verify / password reset — SHA-256 digest, single-use; [K-48](DECISIONS.md#k-48)) | `tenant/V4__user_auth_tokens.sql` |
 | `tenant_<sub>`   | `t_user_accounts`   | Security state (lock, failed login)  | `tenant/V1__iam_users.sql` |
@@ -151,7 +211,7 @@ flowchart TB
 | `tenant_<sub>`   | `t_apps` + 4        | App builder ailesi: `t_apps`(`project_id` — APPS koleksiyon konteynerine çapalı, K-45) + `t_app_properties(config jsonb)`, `t_app_records`, `t_app_record_values(value jsonb, GIN)`, `t_app_views(config jsonb)` — `apps` modülü aktivasyonda düşer | `module/apps/V1__app_builder.sql` + `module/apps/V2__apps_project_scoping.sql` (per-module history `flyway_schema_history_mod_apps`, [K-15](DECISIONS.md#k-15)) |
 | `tenant_<sub>`   | `t_notes`, `t_note_categories` | Notes modülü (markdown; ikisi de `project_id` ile NOTES konteynerine çapalı — K-45; kategori FK `ON DELETE SET NULL`) — `notes` modülü aktivasyonda düşer | `module/notes/V1__notes.sql` + `module/notes/V2__notes_project_scoping.sql` (per-module history `flyway_schema_history_mod_notes`, [K-44](DECISIONS.md#k-44)) |
 
-> Refresh token'lar tabloda DEĞİL — Redis-first (K-34, [DECISIONS](DECISIONS.md#k-34)); eski `t_refresh_tokens` ölü tablosu K-36 temizliğinde kaldırıldı. Migration'ların tamamı pre-1.0.0 squash'ı ile alan-bazlı `V1.x` baseline ailesine indirildi ([K-36](DECISIONS.md#k-36)) — yeni migration'lar `V2`'den devam eder.
+> Refresh token'lar tabloda DEĞİL — Redis-first (K-34, [DECISIONS](DECISIONS.md#k-34)); eski `t_refresh_tokens` ölü tablosu K-36 temizliğinde kaldırıldı. Migration'ların tamamı pre-1.0.0 squash'ı ile alan-bazlı `V1.x` baseline ailesine indirildi ([K-36](DECISIONS.md#k-36)) — yeni public migration `V5`'ten, tenant migration `V5`'ten devam eder.
 
 **Tenant provisioning akışı** (`TenantProvisioningService`, K-21 iki-fazlı):
 
@@ -171,7 +231,7 @@ flowchart TB
 7. `Company.status = ACTIVE`, `token.usedAt = now`.
 8. Transaction commit'inden sonra (afterCommit senkronizasyonu) sample data seeding ([K-47](DECISIONS.md#k-47)): `TenantSampleDataService` config gate (`forgesys.provisioning.sample-data.enabled`) + iki katman fail-safe; seed'in REQUIRES_NEW tx'i aktivasyon/subscription satırlarını görmek zorunda olduğundan bilinçli post-commit.
 
-**Bootstrap auto-verify** (`provisionSystemTenant`, K-24): `SystemAdminBootstrapRunner` faz 1 (mail yok) + faz 2'yi arka arkaya çağırır — `system` tenant'ı startup'ta mail loop olmadan provision edilir.
+**Platform admin bootstrap** (K-50): `PlatformAdminBootstrapRunner` (`forgesys.bootstrap.platform-admin.*`, idempotent-by-email) ilk HUMAN süperadmin'i `public.t_platform_users`'a oluşturur; self-signup YOK. Dev profilinde default credential'larla açıktır, prod'da env ile opt-in. (K-24'ün `system` tenant bootstrap'i K-50 ile kaldırıldı.)
 
 > **DEBT-10 (kısmen çözüldü):** `createPendingCompany` tam transactional (yalnız DB write). `verifyAndProvision` `@Transactional` işaretli ama `CREATE SCHEMA` implicit commit → DDL transaction dışına kaçar. Recovery idempotency ile (`IF NOT EXISTS`, `usedAt` guard). Tam transactional DDL PostgreSQL'de mümkün değil.
 
@@ -244,6 +304,9 @@ classDiagram
     class Plan
     class Subscription
     class TenantModule
+    class PlatformUser
+    class PlatformApiKey
+    class PlatformAuditLog
     class Project
     class Task
     class AuditLog
@@ -279,6 +342,9 @@ classDiagram
     GeneratedIdAuditEntity <|-- LoginHistory
     GeneratedIdAuditEntity <|-- RequestLog
     GeneratedIdAuditEntity <|-- AppRecordValue
+    GeneratedIdAuditEntity <|-- PlatformUser
+    GeneratedIdAuditEntity <|-- PlatformApiKey
+    GeneratedIdAuditEntity <|-- PlatformAuditLog
 ```
 
 - **`@MappedSuperclass`** — DB tablosu karşılığı yok, sadece alanları concrete entity'lere inherits.
@@ -286,7 +352,7 @@ classDiagram
 - `@SQLDelete` her concrete entity'de ayrı (table-specific `UPDATE ... SET is_deleted = true, version = version + 1`).
 - `UserAccount`/`UserProfile` `@MapsId` ile `User`'a shared PK (gereksiz FK yok).
 - Tüm ID'ler UUID (`GenerationType.UUID`). Tablo adları `t_` prefix'li. Constraint'ler `idx_*`, `uk_*`, `fk_*`.
-- `Subscription`/`TenantModule` (public şema) `BaseEntity`. Read model'ler hiyerarşi dışındadır ve K-49 ile entity değil kod içi Criteria DTO projection'dır (`web/projection/ProjectionListQuery` — eski `@Immutable @Subselect` `UserDirectoryView` kaldırıldı; view entity yalnızca karmaşık/yoğun tablolar için istisna). `AppRecordValue` ve `RequestLog` soft-delete'siz (`GeneratedIdAuditEntity`) — value clear = satır silinir (K-15); request log append-only (K-27).
+- `Subscription`/`TenantModule` (public şema) `BaseEntity`. Read model'ler hiyerarşi dışındadır ve K-49 ile entity değil kod içi Criteria DTO projection'dır (`web/projection/ProjectionListQuery` — eski `@Immutable @Subselect` `UserDirectoryView` kaldırıldı; view entity yalnızca karmaşık/yoğun tablolar için istisna). `AppRecordValue` ve `RequestLog` soft-delete'siz (`GeneratedIdAuditEntity`) — value clear = satır silinir (K-15); request log append-only (K-27). `PlatformUser`/`PlatformApiKey`/`PlatformAuditLog` (public şema, K-50) da `GeneratedIdAuditEntity` — platform audit append-only.
 - **Tipli proje konteyneri (K-45):** `Project` = typed container (`project_type` NOT NULL: TASKS/NOTES/APPS; katalog aktif modüllerden türer). İçerik çapaları düz UUID kolonlarıdır (`@ManyToOne` yok — Task konvansiyonu): `Task.projectId`, `Note.projectId` + `NoteCategory.projectId` (NOTES), `App.projectId` (APPS koleksiyonu). İlişkisel veri katmanı (t_links) bilinçli erteli — talep-kapılı.
 
 > Detaylar: [`persistence/AGENTS.md`](../persistence/AGENTS.md)
@@ -306,6 +372,7 @@ Profile-based config. Aktif profil `SPRING_PROFILES_ACTIVE` (default: `dev`).
 - H2 `MODE=PostgreSQL`'de çalışır → build Docker gerektirmez.
 - H2 sınırları: `JSONB`, partial index, `SET search_path` desteklenmez → multi-tenancy akışı H2'de test edilemez, sadece context yükü doğrulanır.
 - **Mail/SMTP ([K-48](DECISIONS.md#k-48)):** sender profil ile split — prod `SmtpMailSender` (`spring.mail.*` → `MAIL_HOST`/`MAIL_PORT`/`MAIL_USERNAME`/`MAIL_PASSWORD`; `MAIL_HOST` boşsa startup fail-fast), dev `LogMailSender` (log'a düşer), test `InMemoryMailSender`. Ortak config `forgesys.mail.*`: `from`, `default-language` (tr default), `templates-dir` (classpath `mail/*.html` override — `infra/templates/`). Şablonlar TR/EN: tenant-verify, email-verify, password-reset.
+- **Platform kimlikleri ([K-50](DECISIONS.md#k-50)):** `forgesys.platform.auth.*` (`refresh-ttl-days` 7, `impersonation-ttl-minutes` 30, `cookie-path` `/api/v1/platform`, `cookie-secure` prod'da `true`, `cookie-same-site` Lax; access TTL `jwt.access-token-ttl-minutes` ile ortak). Bootstrap: `forgesys.bootstrap.platform-admin.*` (`enabled`/`email`/`password`/`display-name`; env `FORGESYS_BOOTSTRAP_PLATFORM_ADMIN_*` — dev default `platform-admin@forgesys.dev`, prod opt-in).
 - **Actuator/metrics ([K-43](DECISIONS.md#k-43)):** dev/test — same-port, `health,info,metrics,prometheus` (scrape auth'suz). Prod — ayrı management portu **8081** (compose'da `expose`-only, host'a publish edilmez; management child context'inde security zinciri uygulanmaz → internal ağdan auth'suz scrape) + daraltılmış exposure (`health,info,prometheus`). Custom gauge: `forgesys.tenants.active`.
 
 ## İlgili Dokümanlar

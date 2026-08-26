@@ -21,19 +21,9 @@ Platform çekirdeği kullanımda: schema-per-tenant multi-tenancy, iki fazlı te
 | Observability + CI/CD | Prometheus expose, CI 3-job + gated IT'ler + GHCR publish | K-43 |
 | Audit genişletme | `@AuditLog` AOP, delta kaydı, `t_request_logs` + endpoint + UI, high-risk body masking | K-19, K-27 |
 | **K-48 — user lifecycle + mail** | SMTP kanalı (`MailSender` port + Smtp/Log/InMemory sender'lar, TR/EN şablonlar), `t_auth_tokens` (digest-at-rest + supersede-on-reissue + atomic claim), opsiyonel email doğrulama (verify-email/resend), self-service password reset (forgot/reset, uniform-200 no-enumeration, session kill), `TokenPurgeJob` (ilk `@EnableScheduling`) | K-48 (+RISK-30) |
-| **K-49 — projection-first liste okuma yolu** | Tüm DB-backed listeler Criteria DTO projection executor'ından (`ProjectionListQuery`; `UserDirectoryView` @Subselect kaldırıldı), filtre motoruna JOINED/SUBQUERY/MEMBERSHIP alan türleri (+inverse) + DATE/INT tipleri + `qFields` akıllı arama hedefleme, her liste yüzeyinde `POST /search`, frontend DataTable kolon filtreleri + smart search'in sunucuya bağlanması, groups N+1 ölümü, platform companies paging'i | K-49 |
+| **K-50 — platform süperadmin + servis hesapları** | Global platform kimliği (`public` şeması: `t_platform_users`/`t_platform_api_keys`/`t_platform_audit_logs`), ayrı platform auth yüzeyi (`scope=platform` JWT + `sf_platform_*` cookie'leri), tenant lifecycle + abonelik/modül/rapor endpoint'leri, servis hesapları (`X-API-Key`, scope'lu), tenant'a giriş (switch code → impersonation JWT `act` claim'li, API mirroring yok), RISK-18 kapanışı + K-24 kaldırma, frontend `/platform/*` konsolu + tenant shell impersonation banner | K-50 (+RISK-18) |
 
 ## Kalan İşler
-
-### K-50 — platform süperadmin + servis hesapları (AKTİF EPİK)
-- [ ] Global platform kimliği (`public` şeması: `t_platform_users`/`t_platform_api_keys`/`t_platform_audit_logs`), ayrı platform auth yüzeyi (`scope=platform` JWT + `sf_platform_*` cookie'leri)
-- [ ] Tenant lifecycle + abonelik/modül yönetimi + cross-tenant rapor endpoint'leri
-- [ ] Servis hesapları (`X-API-Key`, scope'lu agent erişimi; raw key bir kez gösterilir)
-- [ ] Tenant'a giriş: switch code → impersonation JWT (`act` claim'li, audit'li; API mirroring yok)
-- [ ] RISK-18 kapanışı (`platform:*` tenant seed'lerinin temizlenir) + K-24 system-tenant bootstrap kaldırma
-- [ ] Frontend `/platform/*` konsolu (login, companies, service accounts, platform audit) + tenant shell'de impersonation banner'ı
-
-> Faz listesi ve anlık durum: [`docs/plans/k50-platform-superadmin.md`](plans/k50-platform-superadmin.md) — karar kaydı [K-50](DECISIONS.md#k-50).
 
 ### Faz 3 kalanı — built-in modüller
 - [ ] **Warehouse:** ürün/depo/stok kalemi/stok hareketi (IN/OUT/TRANSFER) + minimum stok uyarısı

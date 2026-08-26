@@ -1,32 +1,13 @@
 import type {
-  ApiErrorResponse,
   PageParams,
   PageResponse,
   PageResult,
   SearchRequestBody,
 } from '../types';
 import { useTenantStore } from '../store/tenantStore';
+import { ApiError, createApiClient } from './apiClient';
 
-export class ApiError extends Error {
-  status: number;
-  code: string;
-  body: ApiErrorResponse;
-
-  constructor(status: number, code: string, body: ApiErrorResponse) {
-    super(body.message);
-    this.name = 'ApiError';
-    this.status = status;
-    this.code = code;
-    this.body = body;
-  }
-}
-
-const BASE_URL = '';
-
-// --- Transparent refresh-on-401 -------------------------------------------
-// On a 401 (non-auth endpoints) call /api/v1/auth/refresh once (the httpOnly
-// sf_refresh_token cookie is sent by the browser, never read by JS) and retry the
-// original request; concurrent 401s coalesce into one /refresh via refreshPromise.
+export { ApiError };
 
 /** Paths whose 401 is a genuine auth failure (not an expired access token). */
 const REFRESH_SKIP_EXACT = new Set([
@@ -40,99 +21,31 @@ function shouldSkipRefresh(path: string): boolean {
   return REFRESH_SKIP_EXACT.has(path) || path.startsWith(REFRESH_SKIP_PREFIX);
 }
 
-let refreshPromise: Promise<boolean> | null = null;
-
-async function refreshSession(): Promise<boolean> {
-  if (refreshPromise) return refreshPromise;
-  refreshPromise = (async () => {
-    try {
-      const tenantId = useTenantStore.getState().tenantId;
-      const headers: Record<string, string> = {};
-      if (tenantId) headers['X-Tenant-ID'] = tenantId;
-      const res = await fetch(`${BASE_URL}/api/v1/auth/refresh`, {
-        method: 'POST',
-        credentials: 'include',
-        headers,
-      });
-      return res.ok;
-    } catch {
-      return false;
-    } finally {
-      refreshPromise = null;
-    }
-  })();
-  return refreshPromise;
-}
+// Tenant client: every request carries X-Tenant-ID from the tenant store — the
+// dev-profile TenantFilter resolves the schema.
+const client = createApiClient({
+  buildHeaders: (): Record<string, string> => {
+    const tenantId = useTenantStore.getState().tenantId;
+    return tenantId ? { 'X-Tenant-ID': tenantId } : {};
+  },
+  refreshPath: '/api/v1/auth/refresh',
+  shouldSkipRefresh,
+});
 
 /**
  * Session-expired callback, injected via setter so this module never imports the
  * auth store (avoids the circular dep lib/api <- authStore <- api/auth <- lib/api);
  * {@link useAuthStore} registers the handler at module load.
  */
-let sessionExpiredHandler: (() => void) | null = null;
-
 export function setSessionExpiredHandler(handler: () => void): void {
-  sessionExpiredHandler = handler;
-}
-
-async function sendRequest(path: string, options: RequestInit): Promise<Response> {
-  // X-Tenant-ID from the tenant store — the dev-profile TenantFilter resolves the schema.
-  const tenantId = useTenantStore.getState().tenantId;
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...((options.headers as Record<string, string>) || {}),
-  };
-  if (tenantId) {
-    headers['X-Tenant-ID'] = tenantId;
-  }
-  return fetch(`${BASE_URL}${path}`, {
-    ...options,
-    credentials: 'include',
-    headers,
-  });
+  client.setSessionExpiredHandler(handler);
 }
 
 export async function apiFetch<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  let response = await sendRequest(path, options);
-
-  // Expired access token: refresh once (shared), then retry.
-  if (response.status === 401 && !shouldSkipRefresh(path)) {
-    if (await refreshSession()) {
-      // Bodies here are always JSON strings (see api.post/put/patch) — safe to resend.
-      response = await sendRequest(path, options);
-    } else {
-      // Session is gone — signal the store (RequireAuth redirects), surface the 401.
-      sessionExpiredHandler?.();
-    }
-  }
-
-  if (!response.ok) {
-    let body: ApiErrorResponse;
-    try {
-      body = (await response.json()) as ApiErrorResponse;
-    } catch {
-      body = {
-        timestamp: new Date().toISOString(),
-        status: response.status,
-        error: response.statusText,
-        code: 'unknown',
-        message: response.statusText,
-        path,
-        traceId: '',
-        fields: [],
-      };
-    }
-    throw new ApiError(response.status, body.code, body);
-  }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  return response.json();
+  return client.fetchJson<T>(path, options);
 }
 
 /**

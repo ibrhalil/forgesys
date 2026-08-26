@@ -20,6 +20,13 @@ export interface LoginResponse {
   authorities: string[];
 }
 
+// Backend ImpersonationInfo (K-50 F6): non-null while the session is an
+// impersonation — {actorId, actorEmail} of the platform superadmin.
+export interface ImpersonationInfo {
+  actorId: string;
+  actorEmail: string;
+}
+
 // Backend MeResponse: the single self endpoint (GET /users/me) — full profile view
 // from the DB + the authorities embedded in the access token. The former
 // claims-only GET /auth/me was removed (K-37).
@@ -40,6 +47,7 @@ export interface MeResponse {
   roles: RoleSummary[];
   groups: GroupSummary[];
   authorities: string[];
+  impersonation?: ImpersonationInfo | null;
 }
 
 // K-21 tenant signup — two-phase provisioning (register -> email verify -> activate)

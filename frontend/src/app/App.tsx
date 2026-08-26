@@ -2,11 +2,17 @@ import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import {BrowserRouter, Navigate, Route, Routes} from 'react-router-dom';
 import {lazy, useEffect} from 'react';
 import {useAuthStore} from '../store/authStore';
+import {usePlatformAuthStore} from '../store/platformAuthStore';
 import {AppShell} from '../components/AppShell';
 import {RequireAuth} from '../components/RequireAuth';
 import {RequirePermission} from '../components/RequirePermission';
+import {RequirePlatformAuth} from '../components/RequirePlatformAuth';
 import {Spinner} from '../components/ui/Spinner';
 import {SHELL_ROUTES} from './Routes.ts';
+import {PLATFORM_ROUTES} from './PlatformRoutes.ts';
+import {PlatformShell} from '../features/platform/PlatformShell';
+import {RequirePlatformPermission} from '../features/platform/RequirePlatformPermission';
+import {PlatformLoginPage} from '../features/platform/PlatformLoginPage';
 import {LoginPage} from '../features/auth/LoginPage';
 import {RegisterPage} from '../features/auth/RegisterPage';
 import {VerifyTenantPage} from '../features/auth/VerifyTenantPage';
@@ -14,8 +20,9 @@ import {VerifyEmailPage} from '../features/auth/VerifyEmailPage';
 import {ForgotPasswordPage} from '../features/auth/ForgotPasswordPage';
 import {ResetPasswordPage} from '../features/auth/ResetPasswordPage';
 import {ApiError} from '../lib/api';
-import {notifyApiError} from '../lib/notify';
+import {notify, notifyApiError} from '../lib/notify';
 import {useT} from '../lib/i18n';
+import {consumeSwitchCode} from '../features/platform/switchHandoff';
 
 // DEV-only: UI component showcase — tree-shaken in production builds.
 const DemoLayout = import.meta.env.DEV
@@ -84,12 +91,21 @@ export default function App() {
   // the provider tree on every authStore write.
   const fetchMe = useAuthStore((s) => s.fetchMe);
   const isLoading = useAuthStore((s) => s.isLoading);
+  const fetchPlatformMe = usePlatformAuthStore((s) => s.fetchMe);
   const {t} = useT();
 
-  // Try to fetch current user session on mount
+  // Try to fetch both sessions on mount — the tenant bootstrap spinner gates only
+  // the tenant tree; the platform store gates itself (RequirePlatformAuth).
   useEffect(() => {
     fetchMe();
-  }, [fetchMe]);
+    fetchPlatformMe();
+  }, [fetchMe, fetchPlatformMe]);
+
+  // K-50 F6 switch handoff: the platform console opens the tenant URL with a
+  // one-time ?switchCode= — consumed (and stripped from the address) on mount.
+  useEffect(() => {
+    consumeSwitchCode().catch(() => notify.error(t('impersonation.exchangeFailed')));
+  }, [t]);
 
   if (isLoading) {
     return (
@@ -110,6 +126,29 @@ export default function App() {
           <Route path="/verify-email" element={<VerifyEmailPage/>}/>
           <Route path="/forgot-password" element={<ForgotPasswordPage/>}/>
           <Route path="/reset-password" element={<ResetPasswordPage/>}/>
+
+          {/* K-50 platform console — its own shell/guards/auth store, outside the tenant RequireAuth. */}
+          <Route path="/platform/login" element={<PlatformLoginPage/>}/>
+          <Route
+            path="/platform"
+            element={
+              <RequirePlatformAuth>
+                <PlatformShell/>
+              </RequirePlatformAuth>
+            }
+          >
+            <Route index element={<Navigate to="companies" replace/>}/>
+            {PLATFORM_ROUTES.map(({path, Component, authority}) => {
+              const element = authority ? (
+                <RequirePlatformPermission authority={authority}>
+                  <Component/>
+                </RequirePlatformPermission>
+              ) : (
+                <Component/>
+              );
+              return <Route key={path} path={path} element={element}/>;
+            })}
+          </Route>
 
           <Route
             path="/"

@@ -44,7 +44,6 @@
 - FREE subscription + default module activations (K-16): `activateForCompany` manages its own TenantContext + REQUIRES_NEW; `pm` needs no extra migration (baseline tables).
 - `registerSampleDataSeed` (K-47): afterCommit because the seed's REQUIRES_NEW tx must SEE the committed `t_tenant_modules` activation records + FREE subscription; under read-committed an inner tx cannot — a same-tx call fails the module gate (`MODULE_NOT_ACTIVE`) and plan chain (`SUBSCRIPTION_NOT_FOUND`) and is silently swallowed by the seed's fail-safe. Guard covers non-transactional callers (unit tests). Two-layer fail-safe: `seedForCompany` catches internally AND the callback catches again.
 - `PendingSignup` carries the RAW token (RISK-30 hash-at-rest): raw goes to the mail link or, on bootstrap, straight to `verifyAndProvision` in memory.
-- `provisionSystemTenant` (K-24): phase 1 without mail + phase 2 in one call for `SystemAdminBootstrapRunner` (reserved `system` tenant).
 - `createAdminUser`: admin credentials pre-hashed at phase 1, stored verbatim phase 2 (no re-hash). `assignAdminTo(user)` is the ONLY automatic Admin grant (no-op in `test`); startup seeding never touches user role assignments — privilege-escalation fix 2026-08-16 (role-less users used to be silently granted the all-permissions Admin role on every restart).
 - `createDefaultSubscription`: fails fast when the FREE plan row is missing — `PlanSyncRunner` seeds plans before any provisioning can run. Real plan selection/upgrades arrive in Faz 6.
 - Schema name derivation: subdomain lowercased, non-[a-z0-9-] stripped, `-`→`_`, `tenant_` prefix, regex-validated.
@@ -562,13 +561,10 @@
   propagates newly shipped module migrations/permissions to existing tenants. Disabled in
   test (ModuleActivationService falls back to built-in default keys there).
 
-### SystemAdminBootstrapRunner / SystemAdminBootstrapProperties (config/)
-- K-24: gives the platform a stable privileged identity without manual signup; used for
-  platform operations and as a service account for M2M/job outbound calls. The RBAC seed
-  and the explicit Admin grant happen inside `createAdminUser` during provisioning — the
-  runner intentionally only performs tenant + admin provisioning. Disabled in test.
-- `provisionSystemTenant` = createPendingCompany + verifyAndProvision back-to-back
-  (K-21 two-phase flow) with verification mail suppressed.
+### SystemAdminBootstrapRunner / SystemAdminBootstrapProperties (config/) — K-50 ile KALDIRILDI
+- K-24: gave the platform a stable privileged identity without manual signup; used for platform operations and as a service account for M2M/job outbound calls. The RBAC seed and the explicit Admin grant happened inside `createAdminUser` during provisioning — the runner intentionally only performed tenant + admin provisioning. Disabled in test.
+- `provisionSystemTenant` = createPendingCompany + verifyAndProvision back-to-back (K-21 two-phase flow) with verification mail suppressed.
+- **K-50 ile kaldırıldı** (2026-08-26): `SystemAdminBootstrapRunner` + `SystemAdminBootstrapProperties` + `provisionSystemTenant` silindi; mevcut `system` tenant DB satırı dokunulmadan bırakıldı. Yerine platform kimlikleri (`public` şeması) + `PlatformAdminBootstrapRunner` (K-50).
 
 ### SchedulingConfig (config/)
 - First @Scheduled consumer: TokenPurgeJob (RISK-30 stale verification-token purge).

@@ -5,6 +5,7 @@ import { LuChevronDown, LuLogOut, LuMenu } from 'react-icons/lu';
 import { useAuthStore } from '../store/authStore';
 import { NAV_GROUPS, NAV_ITEMS, type NavItem } from '../app/Navigation';
 import { BreadcrumbTargetContext } from './BreadcrumbTargetContext';
+import { ImpersonationBanner } from './ImpersonationBanner';
 import { LanguageToggle } from './LanguageToggle';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { Spinner } from './ui/Spinner';
@@ -231,6 +232,9 @@ export function AppShell() {
         </aside>
 
         <main className="flex min-h-0 min-w-0 flex-col">
+          {/* Impersonation strip (K-50): rendered above the topbar while the
+              session is a platform superadmin's tenant switch. */}
+          <ImpersonationBanner />
           {/* Fixed breadcrumb topbar (Page portals its breadcrumb here). It lives
               OUTSIDE the scroll container so it never scrolls away — and future
               sticky elements like table headers can use plain `top-0` inside the
