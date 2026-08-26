@@ -57,9 +57,10 @@ public class LastAdminGuard {
     /**
      * All-permissions roles plus their transitive children ({@code t_role_parents} walked
      * to a fixpoint — acyclic by {@code RoleService.setParents}); soft-deleted roles are
-     * filtered by {@code @SQLRestriction}.
+     * filtered by {@code @SQLRestriction}. K-50: also the impersonation target's
+     * admin-capability definition (PlatformSwitchService reuses this closure).
      */
-    private Set<UUID> adminCapableRoleIds() {
+    public Set<UUID> adminCapableRoleIds() {
         Set<UUID> roleIds = new LinkedHashSet<>();
         for (Role role : roleRepository.findAllByAllPermissionsTrue()) {
             if (role.getId() != null) {

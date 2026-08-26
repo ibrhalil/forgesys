@@ -27,6 +27,10 @@ public class CustomUserDetails implements UserDetails {
     private final String jti;
     /** K-50: {@code "platform"} for platform-identity tokens; null for tenant users. */
     private final String scope;
+    /** K-50 F6: acting platform identity (UUID string) while impersonating; null otherwise. */
+    private final String actUserId;
+    private final String actEmail;
+    private final boolean impersonation;
 
     public CustomUserDetails(UUID userId, String email, String password, boolean enabled,
                              boolean accountNonExpired, boolean accountNonLocked,
@@ -40,6 +44,15 @@ public class CustomUserDetails implements UserDetails {
                              boolean accountNonExpired, boolean accountNonLocked,
                              boolean credentialsNonExpired, Set<GrantedAuthority> authorities,
                              String tenantSchema, String jti, String scope) {
+        this(userId, email, password, enabled, accountNonExpired, accountNonLocked,
+                credentialsNonExpired, authorities, tenantSchema, jti, scope, null, null, false);
+    }
+
+    public CustomUserDetails(UUID userId, String email, String password, boolean enabled,
+                             boolean accountNonExpired, boolean accountNonLocked,
+                             boolean credentialsNonExpired, Set<GrantedAuthority> authorities,
+                             String tenantSchema, String jti, String scope,
+                             String actUserId, String actEmail, boolean impersonation) {
         this.userId = userId;
         this.email = email;
         this.password = password;
@@ -51,6 +64,9 @@ public class CustomUserDetails implements UserDetails {
         this.tenantSchema = tenantSchema;
         this.jti = jti;
         this.scope = scope;
+        this.actUserId = actUserId;
+        this.actEmail = actEmail;
+        this.impersonation = impersonation;
     }
 
     public static CustomUserDetails from(User user, UserAccount account, Set<GrantedAuthority> authorities, String tenantSchema) {
@@ -102,6 +118,20 @@ public class CustomUserDetails implements UserDetails {
 
     public boolean isPlatform() {
         return "platform".equals(scope);
+    }
+
+    /** K-50 F6: acting platform identity's id while impersonating; null for real logins. */
+    public String getActUserId() {
+        return actUserId;
+    }
+
+    /** K-50 F6: acting platform identity's display; null for real logins. */
+    public String getActEmail() {
+        return actEmail;
+    }
+
+    public boolean isImpersonation() {
+        return impersonation;
     }
 
     @Override

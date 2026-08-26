@@ -107,6 +107,21 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
     boolean existsEnabledByRoleIds(@Param("roleIds") Collection<UUID> roleIds);
 
     /**
+     * Earliest-created enabled holder of any of the roles (K-50 impersonation target);
+     * sort/{@code limit 1} come from the {@code Pageable} (caller passes
+     * {@code createdDate ASC, id ASC}). Same role paths as {@link #existsEnabledByRoleIds}.
+     */
+    @Query("""
+            select u from User u
+            join u.userAccount a
+            where a.enabled = true
+              and (u.id in (select u2.id from User u2 join u2.roles r where r.id in :roleIds)
+                or u.id in (select u2.id from User u2 join u2.groups g join g.roles gr
+                            where g.active = true and gr.id in :roleIds))
+            """)
+    List<User> findFirstEnabledByRoleIds(@Param("roleIds") Collection<UUID> roleIds, Pageable pageable);
+
+    /**
      * Bulk-stamps {@code tokenInvalidBefore = now} for the given users (user-scoped
      * revoke, RISK-21). Returns the number of rows updated.
      */

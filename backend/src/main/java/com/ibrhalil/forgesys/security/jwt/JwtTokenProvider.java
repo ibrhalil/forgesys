@@ -32,6 +32,10 @@ public class JwtTokenProvider {
     /** K-50: token scope — {@code platform} marks a platform-identity token (no tenant claim). */
     public static final String CLAIM_SCOPE = "scope";
     public static final String SCOPE_PLATFORM = "platform";
+    /** K-50 F6 impersonation claims: acting platform identity + marker (frozen decision #5). */
+    public static final String CLAIM_ACT = "act";
+    public static final String CLAIM_ACTOR_EMAIL = "act_email";
+    public static final String CLAIM_IMPERSONATION = "imp";
 
     private final JwtEncoder jwtEncoder;
     private final long accessTokenTtlMinutes;
@@ -78,6 +82,34 @@ public class JwtTokenProvider {
                 .claim(CLAIM_EMAIL, email)
                 .claim(CLAIM_SCOPE, SCOPE_PLATFORM)
                 .claim(CLAIM_AUTHORITIES, authorities == null ? List.of() : authorities)
+                .build();
+        JwsHeader header = JwsHeader.with(SignatureAlgorithm.RS256).build();
+        return jwtEncoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
+    }
+
+    /**
+     * K-50 F6: impersonation token — {@code sub}/{@code tenant} are the target admin
+     * (passes the RISK-19 tenant==context check like a real login), {@code act}/
+     * {@code act_email} identify the acting platform identity, {@code imp=true} marks
+     * the session. TTL is the impersonation lifetime (no refresh token is ever issued).
+     */
+    public String generateImpersonationToken(String userId, String email, String tenantSchema,
+                                             List<String> authorities, String actorId, String actorEmail,
+                                             String jti, long ttlMinutes) {
+        Instant now = Instant.now();
+        JwtClaimsSet claims = JwtClaimsSet.builder()
+                .issuer(ISSUER)
+                .id(jti)
+                .audience(List.of(AUDIENCE))
+                .issuedAt(now)
+                .expiresAt(now.plus(ttlMinutes, ChronoUnit.MINUTES))
+                .subject(userId)
+                .claim(CLAIM_EMAIL, email)
+                .claim(CLAIM_AUTHORITIES, authorities == null ? List.of() : authorities)
+                .claim(CLAIM_TENANT, tenantSchema)
+                .claim(CLAIM_ACT, actorId)
+                .claim(CLAIM_ACTOR_EMAIL, actorEmail)
+                .claim(CLAIM_IMPERSONATION, true)
                 .build();
         JwsHeader header = JwsHeader.with(SignatureAlgorithm.RS256).build();
         return jwtEncoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();

@@ -31,4 +31,15 @@ public final class TenantContextExecutor {
             return null;
         });
     }
+
+    /** Public-schema window: clears the context for the action, restoring the caller's afterward (K-25/F6). */
+    public static <T> T withoutTenantContext(Supplier<T> action) {
+        Optional<String> previous = TenantContext.getCurrentTenant();
+        TenantContext.clear();
+        try {
+            return action.get();
+        } finally {
+            previous.ifPresentOrElse(TenantContext::setCurrentTenant, TenantContext::clear);
+        }
+    }
 }

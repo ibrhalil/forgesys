@@ -1,5 +1,6 @@
 package com.ibrhalil.forgesys.controller;
 
+import com.ibrhalil.forgesys.dto.ImpersonationInfo;
 import com.ibrhalil.forgesys.dto.MeResponse;
 import com.ibrhalil.forgesys.dto.PasswordChangeRequest;
 import com.ibrhalil.forgesys.dto.UserProfileUpdateRequest;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Self-service endpoints for the authenticated user's own account — no
@@ -38,11 +40,14 @@ public class UserProfileController {
         List<String> authorities = principal.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .toList();
+        ImpersonationInfo impersonation = principal.isImpersonation() && principal.getActUserId() != null
+                ? new ImpersonationInfo(UUID.fromString(principal.getActUserId()), principal.getActEmail())
+                : null;
         return ResponseEntity.ok(new MeResponse(
                 user.id(), user.username(), user.email(), user.emailVerified(), user.enabled(),
                 user.lockedUntil(), user.firstName(), user.lastName(), user.phoneNumber(),
                 user.address(), user.city(), user.country(), user.zipCode(),
-                user.roles(), user.groups(), authorities));
+                user.roles(), user.groups(), authorities, impersonation));
     }
 
     @PutMapping("/profile")

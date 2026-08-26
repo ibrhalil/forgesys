@@ -36,6 +36,20 @@ public class AuditService {
         recordDelta(action, entityType, entityId, entityName, null, null);
     }
 
+    /**
+     * K-50 F6: explicit actor (a platform identity writing into the tenant audit
+     * trail during a switch) instead of the SecurityContext principal.
+     */
+    public void recordWithActor(String action, String entityType, UUID entityId, String entityName,
+                                UUID actorId, String actorName) {
+        try {
+            self.getObject().recordInNewTxWithActor(action, entityType, entityId, entityName, actorId, actorName);
+        } catch (RuntimeException ex) {
+            log.warn("Failed to record audit log (action={}, entityType={}, entityId={})",
+                    action, entityType, entityId, ex);
+        }
+    }
+
     /** Like {@link #record}, plus the before/after delta (JSON via {@link #namesJson}). */
     public void recordDelta(String action, String entityType, UUID entityId, String entityName,
                             String oldValue, String newValue) {
@@ -59,6 +73,24 @@ public class AuditService {
         entry.setOldValue(oldValue);
         entry.setNewValue(newValue);
         resolveActor(entry);
+        RequestContext.current().ifPresent(meta -> {
+            entry.setIpAddress(meta.clientIp());
+            entry.setTraceId(meta.traceId());
+        });
+        auditLogRepository.save(entry);
+    }
+
+    /** K-50 F6 twin of {@link #recordInNewTx} with the actor supplied by the caller. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordInNewTxWithActor(String action, String entityType, UUID entityId, String entityName,
+                                       UUID actorId, String actorName) {
+        AuditLog entry = new AuditLog();
+        entry.setAction(action);
+        entry.setEntityType(entityType);
+        entry.setEntityId(entityId);
+        entry.setEntityName(entityName);
+        entry.setActorId(actorId);
+        entry.setActorName(actorName != null ? actorName : SYSTEM_ACTOR);
         RequestContext.current().ifPresent(meta -> {
             entry.setIpAddress(meta.clientIp());
             entry.setTraceId(meta.traceId());

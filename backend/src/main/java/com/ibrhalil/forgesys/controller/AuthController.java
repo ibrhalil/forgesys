@@ -9,6 +9,8 @@ import com.ibrhalil.forgesys.dto.EmailVerifyRequest;
 import com.ibrhalil.forgesys.dto.ForgotPasswordRequest;
 import com.ibrhalil.forgesys.dto.LoginRequest;
 import com.ibrhalil.forgesys.dto.LoginResponse;
+import com.ibrhalil.forgesys.dto.PlatformSwitchExchangeRequest;
+import com.ibrhalil.forgesys.dto.PlatformSwitchExchangeResponse;
 import com.ibrhalil.forgesys.dto.RefreshRequest;
 import com.ibrhalil.forgesys.dto.ResetPasswordRequest;
 import com.ibrhalil.forgesys.dto.SubdomainSuggestionRequest;
@@ -16,6 +18,7 @@ import com.ibrhalil.forgesys.dto.SubdomainSuggestionResponse;
 import com.ibrhalil.forgesys.security.CustomUserDetails;
 import com.ibrhalil.forgesys.security.jwt.JwtCookieProperties;
 import com.ibrhalil.forgesys.service.AuthService;
+import com.ibrhalil.forgesys.service.PlatformSwitchService;
 import com.ibrhalil.forgesys.service.SubdomainSuggestionService;
 import com.ibrhalil.forgesys.service.TenantProvisioningService;
 import com.ibrhalil.forgesys.service.UserService;
@@ -42,6 +45,7 @@ public class AuthController {
     private final AuthService authService;
     private final UserService userService;
     private final SubdomainSuggestionService subdomainSuggestionService;
+    private final PlatformSwitchService platformSwitchService;
     private final JwtCookieProperties cookieProperties;
 
     @PostMapping("/company/register")
@@ -108,6 +112,22 @@ public class AuthController {
         return ResponseEntity.ok(bodyOut);
     }
 
+    /**
+     * K-50 F6: exchanges a one-time platform switch code for a short-lived
+     * impersonation JWT. Runs on the target tenant's subdomain host (TenantFilter
+     * NORMAL flow) — the code's schema must match the resolved tenant. Sets the
+     * tenant access cookie; NO refresh token is issued. Public (permitAll).
+     */
+    @PostMapping("/platform-switch")
+    public ResponseEntity<PlatformSwitchExchangeResponse> platformSwitch(
+            @Valid @RequestBody PlatformSwitchExchangeRequest request,
+            HttpServletResponse response) {
+        PlatformSwitchExchangeResponse body = platformSwitchService.exchange(request.code());
+        response.addHeader(HttpHeaders.SET_COOKIE,
+                cookieProperties.buildAccessTokenCookie(body.accessToken(), body.expiresIn()));
+        return ResponseEntity.ok(body);
+    }
+
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(@AuthenticationPrincipal CustomUserDetails principal,
                                        HttpServletRequest request,
@@ -117,7 +137,14 @@ public class AuthController {
         UUID userId = principal == null ? null : principal.getUserId();
         String jti = principal == null ? null : principal.getJti();
         String refreshToken = resolveRefreshToken(null, request);
-        if (userId != null) {
+        if (principal != null && principal.isImpersonation()) {
+            // K-50 F6: impersonation sessions have no refresh token — logout ends the
+            // switch itself (jti blacklist + concurrency-guard clear + platform audit).
+            UUID actorId = parseActorId(principal.getActUserId());
+            if (actorId != null) {
+                platformSwitchService.end(actorId, jti);
+            }
+        } else if (userId != null) {
             authService.logout(userId, jti, refreshToken);
         }
         response.addHeader(HttpHeaders.SET_COOKIE, cookieProperties.expireCookie(
@@ -125,6 +152,18 @@ public class AuthController {
         response.addHeader(HttpHeaders.SET_COOKIE, cookieProperties.expireCookie(
                 cookieProperties.effectiveRefreshCookieName(), cookieProperties.effectiveRefreshCookiePath()));
         return ResponseEntity.noContent().build();
+    }
+
+    /** Defensive parse of the act claim (K-50); null when absent or malformed. */
+    private UUID parseActorId(String actUserId) {
+        if (actUserId == null || actUserId.isBlank()) {
+            return null;
+        }
+        try {
+            return UUID.fromString(actUserId);
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
     }
 
     /** Body takes precedence; falls back to the refresh-token cookie. */

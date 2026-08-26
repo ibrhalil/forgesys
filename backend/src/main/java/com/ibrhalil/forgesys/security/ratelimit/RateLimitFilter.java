@@ -3,6 +3,7 @@ package com.ibrhalil.forgesys.security.ratelimit;
 import com.ibrhalil.forgesys.common.tenant.TenantContext;
 import com.ibrhalil.forgesys.exception.ApiErrorFactory;
 import com.ibrhalil.forgesys.exception.ErrorCode;
+import com.ibrhalil.forgesys.security.apikey.PlatformApiKeyAuthenticationFilter;
 import com.ibrhalil.forgesys.web.RequestContext;
 import com.ibrhalil.forgesys.web.RequestMeta;
 import jakarta.servlet.FilterChain;
@@ -22,7 +23,8 @@ import java.io.IOException;
  * {@code scope:tenant:clientIp} — complements the per-account lockout (RISK-22) by
  * closing the credential-stuffing path (one IP across many accounts; unknown emails
  * never increment any lockout counter). Runs before JWT decode; a blocked request
- * short-circuits with {@code 429 auth_rate_limited} + {@code Retry-After}.
+ * short-circuits with {@code 429 auth_rate_limited} + {@code Retry-After}. K-50 F5:
+ * {@code X-API-Key} requests get their own per-key bucket (identity = key prefix).
  */
 @Component
 public class RateLimitFilter extends OncePerRequestFilter {
@@ -39,7 +41,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return scopeOf(request.getRequestURI()) == null;
+        return scopeOf(request) == null;
     }
 
     @Override
@@ -49,10 +51,13 @@ public class RateLimitFilter extends OncePerRequestFilter {
             chain.doFilter(request, response);
             return;
         }
-        String scope = scopeOf(request.getRequestURI());
+        String scope = scopeOf(request);
         String tenant = TenantContext.getCurrentTenant().orElse("public");
         String clientIp = RequestContext.current().map(RequestMeta::clientIp).orElse("unknown");
-        String key = scope + ":" + tenant + ":" + clientIp;
+        // K-50 F5: API-key requests are limited per identity (key prefix), not per IP —
+        // NAT'ed agents must not share one bucket; the prefix never reveals the secret.
+        String identity = PLATFORM_API_KEY_SCOPE.equals(scope) ? apiKeyIdentity(request) : clientIp;
+        String key = scope + ":" + tenant + ":" + identity;
 
         RateLimitResult result = rateLimiter.tryConsume(key,
                 properties.effectiveCapacity(),
@@ -69,7 +74,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
         chain.doFilter(request, response);
     }
 
-    private static String scopeOf(String uri) {
+    private static final String PLATFORM_API_KEY_SCOPE = "platform-api-key";
+
+    private static String scopeOf(HttpServletRequest request) {
+        String uri = request.getRequestURI();
         if (uri == null) {
             return null;
         }
@@ -85,6 +93,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if (uri.startsWith("/api/v1/auth/reset-password")) {
             return "reset-password";
         }
+        // K-50 F6: one-time switch-code exchange — runs on the tenant host (key tenant part = target schema).
+        if (uri.startsWith("/api/v1/auth/platform-switch")) {
+            return "platform-switch";
+        }
         if (uri.startsWith("/api/v1/auth/login")) {
             return "login";
         }
@@ -98,6 +110,20 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if (uri.startsWith("/api/v1/platform/auth/refresh")) {
             return "platform-refresh";
         }
+        // K-50 F5: every X-API-Key request gets a bucket (path scopes above win when both match).
+        if (request.getHeader(PlatformApiKeyAuthenticationFilter.API_KEY_HEADER) != null) {
+            return PLATFORM_API_KEY_SCOPE;
+        }
         return null;
+    }
+
+    /** Prefix part of {@code <prefix>_<secret>} only — the secret must never reach the rate-limit store. */
+    private static String apiKeyIdentity(HttpServletRequest request) {
+        String rawKey = request.getHeader(PlatformApiKeyAuthenticationFilter.API_KEY_HEADER);
+        int separator = rawKey.indexOf('_');
+        if (separator <= 0) {
+            return "malformed";
+        }
+        return rawKey.substring(0, Math.min(separator, 20));
     }
 }

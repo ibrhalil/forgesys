@@ -117,6 +117,20 @@ public class ModuleActivationService {
         return TenantContextExecutor.inTenantContext(company.getSchemaName(), () -> doActivateForCompany(company, module));
     }
 
+    /**
+     * K-50 F4: platform-driven deactivation — soft-deletes the activation row
+     * (public schema, no tenant window needed). Idempotent; module data,
+     * permissions and migrations are deliberately KEPT (cleanup semantics arrive
+     * with billing-driven downgrades, Faz 6).
+     */
+    public void deactivateForCompany(Company company, ModuleDefinition module) {
+        tenantModuleRepository.findByCompanyIdAndModuleKey(company.getId(), module.key())
+                .ifPresent(row -> {
+                    tenantModuleRepository.delete(row);
+                    log.info("Module '{}' deactivated for company {}", module.key(), company.getId());
+                });
+    }
+
     /** Re-applies migrations + permission seed to an ALREADY-activated tenant (ModuleSyncRunner). */
     public void resyncForCompany(Company company, ModuleDefinition module) {
         TenantContextExecutor.inTenantContext(company.getSchemaName(), () -> {
