@@ -7,7 +7,8 @@ import java.util.UUID;
 /**
  * The single self view ({@code GET /api/v1/users/me}, K-37): DB profile + the
  * authorities embedded in the access token; backs the SPA bootstrap and the
- * profile page.
+ * profile page. K-50 F6: {@code impersonation} carries banner data when the
+ * session is a platform switch (null for real logins).
  */
 public record MeResponse(
         UUID id,
@@ -25,6 +26,7 @@ public record MeResponse(
         String zipCode,
         List<RoleSummary> roles,
         List<GroupSummary> groups,
-        List<String> authorities
+        List<String> authorities,
+        ImpersonationInfo impersonation
 ) {
 }

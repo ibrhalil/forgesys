@@ -3,6 +3,7 @@ package com.ibrhalil.forgesys.config;
 import com.ibrhalil.forgesys.security.PepperingPasswordEncoder;
 import com.ibrhalil.forgesys.security.RestAccessDeniedHandler;
 import com.ibrhalil.forgesys.security.RestAuthenticationEntryPoint;
+import com.ibrhalil.forgesys.security.apikey.PlatformApiKeyAuthenticationFilter;
 import com.ibrhalil.forgesys.security.jwt.JwtAuthenticationFilter;
 import com.ibrhalil.forgesys.security.ratelimit.RateLimitFilter;
 import com.ibrhalil.forgesys.tenant.TenantFilter;
@@ -37,6 +38,7 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
                                                    JwtAuthenticationFilter jwtAuthenticationFilter,
                                                    RateLimitFilter rateLimitFilter,
+                                                   PlatformApiKeyAuthenticationFilter platformApiKeyAuthenticationFilter,
                                                    RestAuthenticationEntryPoint authenticationEntryPoint,
                                                    RestAccessDeniedHandler accessDeniedHandler) throws Exception {
         http
@@ -50,6 +52,7 @@ public class SecurityConfig {
                                 "/api/v1/auth/verify-email",
                                 "/api/v1/auth/forgot-password",
                                 "/api/v1/auth/reset-password",
+                                "/api/v1/auth/platform-switch",
                                 "/api/v1/platform/auth/login",
                                 "/api/v1/platform/auth/refresh").permitAll()
                         // K-41: safe unconditionally — prod disables springdoc outright (404); dev/test stay open.
@@ -70,6 +73,9 @@ public class SecurityConfig {
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 // Faz 3: rate-limit before JWT decode — a blocked request short-circuits 429 and never pays the BCrypt cost.
                 .addFilterBefore(rateLimitFilter, JwtAuthenticationFilter.class)
+                // K-50 F5: X-API-Key auth before the JWT filter (chain order: rate-limit → api-key → jwt);
+                // the JWT filter skips requests already authenticated by the key.
+                .addFilterBefore(platformApiKeyAuthenticationFilter, JwtAuthenticationFilter.class)
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint(authenticationEntryPoint)
                         .accessDeniedHandler(accessDeniedHandler));

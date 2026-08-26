@@ -20,15 +20,26 @@ public class MailLinkBuilder {
     private String appBaseUrl;
 
     public String tenantLink(String schemaName, String path, String rawToken) {
-        String subdomain = schemaName.substring("tenant_".length()).replace('_', '-');
+        return tenantBaseUrl(schemaName) + path + "?token=" + rawToken;
+    }
+
+    /**
+     * Origin of the tenant's own subdomain: {@code {scheme}://{subdomain}.{host}[:{port}]}.
+     * K-50 F6: also the switch {@code targetUrl} base. A non-{@code tenant_*} schema
+     * (single-schema H2 tests) folds to the bare base URL.
+     */
+    public String tenantBaseUrl(String schemaName) {
         URI base = URI.create(appBaseUrl);
         StringBuilder url = new StringBuilder()
-                .append(base.getScheme()).append("://")
-                .append(subdomain).append('.').append(base.getHost());
+                .append(base.getScheme()).append("://");
+        if (schemaName != null && schemaName.startsWith("tenant_")) {
+            String subdomain = schemaName.substring("tenant_".length()).replace('_', '-');
+            url.append(subdomain).append('.');
+        }
+        url.append(base.getHost());
         if (base.getPort() != -1) {
             url.append(':').append(base.getPort());
         }
-        url.append(path).append("?token=").append(rawToken);
         return url.toString();
     }
 }

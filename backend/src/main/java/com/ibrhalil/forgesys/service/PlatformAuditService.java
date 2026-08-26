@@ -32,6 +32,17 @@ public class PlatformAuditService {
     public static final String ACTION_LOGIN_SUCCESS = "platform_login_success";
     public static final String ACTION_LOGIN_FAILED = "platform_login_failed";
 
+    /** K-50 F5: service-account key lifecycle + X-API-Key authentication failures. */
+    public static final String ACTION_API_KEY_CREATED = "platform_api_key_created";
+    public static final String ACTION_API_KEY_REVOKED = "platform_api_key_revoked";
+    public static final String ACTION_API_KEY_AUTH_FAILED = "platform_api_key_auth_failed";
+
+    /** K-50 F4 tenant lifecycle actions (actor = platform principal). */
+    public static final String ACTION_COMPANY_STATUS_UPDATED = "company_status_updated";
+    public static final String ACTION_TENANT_PLAN_CHANGED = "tenant_plan_changed";
+    public static final String ACTION_TENANT_MODULE_ACTIVATED = "tenant_module_activated";
+    public static final String ACTION_TENANT_MODULE_DEACTIVATED = "tenant_module_deactivated";
+
     private final PlatformAuditLogRepository platformAuditLogRepository;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)

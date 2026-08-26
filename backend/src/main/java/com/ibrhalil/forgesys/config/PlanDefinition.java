@@ -1,5 +1,8 @@
 package com.ibrhalil.forgesys.config;
 
+import java.util.Arrays;
+import java.util.Optional;
+
 /**
  * Code-side plan registry (K-16), upserted into {@code t_plans} at startup; financial
  * flows arrive in Faz 6. {@link #rank} orders plans (FREE &lt; PRO &lt; ENTERPRISE) and
@@ -51,5 +54,12 @@ public enum PlanDefinition {
 
     public boolean covers(PlanDefinition other) {
         return rank >= other.rank;
+    }
+
+    /** Registry lookup by {@code t_plans} key; empty for unknown keys. */
+    public static Optional<PlanDefinition> fromKey(String key) {
+        return Arrays.stream(values())
+                .filter(definition -> definition.key.equals(key))
+                .findFirst();
     }
 }

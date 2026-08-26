@@ -267,7 +267,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 .map(SimpleGrantedAuthority::new)
                 .collect(Collectors.toSet());
 
-        CustomUserDetails principal = new CustomUserDetails(userId, email, null, true, true, true, true, authorities, tenantSchema, jwt.getId());
+        // K-50 F6: impersonation claims ride along (banner data + act-aware auditing).
+        String actUserId = jwt.getClaimAsString(JwtTokenProvider.CLAIM_ACT);
+        String actEmail = jwt.getClaimAsString(JwtTokenProvider.CLAIM_ACTOR_EMAIL);
+        boolean impersonation = actUserId != null
+                && Boolean.TRUE.equals(jwt.getClaimAsBoolean(JwtTokenProvider.CLAIM_IMPERSONATION));
+
+        CustomUserDetails principal = new CustomUserDetails(userId, email, null, true, true, true, true,
+                authorities, tenantSchema, jwt.getId(), null, actUserId, actEmail, impersonation);
         return new UsernamePasswordAuthenticationToken(principal, null, authorities);
     }
 

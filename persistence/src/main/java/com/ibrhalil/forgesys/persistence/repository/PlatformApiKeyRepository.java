@@ -6,6 +6,7 @@ import java.util.UUID;
 
 import com.ibrhalil.forgesys.entity.PlatformApiKey;
 
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -14,6 +15,10 @@ import org.springframework.stereotype.Repository;
 public interface PlatformApiKeyRepository extends JpaRepository<PlatformApiKey, UUID> {
 
     Optional<PlatformApiKey> findByKeyPrefix(String keyPrefix);
+
+    /** Fetch-joined owner for the auth filter (runs outside a transaction — no lazy init). */
+    @EntityGraph(attributePaths = "platformUser")
+    Optional<PlatformApiKey> findWithUserByKeyPrefix(String keyPrefix);
 
     List<PlatformApiKey> findByPlatformUserIdOrderByCreatedDateDesc(UUID platformUserId);
 }

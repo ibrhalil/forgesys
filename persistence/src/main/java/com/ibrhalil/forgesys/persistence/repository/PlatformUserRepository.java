@@ -1,10 +1,12 @@
 package com.ibrhalil.forgesys.persistence.repository;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import com.ibrhalil.forgesys.entity.PlatformUser;
+import com.ibrhalil.forgesys.entity.PlatformUserType;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -18,6 +20,9 @@ public interface PlatformUserRepository extends JpaRepository<PlatformUser, UUID
     Optional<PlatformUser> findByEmail(String email);
 
     boolean existsByEmail(String email);
+
+    /** SERVICE accounts for the service-account list (K-50 F5). */
+    List<PlatformUser> findByUserTypeOrderByCreatedDateDesc(PlatformUserType userType);
 
     /** Single-column projection for the platform JWT revocation check (RISK-21 pattern). */
     @Query("select u.tokenInvalidBefore from PlatformUser u where u.id = :userId")

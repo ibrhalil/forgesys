@@ -49,13 +49,18 @@ public class MultiTenancyJpaConfig {
 
     /**
      * Audit actor from the SecurityContext (RISK-33); falls back to {@code "system"}
-     * for signup, provisioning and startup runners.
+     * for signup, provisioning and startup runners. K-50 F6: impersonated sessions
+     * attribute mutations to the acting platform identity ({@code act}, frozen
+     * decision #5) — the target admin is a vehicle, not the actor.
      */
     @Bean
     public AuditorAware<String> auditorAwareProvider() {
         return () -> {
             var authentication = SecurityContextHolder.getContext().getAuthentication();
             if (authentication != null && authentication.getPrincipal() instanceof CustomUserDetails user) {
+                if (user.isImpersonation() && user.getActUserId() != null) {
+                    return Optional.of(user.getActUserId());
+                }
                 return Optional.of(user.getUserId().toString());
             }
             return Optional.of("system");
