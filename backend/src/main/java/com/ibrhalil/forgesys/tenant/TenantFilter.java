@@ -48,9 +48,12 @@ public class TenantFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
-        // Only tenant-creation endpoints lack a tenant context; login and /me ARE
+        // Tenant-agnostic surfaces: tenant-creation endpoints, the platform API (K-50 —
+        // global identities, no company resolution) and actuator. Login and /me ARE
         // tenant-specific and go through normal subdomain resolution.
-        return path.startsWith("/api/v1/auth/company/") || path.startsWith("/actuator/");
+        return path.startsWith("/api/v1/auth/company/")
+                || path.startsWith("/api/v1/platform/")
+                || path.startsWith("/actuator/");
     }
 
     @Override

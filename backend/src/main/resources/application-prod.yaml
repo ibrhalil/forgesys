@@ -49,6 +49,12 @@ jwt:
   cookie-secure: true
   refresh-cookie-secure: true
 
+# K-50: platform cookies are Secure in prod (same threat model as the tenant cookies).
+forgesys:
+  platform:
+    auth:
+      cookie-secure: true
+
 management:
   # K-43: management moves to its own port in prod. The main port (8080, the only
   # published one) then serves ONLY application traffic — the unauthenticated

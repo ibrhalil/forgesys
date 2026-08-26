@@ -29,6 +29,9 @@ public class JwtTokenProvider {
     public static final String CLAIM_EMAIL = "email";
     /** JWT id claim — unique per token, the granular-blacklist key (K-34). */
     public static final String CLAIM_JTI = "jti";
+    /** K-50: token scope — {@code platform} marks a platform-identity token (no tenant claim). */
+    public static final String CLAIM_SCOPE = "scope";
+    public static final String SCOPE_PLATFORM = "platform";
 
     private final JwtEncoder jwtEncoder;
     private final long accessTokenTtlMinutes;
@@ -55,6 +58,27 @@ public class JwtTokenProvider {
             builder.claim(CLAIM_TENANT, tenantSchema);
         }
         JwtClaimsSet claims = builder.build();
+        JwsHeader header = JwsHeader.with(SignatureAlgorithm.RS256).build();
+        return jwtEncoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
+    }
+
+    /**
+     * K-50: platform-identity token — carries {@code scope=platform} and NO tenant claim;
+     * revocation/account checks resolve against {@code t_platform_users}.
+     */
+    public String generatePlatformAccessToken(String userId, String email, List<String> authorities) {
+        Instant now = Instant.now();
+        JwtClaimsSet claims = JwtClaimsSet.builder()
+                .issuer(ISSUER)
+                .id(UUID.randomUUID().toString())
+                .audience(List.of(AUDIENCE))
+                .issuedAt(now)
+                .expiresAt(now.plus(accessTokenTtlMinutes, ChronoUnit.MINUTES))
+                .subject(userId)
+                .claim(CLAIM_EMAIL, email)
+                .claim(CLAIM_SCOPE, SCOPE_PLATFORM)
+                .claim(CLAIM_AUTHORITIES, authorities == null ? List.of() : authorities)
+                .build();
         JwsHeader header = JwsHeader.with(SignatureAlgorithm.RS256).build();
         return jwtEncoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
     }

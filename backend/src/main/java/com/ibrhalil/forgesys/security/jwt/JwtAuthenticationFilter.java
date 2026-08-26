@@ -1,6 +1,7 @@
 package com.ibrhalil.forgesys.security.jwt;
 
 import com.ibrhalil.forgesys.common.tenant.TenantContext;
+import com.ibrhalil.forgesys.persistence.repository.PlatformUserRepository;
 import com.ibrhalil.forgesys.persistence.repository.UserRepository;
 import com.ibrhalil.forgesys.security.CustomUserDetails;
 import com.ibrhalil.forgesys.security.TokenBlacklistService;
@@ -48,15 +49,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtDecoder jwtDecoder;
     private final UserRepository userRepository;
+    private final PlatformUserRepository platformUserRepository;
     private final TokenBlacklistService tokenBlacklistService;
     private final String cookieName;
 
     public JwtAuthenticationFilter(JwtDecoder jwtDecoder,
                                    UserRepository userRepository,
+                                   PlatformUserRepository platformUserRepository,
                                    TokenBlacklistService tokenBlacklistService,
                                    @Value("${jwt.cookie-name:sf_access_token}") String cookieName) {
         this.jwtDecoder = jwtDecoder;
         this.userRepository = userRepository;
+        this.platformUserRepository = platformUserRepository;
         this.tokenBlacklistService = tokenBlacklistService;
         this.cookieName = cookieName;
     }
@@ -79,11 +83,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     /**
      * [RISK-19] JWT {@code tenant} claim must equal the request tenant; the principal's
-     * {@code tenantSchema} is taken from the context, never the claim.
+     * {@code tenantSchema} is taken from the context, never the claim. K-50: a
+     * {@code scope=platform} token takes the platform branch instead (no tenant claim;
+     * valid only where NO tenant context was resolved).
      */
     private void authenticateIfTenantMatches(Jwt jwt) {
         if (!hasValidIssuerAndAudience(jwt)) {
             SecurityContextHolder.clearContext();
+            return;
+        }
+        if (JwtTokenProvider.SCOPE_PLATFORM.equals(jwt.getClaimAsString(JwtTokenProvider.CLAIM_SCOPE))) {
+            authenticatePlatform(jwt);
             return;
         }
         String ctxTenant = TenantContext.getCurrentTenant().orElse("public");
@@ -105,6 +115,52 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
         SecurityContextHolder.getContext().setAuthentication(toAuthentication(jwt, ctxTenant));
+    }
+
+    /**
+     * K-50: platform-identity token. Valid only on tenant-less requests (context empty
+     * → "public") — replay on a tenant subdomain is rejected. Revocation resolves
+     * against {@code t_platform_users}, never the tenant {@code t_users}.
+     */
+    private void authenticatePlatform(Jwt jwt) {
+        String ctxTenant = TenantContext.getCurrentTenant().orElse("public");
+        if (!"public".equals(ctxTenant)) {
+            log.debug("Platform JWT presented on tenant context [{}]; rejecting", ctxTenant);
+            SecurityContextHolder.clearContext();
+            return;
+        }
+        if (isRevokedByPlatformTokenInvalidBefore(jwt)) {
+            SecurityContextHolder.clearContext();
+            return;
+        }
+        if (isBlacklisted(jwt)) {
+            SecurityContextHolder.clearContext();
+            return;
+        }
+        SecurityContextHolder.getContext().setAuthentication(toPlatformAuthentication(jwt));
+    }
+
+    /**
+     * [RISK-21 / K-50] Platform twin of {@link #isRevokedByTokenInvalidBefore(Jwt)} —
+     * checks {@code t_platform_users.tokenInvalidBefore} instead of the tenant account.
+     */
+    private boolean isRevokedByPlatformTokenInvalidBefore(Jwt jwt) {
+        UUID userId;
+        try {
+            userId = UUID.fromString(jwt.getSubject());
+        } catch (IllegalArgumentException ex) {
+            return false;
+        }
+        Optional<OffsetDateTime> maybeInvalidBefore = platformUserRepository.findTokenInvalidBefore(userId);
+        if (maybeInvalidBefore.isEmpty()) {
+            return false;
+        }
+        Instant issuedAt = jwt.getIssuedAt();
+        if (issuedAt == null) {
+            return false;
+        }
+        Instant invalidBefore = maybeInvalidBefore.get().toInstant().truncatedTo(ChronoUnit.SECONDS);
+        return issuedAt.isBefore(invalidBefore);
     }
 
     /**
@@ -172,13 +228,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private String extractToken(HttpServletRequest request) {
         // Cookie takes precedence over the Bearer header (browser sessions first).
+        // K-50: the platform cookie (path-scoped to /api/v1/platform) wins when both
+        // are present — on platform paths the browser may send the tenant cookie too
+        // (path /), but the platform identity is the intended principal there. Tenant
+        // endpoints never receive the platform cookie (path isolation).
         Cookie[] cookies = request.getCookies();
         if (cookies != null) {
-            String cookieToken = Arrays.stream(cookies)
-                    .filter(c -> cookieName.equals(c.getName()))
-                    .map(Cookie::getValue)
-                    .findFirst()
-                    .orElse(null);
+            String platformCookie = readCookie(cookies, PlatformAuthProperties.ACCESS_COOKIE_NAME);
+            if (platformCookie != null) {
+                return platformCookie;
+            }
+            String cookieToken = readCookie(cookies, cookieName);
             if (cookieToken != null) {
                 return cookieToken;
             }
@@ -188,6 +248,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return bearerHeader.substring(7);
         }
         return null;
+    }
+
+    private static String readCookie(Cookie[] cookies, String name) {
+        return Arrays.stream(cookies)
+                .filter(c -> name.equals(c.getName()))
+                .map(Cookie::getValue)
+                .findFirst()
+                .orElse(null);
     }
 
     @SuppressWarnings("unchecked")
@@ -200,6 +268,21 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 .collect(Collectors.toSet());
 
         CustomUserDetails principal = new CustomUserDetails(userId, email, null, true, true, true, true, authorities, tenantSchema, jwt.getId());
+        return new UsernamePasswordAuthenticationToken(principal, null, authorities);
+    }
+
+    /** K-50: principal rebuilt from a platform-identity token (no tenant schema). */
+    @SuppressWarnings("unchecked")
+    private UsernamePasswordAuthenticationToken toPlatformAuthentication(Jwt jwt) {
+        UUID userId = UUID.fromString(jwt.getSubject());
+        String email = jwt.getClaimAsString(JwtTokenProvider.CLAIM_EMAIL);
+        List<String> authorityNames = jwt.getClaimAsStringList(JwtTokenProvider.CLAIM_AUTHORITIES);
+        Set<GrantedAuthority> authorities = (authorityNames == null ? List.<String>of() : authorityNames).stream()
+                .map(SimpleGrantedAuthority::new)
+                .collect(Collectors.toSet());
+
+        CustomUserDetails principal = new CustomUserDetails(userId, email, null, true, true, true, true,
+                authorities, null, jwt.getId(), JwtTokenProvider.SCOPE_PLATFORM);
         return new UsernamePasswordAuthenticationToken(principal, null, authorities);
     }
 }

@@ -25,7 +25,7 @@ import java.security.interfaces.RSAPublicKey;
  * ({@code tokenInvalidBefore} / jti blacklist) on top of decoding.
  */
 @Configuration
-@EnableConfigurationProperties({RsaKeyProperties.class, JwtCookieProperties.class})
+@EnableConfigurationProperties({RsaKeyProperties.class, JwtCookieProperties.class, PlatformAuthProperties.class})
 public class JwtConfig {
 
     public static final String KEY_ID = "forgesys-rs256";

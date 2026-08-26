@@ -91,6 +91,13 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if (uri.startsWith("/api/v1/auth/refresh")) {
             return "refresh";
         }
+        // K-50: platform auth runs without a tenant context (key tenant part = "public").
+        if (uri.startsWith("/api/v1/platform/auth/login")) {
+            return "platform-login";
+        }
+        if (uri.startsWith("/api/v1/platform/auth/refresh")) {
+            return "platform-refresh";
+        }
         return null;
     }
 }
