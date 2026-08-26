@@ -20,6 +20,7 @@
 - [`docs/ROADMAP.md`](docs/ROADMAP.md) — remaining work + completed-epics summary (no ticket numbers). (TR/mixed)
 - [`docs/DECISIONS.md`](docs/DECISIONS.md) — decision log (K-XX architecture, RISK-XX risk, DEBT-XX tech debt) + **frozen decisions** (do not re-litigate).
 - [`docs/CODE_NOTES.md`](docs/CODE_NOTES.md) — "why" notes moved OUT of source comments (long narratives live here, not in code). TR/mixed. (TR/mixed)
+- [`docs/plans/`](docs/plans/) — active epic plan files (`<key>-<slug>.md`): phases, checkbox steps, claims, status log. The progress single-source for long-running/multi-agent work. (EN)
 - Each module has its own `AGENTS.md`: [`common/`](common/AGENTS.md) · [`persistence/`](persistence/AGENTS.md) · [`backend/`](backend/AGENTS.md) · [`frontend/`](frontend/AGENTS.md). (all EN)
 
 > Completed initiatives live in `docs/DECISIONS.md` (K-15..K-44, RISK-19..RISK-36) and git history — this file carries current rules only.
@@ -79,6 +80,31 @@ General engineering conduct. Project-specific rules above take precedence; the s
 - **Thread safety.** `TenantContext` is a `ThreadLocal` — it does NOT propagate across `@Async`/executor threads without a `TaskDecorator` ([RISK-10](docs/DECISIONS.md)). Always `clear()` in `finally`.
 - **Backward compatibility.** Do not break endpoint contracts (`/api/v1/*`) without explicit intent. Deprecate before removing; version when behavior changes.
 - **Documentation = part of development.** Every significant change carries its doc delta: ADR → DECISIONS.md; endpoint → module AGENTS.md; architecture impact → ARCHITECTURE.md.
+
+## Working mode (long-running & multi-agent work)
+
+Sessions may end mid-epic and multiple agents may work in parallel — the user must never have
+to re-explain context. State lives in files, not in conversation.
+
+- **Plan file first.** Any multi-phase work gets a plan file under
+  `docs/plans/<key>-<slug>.md` (phases, checkbox steps, per-step verify command, claims,
+  status log) BEFORE implementation starts. Create it in the epic's first session.
+- **Resume protocol.** An agent resuming work reads the plan file first, finds the first
+  unchecked step, verifies code state against it (steps may have landed untracked), and
+  continues from there. Do not ask the user for context that the plan file carries.
+- **Step contract.** Every checked step leaves the repo green (`mvn clean install`; frontend
+  also `npm run lint && npm test`). Never stop mid-step; a half-done step stays unchecked with
+  a one-line note in the plan file.
+- **Parallel agents / claims.** Before starting a phase, claim it in the plan file's claims
+  table (scope + steps + files you touch, with a date). Do not edit files outside your claim.
+  Shared chokepoint files (root pom, `SecurityConfig`, `PermissionCatalog`, `AGENTS.md`,
+  `DECISIONS.md`, the plan file's structure sections) are edited only with a claim and are
+  re-read immediately before editing.
+- **Status log.** Append a line to the plan file's status log whenever a phase lands, a
+  decision refines, or a blocker appears. Epic-level outcomes (ADR, ROADMAP, module docs) are
+  recorded as phases land, not deferred to the end.
+- Plans live in `docs/plans/`, never in code comments (#21). When an epic completes, its plan
+  file stays as history; decision/impact records graduate to `DECISIONS.md`.
 
 ## Test
 
