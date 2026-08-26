@@ -22,12 +22,15 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * Idempotent RBAC seed per tenant: the built-in CORE permission catalog (module
+ * Idempotent RBAC seed per tenant: the built-in IAM permission catalog (module
  * permissions seed on activation, K-16) + an {@code Admin} role carrying
- * {@code all_permissions} (resolved dynamically — no grant rows). Also invoked directly
+ * {@code all_permissions} (resolved dynamically — no grant rows). Also invokes directly
  * by provisioning so a new tenant is seed-complete. NEVER grants roles at startup:
  * Admin is assigned ONLY via {@link #assignAdminTo} — startup auto-assign silently
  * elevated role-less users on every restart (closed 2026-08-16).
+ * RISK-18 closure (K-50 F3): startup also purges retired {@code platform:*}
+ * permission rows from every tenant schema (the platform catalog lives in code —
+ * {@link PlatformPermissionCatalog}).
  * rationale: docs/CODE_NOTES.md (backend/config → RbacSeeder)
  */
 @Slf4j
@@ -64,12 +67,24 @@ public class RbacSeeder implements ApplicationRunner {
     /** Ensures catalog + Admin role in the CURRENT tenant context; caller sets/clears {@link TenantContext}. */
     @Transactional
     public void seedForCurrentTenant() {
+        removeRetiredPlatformPermissions();
         ensurePermissions();
         ensureAdminRole();
     }
 
+    /**
+     * RISK-18 closure: drops retired {@code platform:*} rows from this tenant schema
+     * (role grants cascade at the DB level). No-op once every schema is clean.
+     */
+    private void removeRetiredPlatformPermissions() {
+        int removed = permissionRepository.deleteAllByPlatformPrefix();
+        if (removed > 0) {
+            log.info("Removed {} retired platform:* permission rows from tenant schema", removed);
+        }
+    }
+
     private Map<String, Permission> ensurePermissions() {
-        return PermissionCatalog.CORE.stream()
+        return PermissionCatalog.IAM_PERMISSIONS.stream()
                 .map(this::ensurePermission)
                 .collect(Collectors.toUnmodifiableMap(Permission::getName, Function.identity()));
     }

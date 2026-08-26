@@ -73,9 +73,14 @@ abstract class AbstractRbacWebTest {
      * claim) — HUMAN superadmins implicitly carry the full platform catalog.
      */
     Cookie authPlatform(UUID userId, String email) {
-        String token = jwtTokenProvider.generatePlatformAccessToken(
-                userId.toString(), email,
+        return authPlatform(userId, email,
                 com.ibrhalil.forgesys.config.PlatformPermissionCatalog.ALL_NAMES);
+    }
+
+    /** Scoped variant (e.g. SERVICE-account-style subsets) for permission-gate tests. */
+    Cookie authPlatform(UUID userId, String email, List<String> authorities) {
+        String token = jwtTokenProvider.generatePlatformAccessToken(
+                userId.toString(), email, List.copyOf(authorities));
         return new Cookie("sf_platform_access_token", token);
     }
 

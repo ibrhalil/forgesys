@@ -30,11 +30,17 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class PlatformCompanyController {
 
+    /** K-50 F3: platform endpoints accept ONLY platform tokens — tenant JWTs lose access (RISK-18 closure). */
+    private static final String PLATFORM_READ =
+            "hasAuthority('platform:company:read') and authentication.principal.scope == 'platform'";
+    private static final String PLATFORM_WRITE =
+            "hasAuthority('platform:company:write') and authentication.principal.scope == 'platform'";
+
     private final PlatformCompanyService platformCompanyService;
 
     /** Paged engine-filtered list (K-49); {@code schemaName} is never exposed. */
     @GetMapping
-    @PreAuthorize("hasAuthority('platform:company:read')")
+    @PreAuthorize(PLATFORM_READ)
     public ResponseEntity<PageResponse<CompanyResponse>> list(
             @PageableDefault(sort = "name") Pageable pageable,
             @RequestParam(required = false) String q,
@@ -44,20 +50,20 @@ public class PlatformCompanyController {
     }
 
     @PostMapping("/search")
-    @PreAuthorize("hasAuthority('platform:company:read')")
+    @PreAuthorize(PLATFORM_READ)
     public ResponseEntity<PageResponse<CompanyResponse>> search(@Valid @RequestBody SearchRequest request) {
         Pageable pageable = SearchRequests.toPageable(request, PlatformCompanyService.FILTER_FIELDS);
         return ResponseEntity.ok(PageResponse.of(platformCompanyService.search(request, pageable)));
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('platform:company:read')")
+    @PreAuthorize(PLATFORM_READ)
     public CompanyResponse findById(@PathVariable UUID id) {
         return platformCompanyService.findById(id);
     }
 
     @PatchMapping("/{id}/status")
-    @PreAuthorize("hasAuthority('platform:company:write')")
+    @PreAuthorize(PLATFORM_WRITE)
     public CompanyResponse updateStatus(
             @PathVariable UUID id,
             @Valid @RequestBody CompanyStatusUpdateRequest request) {

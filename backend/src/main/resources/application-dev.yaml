@@ -57,14 +57,6 @@ forgesys:
     # when testing against real data. Prod must never use this default.
     password-pepper: ${PASSWORD_PEPPER:dev-pepper-not-for-production}
   bootstrap:
-    system-admin:
-      enabled: ${FORGESYS_BOOTSTRAP_SYSTEM_ADMIN_ENABLED:true}
-      company-name: ${FORGESYS_BOOTSTRAP_SYSTEM_ADMIN_COMPANY_NAME:ForgeSys}
-      subdomain: ${FORGESYS_BOOTSTRAP_SYSTEM_ADMIN_SUBDOMAIN:system}
-      email: ${FORGESYS_BOOTSTRAP_SYSTEM_ADMIN_EMAIL:admin@forgesys.dev}
-      password: ${FORGESYS_BOOTSTRAP_SYSTEM_ADMIN_PASSWORD:change-me-system-admin}
-      first-name: ${FORGESYS_BOOTSTRAP_SYSTEM_ADMIN_FIRST_NAME:System}
-      last-name: ${FORGESYS_BOOTSTRAP_SYSTEM_ADMIN_LAST_NAME:Administrator}
     # K-50: initial platform superadmin (t_platform_users, public schema). Placeholder
     # password — never deploy to prod with it.
     platform-admin:

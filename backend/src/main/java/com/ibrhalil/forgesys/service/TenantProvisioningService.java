@@ -48,9 +48,10 @@ import java.util.UUID;
 /**
  * Two-phase tenant provisioning (K-21): {@link #createPendingCompany} (light,
  * transactional — no schema/DDL/admin) + {@link #verifyAndProvision} (heavy: CREATE
- * SCHEMA + Flyway + admin user + ACTIVE). Bootstrap (K-24) uses
- * {@link #provisionSystemTenant} (both phases, no mail). CREATE SCHEMA is an implicit
- * commit in PostgreSQL — recovery is idempotency, not rollback (DEBT-10 partial).
+ * SCHEMA + Flyway + admin user + ACTIVE). CREATE SCHEMA is an implicit commit in
+ * PostgreSQL — recovery is idempotency, not rollback (DEBT-10 partial). The K-24
+ * {@code system}-tenant bootstrap was removed by K-50 F3; platform identities live
+ * in {@code public} ({@code PlatformAdminBootstrapRunner}).
  * Rationale: docs/CODE_NOTES.md (backend/service → TenantProvisioningService).
  */
 @Slf4j
@@ -90,7 +91,7 @@ public class TenantProvisioningService {
     @Transactional
     public CompanyRegisterResponse createPendingCompany(CompanyRegisterRequest request) {
         log.info("Creating pending tenant: subdomain={}", request.subdomain());
-        PendingSignup pending = createPendingCompanyInternal(request, /* sendVerification */ true);
+        PendingSignup pending = createPendingCompanyInternal(request);
         log.info("Pending tenant created, verification sent: subdomain={}, companyId={}",
                 pending.response().subdomain(), pending.response().companyId());
         return new CompanyRegisterResponse(
@@ -174,19 +175,6 @@ public class TenantProvisioningService {
         );
     }
 
-    /**
-     * Bootstrap-only auto-verify (K-24): phase 1 (no mail) + phase 2 in one call; the
-     * raw token moves in memory only ([RISK-30] — the DB keeps just its digest).
-     */
-    @Transactional
-    public Company provisionSystemTenant(CompanyRegisterRequest request) {
-        PendingSignup pending = createPendingCompanyInternal(request, /* sendVerification */ false);
-        verifyAndProvision(pending.rawToken());
-        return companyRepository.findById(pending.response().companyId())
-                .orElseThrow(() -> new IllegalStateException(
-                        "Company missing after provisioning: " + pending.response().companyId()));
-    }
-
     // --- internal helpers -------------------------------------------------
 
     /** Phase 1 result + the RAW token ([RISK-30] hash-at-rest — raw never touches the DB). */
@@ -217,22 +205,19 @@ public class TenantProvisioningService {
         });
     }
 
-    private PendingSignup createPendingCompanyInternal(CompanyRegisterRequest request,
-                                                       boolean sendVerification) {
+    private PendingSignup createPendingCompanyInternal(CompanyRegisterRequest request) {
         String schemaName = buildSchemaName(request.subdomain());
         validateUnique(request.subdomain(), schemaName);
         Company company = createCompany(request, schemaName, CompanyStatus.PROVISIONING);
         String rawToken = UUID.randomUUID().toString();
         issueToken(company, request, rawToken);
-        if (sendVerification) {
-            mailSender.send(new MailMessage(
-                    request.adminEmail(),
-                    MailTemplate.TENANT_VERIFY,
-                    buildVerificationUrl(rawToken),
-                    request.adminFirstName(),
-                    request.companyName(),
-                    Duration.ofHours(tokenTtlHours)));
-        }
+        mailSender.send(new MailMessage(
+                request.adminEmail(),
+                MailTemplate.TENANT_VERIFY,
+                buildVerificationUrl(rawToken),
+                request.adminFirstName(),
+                request.companyName(),
+                Duration.ofHours(tokenTtlHours)));
         return new PendingSignup(new CompanyRegisterResponse(
                 company.getId(),
                 company.getName(),
