@@ -262,6 +262,13 @@ Standart haline gelmiş kararlar. Yeni gereksinim bunlardan biriyle çelişirse 
 - **Etki:** `GroupService` N+1 öldü (satır başına 2N+1 → sayfa başına sabit 3 sorgu); notes/apps isim çözümü batch'ten DB subquery'sine indi (filtrelenebilir de oldu); request-log `status` STRING→INT tip hatası düzeldi (sayısal karşılaştırma); role/group/app count'ları artık soft-deleted üyeleri dışlar (entity-path `@SQLRestriction` — eski native count ham join satırını sayıyordu; bilinçli semantik iyileştirme). Frontend: DataTable opt-in kolon filtresi popover'ı (`ColumnFilterButton`), tip bazlı değer kontrolleri, `filter.*` i18n namespace. Audit üçlüsünde `ipAddress`/`traceId`/`reason`/`userAgent` ilk kez filtrelenebilir.
 - **Durum:** UYGULANDI (2026-08-26; Faz 1 engine + executor, Faz 2 pilotlar users/groups/notes, Faz 3 kalan listeler + platform companies, Faz 4 frontend altyapısı, Faz 5 sayfa wiring).
 
+### K-50
+**Platform Süperadmin + Servis Hesapları (global kimlik)**
+- **Bağlam:** K-24'ün system tenant admin'i sıradan bir tenant kullanıcısıdır; tenant'lara giremez, abonelik/modül yönetemez, programatik (agent) erişim sunamaz. Kullanıcı ihtiyacı: tüm kapsamda (tenant yaşam döngüsü + tenant içine tam erişim + rapor + impersonation) platform süperadmin'i ve API ajanı servis hesapları.
+- **Karar:** "User-per-tenant" kuralı *tenant verisi* için korunur; **platform kimlikleri** `public` şemasında global yaşar. (1) `public/V4__platform_identity.sql`: `t_platform_users` (HUMAN|SERVICE) + `t_platform_api_keys` (prefix + SHA-256 hash, `TokenHasher` reuse; raw key yalnızız bir kez gösterilir) + `t_platform_audit_logs` (append-only). (2) Ayrı auth yüzeyi `/api/v1/platform/auth/*` + `sf_platform_*` cookie'leri (path `/api/v1/platform`); JWT'de `scope=platform`, `tenant` claim YOK; Redis refresh store `tenant="platform"` marker'ıyla paylaşılır. Platform bootstrap K-24 pattern'i (`forgesys.bootstrap.platform-admin.*`; self-signup yok). (3) Platform permission kataloğu kodda (7 isim); v1'de her HUMAN implicit süperadmin, SERVICE scope'lu. (4) Cross-tenant erişim **token exchange** ile — API mirroring YOK: switch code (Redis, 30sn, tek kullanım) → `/auth/platform-switch` → hedef tenant'ın en eski admin-capable kullanıcısını bürüyen kısa ömürlü JWT (`act` claim = gerçek aktör, `tenant` claim = hedef şema → RISK-19 doğal geçer; refresh YOK; çıkış jti blacklist). Planlanan ADMIN/FULL modları çöktü: `all_permissions` admin zaten tüm tenant yetkilerini çözdüğünden ikinci mod ölü kod olurdu (#21). (5) Servis hesapları `X-API-Key` ile stateless auth (JWT yaşam döngüsü yok). (6) **K-24 kaldırılır** (`SystemAdminBootstrapRunner` + `provisionSystemTenant`; mevcut `system` tenant DB satırı dokunulmadan kalır) ve **RISK-18 kapanır** (`platform:*` tenant seed'i durur + mevcut şemalardan temizlenir). Kullanıcı onayı: global kimlik (public şema) + impersonation + tam kapsam (lifecycle/iç erişim/rapor) + UI dahil.
+- **Durum:** PLANLANDI (2026-08-26) — plan ve faz listesi: [`docs/plans/k50-platform-superadmin.md`](plans/k50-platform-superadmin.md).
+- **Etki:** `JwtAuthenticationFilter`'a `scope=platform` dalı — tenant `tokenInvalidBefore` lookup'ı `public.t_users`'ı hedefler, platform token'ında tablo yok hatası verir; dal lookup'tan ÖNCE ayrılmalı. `TenantFilter.shouldNotFilter` += `/api/v1/platform/**` (platform API tenant-agnostik). `/auth/platform-switch` normal tenant akışında kalır (permitAll, hedef subdomain host'ta koşar). H2'de switch akışı test edilemez (search_path yok) → gated PG IT (`forgesys.pg.it`). Yeni public migration K-50 kapsamında onaylı (ask-first kuralı yerine getirildi).
+
 ---
 
 ## Risk Kayıtları (RISK-XX)
@@ -298,8 +305,8 @@ Standart haline gelmiş kararlar. Yeni gereksinim bunlardan biriyle çelişirse 
 ### RISK-18
 **`platform:*` permission'ları tüm tenantlara seed ediliyor — AÇIK**
 - **Bağlam:** `RbacSeeder` Admin'e tüm katalogu verir; liste `platform:company:*` içerir → her tenant Admin'i teorik olarak platform endpoint'lerine yetkili (pratikte TenantFilter + public şema erişimi sınırlandırır — defense-in-depth açığı).
-- **Karar:** `platform:*` yalnızca system tenant'a seed edilecek şekilde daraltılacak (`IAM_PERMISSIONS` + `PLATFORM_PERMISSIONS` split).
-- **Durum:** Açık — hardening epic'inde.
+- **Karar:** `platform:*` yalnızca platform kimliklerine ait olacak; katalog `IAM_PERMISSIONS` + `PLATFORM_PERMISSIONS` olarak bölünür, tenant şemalarındaki mevcut `platform:*` satırları seeder tarafından temizlenir. [K-50](#k-50) Faz 3'te kapanır.
+- **Durum:** Açık — K-50 (plan: [`docs/plans/k50-platform-superadmin.md`](plans/k50-platform-superadmin.md)).
 
 ### RISK-19
 **JWT tenant claim doğrulanmıyor (P0, cross-tenant escalation)**

@@ -25,6 +25,16 @@ Platform çekirdeği kullanımda: schema-per-tenant multi-tenancy, iki fazlı te
 
 ## Kalan İşler
 
+### K-50 — platform süperadmin + servis hesapları (AKTİF EPİK)
+- [ ] Global platform kimliği (`public` şeması: `t_platform_users`/`t_platform_api_keys`/`t_platform_audit_logs`), ayrı platform auth yüzeyi (`scope=platform` JWT + `sf_platform_*` cookie'leri)
+- [ ] Tenant lifecycle + abonelik/modül yönetimi + cross-tenant rapor endpoint'leri
+- [ ] Servis hesapları (`X-API-Key`, scope'lu agent erişimi; raw key bir kez gösterilir)
+- [ ] Tenant'a giriş: switch code → impersonation JWT (`act` claim'li, audit'li; API mirroring yok)
+- [ ] RISK-18 kapanışı (`platform:*` tenant seed'lerinin temizlenir) + K-24 system-tenant bootstrap kaldırma
+- [ ] Frontend `/platform/*` konsolu (login, companies, service accounts, platform audit) + tenant shell'de impersonation banner'ı
+
+> Faz listesi ve anlık durum: [`docs/plans/k50-platform-superadmin.md`](plans/k50-platform-superadmin.md) — karar kaydı [K-50](DECISIONS.md#k-50).
+
 ### Faz 3 kalanı — built-in modüller
 - [ ] **Warehouse:** ürün/depo/stok kalemi/stok hareketi (IN/OUT/TRANSFER) + minimum stok uyarısı
 - [ ] **Logistics:** sevkiyat/araç/sürücü/route + sevkiyat durum makinesi (CREATED→IN_TRANSIT→DELIVERED)
