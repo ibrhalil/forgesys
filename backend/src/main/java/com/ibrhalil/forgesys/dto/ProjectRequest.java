@@ -8,10 +8,9 @@ import jakarta.validation.constraints.Size;
 import java.util.UUID;
 
 /**
- * Create/update a typed project container (K-45). The {@link ProjectType} decides which
- * built-in module's content lives inside the project; it is required (every project has
- * a kind). {@code parentProjectId} adds optional nesting (validated for existence and
- * acyclicity; {@code null} detaches).
+ * Create/update a typed project container (K-45); the {@link ProjectType} decides
+ * which module's content lives inside. {@code parentProjectId} adds validated
+ * nesting ({@code null} detaches).
  */
 public record ProjectRequest(
         @NotBlank(message = "Project name is required")

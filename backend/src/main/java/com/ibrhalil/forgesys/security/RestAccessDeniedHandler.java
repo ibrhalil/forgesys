@@ -14,10 +14,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 
-/**
- * Returns a uniform {@link ApiErrorResponse} (403, {@code auth_access_denied})
- * when an authenticated user lacks the required authority (RBAC enforcement).
- */
+/** Uniform JSON 403 {@code auth_access_denied} (RBAC enforcement). */
 @Component
 public class RestAccessDeniedHandler implements AccessDeniedHandler {
 

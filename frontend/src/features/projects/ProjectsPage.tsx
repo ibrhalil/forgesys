@@ -50,15 +50,9 @@ export function ProjectsPage() {
     filters,
     setFilters,
     q,
+    listParams,
   } = useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'projects' });
-  const { data, isLoading, isFetching } = useProjects({
-    page,
-    size: pageSize,
-    sorts: [sort],
-    q: q || undefined,
-    qFields: searchFields.length ? searchFields : undefined,
-    filters: filters.length ? filters : undefined,
-  });
+  const { data, isLoading, isFetching } = useProjects(listParams);
   const delProject = useDeleteProject();
   const canWrite = useAuthStore((s) => s.hasAuthority(PERMISSIONS.PROJECT_WRITE));
   const canDelete = useAuthStore((s) => s.hasAuthority(PERMISSIONS.PROJECT_DELETE));

@@ -81,10 +81,12 @@ backend/src/main/resources/static/
 # ============================================================
 
 # PostgreSQL runtime data (large, host-specific).
-# Redis uses a Docker named volume (see docker-compose.yml), so there is
-# no infra/data/redis on the host anymore.
 infra/data/postgres/*
 !infra/data/postgres/.gitkeep
+
+# Redis runtime data (prod bind-mount only — dev uses a Docker named volume).
+infra/data/redis/*
+!infra/data/redis/.gitkeep
 
 # Application log files
 infra/logs/*

@@ -18,6 +18,7 @@ import com.ibrhalil.forgesys.entity.PropertyType;
 import com.ibrhalil.forgesys.entity.TaskPriority;
 import com.ibrhalil.forgesys.entity.TaskStatus;
 import com.ibrhalil.forgesys.entity.ViewType;
+import com.ibrhalil.forgesys.tenant.TenantContextExecutor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
@@ -31,30 +32,16 @@ import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Sample data seeding for newly provisioned tenants (K-47, the Linear onboarding
- * pattern): instead of empty screens, the admin's first login meets small instructive
- * content in every default module — one TASKS project with four guided tasks, two note
- * categories with two markdown notes, and one sample app with properties/views/records.
- * Content is fixed EN strings: it is tenant data, not UI — deliberately no i18n.
- *
- * <p>Mirrors the {@link ModuleActivationService} transactional pattern: the seed runs
- * in its own {@code REQUIRES_NEW} transaction behind a set-and-restore
- * {@link TenantContext} window, because the caller (provisioning) holds a
- * {@code public}-pinned session (RISK-26). Timing matters just as much — the caller
- * invokes {@link #seedForCompany} from an afterCommit synchronization so this fresh
- * transaction can SEE the just-committed {@code t_tenant_modules} activation records
- * and FREE subscription row that gate {@code ProjectService} and the plan limits;
- * under read-committed a same-transaction call would fail those gates invisibly.
- *
- * <p><strong>Fail-safe:</strong> {@link #seedForCompany} swallows every exception with
- * a warn log — sample data must never break provisioning. Reusing the content services
- * is safe here: authority checks live in the controller layer (system context cannot
- * 403), {@code @AuditLog} falls back to the {@code "system"} actor, and the seed stays
- * well inside the FREE plan limits (1 app, 4 records).
+ * Onboarding sample data for newly provisioned tenants (K-47, the Linear pattern):
+ * one TASKS project + 4 guided tasks, 2 note categories + 2 markdown notes, 1 app +
+ * properties/views/records (inside FREE plan limits). Fixed EN strings — tenant data,
+ * not UI (no i18n). The seed runs REQUIRES_NEW behind a set-and-restore
+ * {@link TenantContext} window (RISK-26) from provisioning's afterCommit — it must
+ * SEE the committed activation + subscription rows. Fail-safe: seeding never breaks
+ * provisioning. Rationale: docs/CODE_NOTES.md (backend/service → TenantSampleDataService).
  */
 @Slf4j
 @Service
@@ -68,25 +55,17 @@ public class TenantSampleDataService {
     private final AppBuilderService appBuilderService;
     private final AppRecordService appRecordService;
     private final SampleDataProperties properties;
-    // Self-proxy so the seed body runs through the Spring proxy — required for the
-    // REQUIRES_NEW transaction boundary to take effect (ModuleActivationService pattern).
+    // Self-proxy: the REQUIRES_NEW boundary only takes effect through the Spring proxy.
     private final ObjectProvider<TenantSampleDataService> self;
 
-    /**
-     * Entry point — called by {@code TenantProvisioningService} after the provisioning
-     * transaction commits. Fail-safe: any failure is swallowed with a warn log;
-     * provisioning continues regardless.
-     */
+    /** Entry point (called after the provisioning tx commits); fail-safe by contract. */
     public void seedForCompany(Company company, UUID adminUserId) {
         if (!properties.enabled()) {
             log.debug("Sample data seeding disabled (forgesys.provisioning.sample-data.enabled=false)");
             return;
         }
         try {
-            inTenantContext(company, () -> {
-                self.getObject().seedInNewTx(adminUserId);
-                return null;
-            });
+            TenantContextExecutor.inTenantContext(company.getSchemaName(), () -> self.getObject().seedInNewTx(adminUserId));
             log.info("Sample data seeded for tenant {}", company.getSchemaName());
         } catch (Exception e) {
             log.warn("Sample data seeding failed for tenant {} — provisioning continues",
@@ -94,12 +73,7 @@ public class TenantSampleDataService {
         }
     }
 
-    /**
-     * The seed body in its own transaction — the tenant-schema write must resolve the
-     * tenant schema on a fresh connection regardless of the caller's (possibly
-     * {@code public}-pinned) outer session. Ordered pm → notes → apps; any module's
-     * failure aborts only the seed (caught by {@link #seedForCompany}).
-     */
+    /** The seed body in its own tx; ordered pm → notes → apps (failure aborts only the seed). */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void seedInNewTx(UUID adminUserId) {
         seedPm(adminUserId);
@@ -192,8 +166,8 @@ public class TenantSampleDataService {
         appBuilderService.addView(appId, new AppViewRequest("Board", ViewType.BOARD,
                 new AppViewConfigDto(null, null, stage.toString(), null), 1));
 
-        // Stage values are spread across the three options; the fourth record carries
-        // none — the Board's empty bucket example.
+        // Stage values spread across the options; the fourth record carries none
+        // (the Board's empty-bucket example).
         appRecordService.create(appId, sampleRecord(name, "Aurora", stage, "Discovery",
                 launchDate, LocalDate.of(2026, 9, 30)));
         appRecordService.create(appId, sampleRecord(name, "Beacon", stage, "In Progress",
@@ -215,16 +189,5 @@ public class TenantSampleDataService {
             values.put(datePropertyId.toString(), StringNode.valueOf(launchDate.toString()));
         }
         return new AppRecordRequest(values);
-    }
-
-    /** Runs the action inside the company's tenant context, restoring the caller's context afterward. */
-    private <T> T inTenantContext(Company company, java.util.function.Supplier<T> action) {
-        Optional<String> previous = TenantContext.getCurrentTenant();
-        TenantContext.setCurrentTenant(company.getSchemaName());
-        try {
-            return action.get();
-        } finally {
-            previous.ifPresentOrElse(TenantContext::setCurrentTenant, TenantContext::clear);
-        }
     }
 }

@@ -96,6 +96,9 @@ export interface SearchRequestBody {
   qFields?: string[];
 }
 
+/** GET list params + structured filter clauses — the `searchOrList` entry-point params. */
+export type SearchOrListParams = PageParams & Pick<SearchRequestBody, 'filters'>;
+
 /**
  * Raw paginated list response. Current backend shape is the API-owned
  * `PageResponse` (`data[] + meta`); the legacy Spring Data fields stay as a

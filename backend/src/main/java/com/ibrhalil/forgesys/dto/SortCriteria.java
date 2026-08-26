@@ -4,9 +4,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
 /**
- * One sort clause of a {@link SearchRequest}. {@code direction} is optional
- * (default {@code asc}); field names are validated against the feature's
- * {@code FilterFieldSet} (same whitelist as sorting the GET lists).
+ * One sort clause of a {@link SearchRequest}; direction defaults to {@code asc}.
+ * Field names are validated against the feature's {@code FilterFieldSet}.
  */
 public record SortCriteria(
         @NotBlank String field,

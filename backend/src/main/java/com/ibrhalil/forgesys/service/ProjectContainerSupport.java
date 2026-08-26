@@ -12,11 +12,10 @@ import org.springframework.stereotype.Component;
 import java.util.UUID;
 
 /**
- * Resolves typed project containers for the content modules (K-45): nested endpoints
- * and writes go through {@link #assertProject} (404 unknown, 409 type mismatch); the
- * flat top-nav flow falls back to the per-tenant default container ("Genel", ensured
- * by the module V2 migrations and {@code ModuleActivationService}). Shared by the
- * notes and apps modules.
+ * Resolves typed project containers for the content modules (K-45):
+ * {@link #assertProject} for nested endpoints/writes (404 unknown, 409 type
+ * mismatch); the per-type default container ("Genel") as the flat top-nav fallback.
+ * Shared by the notes and apps modules.
  */
 @Component
 @RequiredArgsConstructor

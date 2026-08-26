@@ -21,10 +21,9 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Property (column) endpoints nested under their owning app (K-15 / Epic 3.0.B). A
- * property is only addressable through its app; a property of another app yields 404
- * (scoped lookup, no cross-app leak). Covered by {@code apps:app:write} — properties
- * are part of the app definition, not record data.
+ * Properties (columns) nested under their owning app (K-15); a property of
+ * another app yields 404. Covered by {@code apps:app:write} — part of the app
+ * definition, not record data.
  */
 @RestController
 @RequestMapping("/api/v1/apps/{appId}/properties")

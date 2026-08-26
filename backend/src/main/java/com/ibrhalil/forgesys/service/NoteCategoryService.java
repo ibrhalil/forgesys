@@ -30,13 +30,10 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * Note-category CRUD inside NOTES-type project containers (K-44, re-scoped by K-45).
- * Categories are design-bounded data (a handful per container), so the list is a plain
- * paged read with a {@code q} name search. A category's project is fixed at create
- * time — moving one would strand its notes in the old container ({@code projectId} on
- * update is rejected when it differs). Deleting a category leaves its notes in place
- * (they become uncategorized); the per-project taxonomy makes cross-container category
- * names legal siblings (name uniqueness stays tenant-wide for now).
+ * Note-category CRUD inside NOTES-type containers (K-44/K-45). A category's project
+ * is fixed at create (a move would strand its notes — rejected 409); deletion leaves
+ * its notes in place (they become uncategorized). Name uniqueness stays tenant-wide.
+ * Rationale: docs/CODE_NOTES.md (backend/service → NoteCategoryService).
  */
 @Service
 @RequiredArgsConstructor
@@ -126,10 +123,8 @@ public class NoteCategoryService {
         if (!noteCategoryRepository.existsById(id)) {
             throw new ResourceNotFoundException("Note category not found: " + id);
         }
-        // Soft-delete the category; the FK's ON DELETE SET NULL never fires (soft-delete
-        // is an UPDATE), but Hibernate's @SQLRestriction already hides it from reads.
-        // Notes keep their categoryId column value — resolveCategoryName treats a
-        // soft-deleted category as absent (name chip simply disappears).
+        // Soft-delete: notes keep their categoryId value — a soft-deleted category
+        // resolves as absent (the name chip simply disappears).
         noteCategoryRepository.deleteById(id);
     }
 

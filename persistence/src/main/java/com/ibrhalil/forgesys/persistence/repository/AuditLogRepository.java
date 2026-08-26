@@ -7,10 +7,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.UUID;
 
-/**
- * Append-only audit log entries (tenant schema). Read access is Specification-driven
- * (filter engine) — audit has no associations, so no {@code @EntityGraph} is needed.
- */
+/** Append-only audit log (tenant schema) — Specification-driven reads, no associations to fetch. */
 @Repository
 public interface AuditLogRepository extends JpaRepository<AuditLog, UUID>, JpaSpecificationExecutor<AuditLog> {
 }

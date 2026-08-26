@@ -6,12 +6,10 @@ import jakarta.validation.constraints.Size;
 import java.util.UUID;
 
 /**
- * Create/update a note. Content is markdown text and may be empty (title-only note).
- * {@code categoryId} is optional (must belong to the same project as the note);
- * {@code pinned} defaults to {@code false} on create and {@code null} means "leave
- * unchanged" on update. {@code projectId} (K-45): on create, optional — absent lands
- * the note in the default NOTES container; on update, {@code null} means "leave
- * unchanged" and a value moves the note.
+ * Create/update a note; content is markdown and may be empty. On update,
+ * {@code null} {@code pinned}/{@code projectId} means "leave unchanged"; a
+ * {@code projectId} value moves the note. On create, absent {@code projectId}
+ * lands in the default NOTES container (K-45).
  */
 public record NoteRequest(
         @NotBlank(message = "Note title is required")

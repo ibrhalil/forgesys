@@ -12,13 +12,11 @@ import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 
 /**
- * {@code prod}-profile {@link MailSender} — real SMTP via {@code spring-boot-starter-mail}
- * ({@code JavaMailSender}; provider-agnostic: Brevo/SendGrid/SES/plain SMTP all speak
- * {@code spring.mail.*}). Fail-fast at startup when {@code spring.mail.host} is unset,
- * and fail-loud on send errors: a silently lost signup/reset link is far worse than a
- * retryable request failure (the caller's transaction rolls back with the exception).
- *
- * <p>Recipients are intentionally NOT logged (PII).
+ * {@code prod}-profile {@link MailSender} — real SMTP via {@code JavaMailSender}
+ * (provider-agnostic: anything that speaks {@code spring.mail.*}). Fail-fast at
+ * startup when {@code spring.mail.host} is unset, fail-loud on send errors (the
+ * caller's tx rolls back — a silently lost signup/reset link is far worse).
+ * Recipients are intentionally NOT logged (PII).
  */
 @Slf4j
 @Component

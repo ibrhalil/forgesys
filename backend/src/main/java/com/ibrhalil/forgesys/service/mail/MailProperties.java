@@ -5,9 +5,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 /**
  * Bound under {@code forgesys.mail.*}.
  *
- * @param from            RFC 822 From header value (e.g. {@code ForgeSys <no-reply@example.com>})
- * @param defaultLanguage template language for all recipients until per-user preferences
- *                        exist ({@code tr} default; {@code en} supported)
+ * @param from            RFC 822 From header value
+ * @param defaultLanguage template language until per-user preferences exist (tr/en)
  * @param templatesDir    optional filesystem override for the classpath templates
  *                        ({@code infra/templates/} in prod — empty = classpath)
  */

@@ -32,20 +32,14 @@ export interface Column<T> {
   render?: (row: T) => ReactNode;
   className?: string;
   /**
-   * Backend field this column sorts by (when sortable). Distinct from `key` when the
-   * column is a composite (e.g. the users "name" column sorts by `email`). Must be in
-   * the feature's backend sort whitelist.
+   * Backend field this column sorts by; distinct from `key` on composite columns
+   * (users "name" sorts by `email`). Must be in the feature's sort whitelist or the
+   * request 400s.
    */
   sortKey?: string;
-  /**
-   * Structured column filter (K-49): when set AND the table receives
-   * `filters`/`onFiltersChange`, a filter popover renders next to the sort arrow.
-   */
+  /** Structured column filter (K-49) — renders a popover when the table receives `filters`/`onFiltersChange`. */
   filter?: ColumnFilterSpec;
-  /**
-   * Whether this column can be hidden by the user. Defaults to true when
-   * personalization is enabled. Set to false for essential primary columns.
-   */
+  /** Whether the user can hide this column (default true; false for essential primary columns). */
   hideable?: boolean;
 }
 
@@ -62,10 +56,7 @@ interface DataTableProps<T> {
   totalElements: number;
   totalPages: number;
   onPageChange: (page: number) => void;
-  /**
-   * Rows-per-page choices for the footer selector. Omit (or omit
-   * {@link onPageSizeChange}) to render no selector — pages that keep a fixed size.
-   */
+  /** Rows-per-page choices; omit (or omit {@link onPageSizeChange}) for fixed-size pages. */
   pageSizeOptions?: readonly number[];
   /** Called with the newly chosen rows-per-page value. Pages should reset to page 0. */
   onPageSizeChange?: (size: number) => void;
@@ -73,66 +64,35 @@ interface DataTableProps<T> {
   sort?: SortState;
   /** Click handler on a sortable header — receives the column's `sortKey`. */
   onSortChange?: (field: string) => void;
-  /**
-   * Active structured filter clauses (K-49 column filters). When omitted, no column
-   * renders a filter trigger — pages opt in per table.
-   */
+  /** Active structured filter clauses (K-49) — omitted means no column renders a filter trigger. */
   filters?: FilterCriteria[];
   /** Called with the full clause list after a column filter is applied or cleared. */
   onFiltersChange?: (filters: FilterCriteria[]) => void;
   actions?: (row: T) => ReactNode;
   actionsHeader?: string;
-  /**
-   * Filter/toolbar area rendered inside the card, above the table (below-zero row).
-   * Reserved for per-page filters (search, selects, quick actions) — pages adopt it
-   * incrementally; nothing changes for callers that omit it.
-   */
+  /** Filter/toolbar area rendered above the table — per-page search, selects, quick actions. */
   toolbar?: ReactNode;
-  /**
-   * Storage key to persist table preferences (hidden columns, density, viewMode, etc.) in localStorage.
-   */
+  /** localStorage key persisting table preferences (hidden columns, density, viewMode). */
   storageKey?: string;
-  /**
-   * Whether table view customization is enabled. Defaults to true when storageKey is provided.
-   */
+  /** Whether view customization is enabled; defaults to true when storageKey is provided. */
   customizableColumns?: boolean;
-  /**
-   * Optional export handler. If omitted, export options render in a disabled state with "Coming soon".
-   */
+  /** Export handler; omitted renders the export options disabled ("Coming soon"). */
   onExport?: (format: 'csv' | 'excel' | 'pdf') => void;
-  /**
-   * Optional manual refresh handler. If omitted, refresh options render in a disabled state with "Coming soon".
-   */
+  /** Manual refresh handler; omitted renders the refresh options disabled ("Coming soon"). */
   onRefresh?: () => void;
-  /**
-   * Additional custom toolbar action buttons rendered alongside table controls.
-   */
+  /** Custom toolbar action buttons rendered alongside the table controls. */
   tableTools?: ReactNode;
-  /**
-   * Supported view modes for this table (e.g. ['table', 'card', 'list']).
-   * When > 1 options are provided, renders a view switcher toggle in the header.
-   */
+  /** Supported view modes; more than one renders the view switcher toggle. */
   viewModes?: TableViewMode[];
-  /**
-   * Current view mode (controlled). If omitted, managed internally and persisted via storageKey.
-   */
+  /** Controlled view mode; omitted = internal state persisted via storageKey. */
   viewMode?: TableViewMode;
-  /**
-   * Callback when view mode changes.
-   */
+  /** Called when the view mode changes. */
   onViewModeChange?: (mode: TableViewMode) => void;
-  /**
-   * Custom renderer for 'card' view mode.
-   * If omitted, a structured auto-card is generated from visible columns.
-   */
+  /** Custom 'card' renderer; omitted = structured auto-card from visible columns. */
   cardRender?: (row: T) => ReactNode;
-  /**
-   * Custom renderer for 'list' view mode.
-   */
+  /** Custom 'list' renderer. */
   listRender?: (row: T) => ReactNode;
-  /**
-   * Context icon for the empty state (defaults to EmptyState's generic folder).
-   */
+  /** Empty-state icon (defaults to EmptyState's generic folder). */
   emptyIcon?: IconType;
 }
 
@@ -193,7 +153,6 @@ export function DataTable<T>({
 
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown on click outside or Escape key
   useEffect(() => {
     if (!showSettingsMenu) return;
 
@@ -266,7 +225,6 @@ export function DataTable<T>({
     onViewModeChange?.(newMode);
   };
 
-
   const sortable = (col: Column<T>): boolean => !!col.sortKey && !!onSortChange;
 
   const columnFilterEnabled = (col: Column<T>): boolean =>
@@ -330,7 +288,6 @@ export function DataTable<T>({
     return sort.dir === 'asc' ? 'ascending' : 'descending';
   };
 
-  // Density spacing styles
   const thPadding =
     density === 'compact' ? 'px-3 py-2 text-[11px]' : density === 'relaxed' ? 'px-5 py-3.5 text-sm' : 'px-4 py-3 text-xs';
   const tdPadding =
@@ -345,7 +302,6 @@ export function DataTable<T>({
           </div>
 
           <div className="flex items-center gap-2">
-            {/* View Mode Switcher Toolbar Buttons */}
             {viewModes && viewModes.length > 1 && (
               <div
                 className="flex items-center rounded-lg border border-glass bg-bg/50 p-0.5"
@@ -407,7 +363,6 @@ export function DataTable<T>({
 
                 {showSettingsMenu && (
                   <div className="absolute right-0 top-full z-60 mt-1.5 w-72 overflow-hidden rounded-xl border border-glass bg-surface shadow-2xl shadow-black/15">
-                    {/* Tab Navigation */}
                     <div className="flex border-b border-glass bg-bg/30 p-1">
                       <button
                         type="button"
@@ -472,7 +427,6 @@ export function DataTable<T>({
 
                     {/* Tab Body */}
                     <div className="p-3">
-                      {/* 1. Columns Tab */}
                       {activeTab === 'columns' && (
                         <div className="space-y-3">
                           <div className="flex items-center justify-between border-b border-glass pb-1.5">
@@ -528,7 +482,6 @@ export function DataTable<T>({
                         </div>
                       )}
 
-                      {/* 2. Density Tab */}
                       {activeTab === 'density' && (
                         <div className="space-y-2">
                           <span className="mb-1 block text-xs font-semibold text-main">
@@ -561,7 +514,6 @@ export function DataTable<T>({
                         </div>
                       )}
 
-                      {/* 3. Export Tab */}
                       {activeTab === 'export' && (
                         <div className="space-y-2">
                           <span className="mb-1 block text-xs font-semibold text-main">
@@ -593,7 +545,6 @@ export function DataTable<T>({
                         </div>
                       )}
 
-                      {/* 4. Auto Refresh Tab */}
                       {activeTab === 'refresh' && (
                         <div className="space-y-2">
                           <span className="mb-1 block text-xs font-semibold text-main">

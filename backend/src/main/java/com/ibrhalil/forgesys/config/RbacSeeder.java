@@ -22,28 +22,13 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * Idempotent RBAC seed for tenant schemas. Ensures every tenant owns the built-in
- * <em>core</em> permission catalog (see {@link PermissionCatalog#CORE} — module-owned
- * permissions are seeded on module activation, K-16) and an {@code Admin} role that
- * carries the {@code all_permissions} flag (so it implicitly holds every permission,
- * resolved dynamically — no per-permission grant rows).
- *
- * <p>Runs at startup (iterating {@code t_companies} and switching {@link TenantContext}
- * per tenant, mirroring {@code TenantMigrationRunner}) and is also invoked directly by
- * {@code TenantProvisioningService.createAdminUser} right after a tenant is provisioned,
- * so a brand-new tenant is seed-complete before the request returns. Disabled in the
- * {@code test} profile (seed data is built manually in tests).
- *
- * <p><strong>Never grants roles at startup.</strong> The Admin role is assigned ONLY
- * explicitly, by {@link #assignAdminTo(User)} from {@code TenantProvisioningService}
- * when a tenant's first admin is created. Auto-assigning Admin to role-less users at
- * startup silently elevated deliberately unprivileged users to full admin on every
- * restart — closed (2026-08-16).
- *
- * <p>{@link #seedForCurrentTenant()} is {@code @Transactional} — called through the
- * Spring proxy from {@link #run(ApplicationArguments)} (via {@code ObjectProvider}) and
- * from {@code TenantProvisioningService} to ensure the session stays open for lazy
- * collection initialization ({@code Role.permissions}, {@code User.roles}).
+ * Idempotent RBAC seed per tenant: the built-in CORE permission catalog (module
+ * permissions seed on activation, K-16) + an {@code Admin} role carrying
+ * {@code all_permissions} (resolved dynamically — no grant rows). Also invoked directly
+ * by provisioning so a new tenant is seed-complete. NEVER grants roles at startup:
+ * Admin is assigned ONLY via {@link #assignAdminTo} — startup auto-assign silently
+ * elevated role-less users on every restart (closed 2026-08-16).
+ * rationale: docs/CODE_NOTES.md (backend/config → RbacSeeder)
  */
 @Slf4j
 @Component
@@ -76,12 +61,7 @@ public class RbacSeeder implements ApplicationRunner {
         }
     }
 
-    /**
-     * Ensures the permission catalog and the Admin role (carrying the {@code all_permissions}
-     * flag) in the <em>current</em> tenant context. Does NOT touch user assignments —
-     * Admin is granted only explicitly via {@link #assignAdminTo(User)}. The caller is
-     * responsible for setting/clearing {@link TenantContext}.
-     */
+    /** Ensures catalog + Admin role in the CURRENT tenant context; caller sets/clears {@link TenantContext}. */
     @Transactional
     public void seedForCurrentTenant() {
         ensurePermissions();
@@ -113,20 +93,14 @@ public class RbacSeeder implements ApplicationRunner {
                     role.setDescription("Full administrative access (implicit all-permissions role)");
                     return role;
                 });
-        // The Admin role carries every permission implicitly via the all_permissions flag
-        // (resolved dynamically by CustomUserDetailsService), so it needs no explicit
-        // t_role_permissions rows. Keeping them out means deleting a catalog permission
+        // all_permissions ⇒ no t_role_permissions rows: deleting a catalog permission
         // is never blocked as "in use" by the Admin role.
         adminRole.setAllPermissions(true);
         adminRole.getPermissions().clear();
         return roleRepository.save(adminRole);
     }
 
-    /**
-     * Explicitly grants the {@code all_permissions} Admin role to the given user (the
-     * tenant's first admin, called from {@code TenantProvisioningService.createAdminUser}
-     * within the tenant context). Idempotent for users already holding the role.
-     */
+    /** Explicitly grants the Admin role to the given user (tenant's first admin); idempotent. */
     @Transactional
     public void assignAdminTo(User user) {
         Role adminRole = ensureAdminRole();

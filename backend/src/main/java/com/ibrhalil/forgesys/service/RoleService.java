@@ -48,9 +48,8 @@ public class RoleService {
 
     /**
      * Filterable/sortable attributes of the role list (K-49); {@code q} matches
-     * {@code name} and {@code description}. {@code permissionCount} is a subquery
-     * scalar (filter + sort — explicit grants only, 0 for all-permissions roles);
-     * {@code permissionIds}/{@code parentIds} are collection-membership filters.
+     * {@code name}/{@code description}. {@code permissionCount} counts explicit grants
+     * only (0 for all-permissions roles).
      */
     public static final FilterFieldSet FILTER_FIELDS = FilterFieldSet.builder()
             .field(Role_.NAME, FilterFieldType.STRING, true)
@@ -126,25 +125,19 @@ public class RoleService {
     @AuditLog(action = "role_deleted", entityType = "Role", entityId = "#id", entityName = "")
     public void delete(UUID id) {
         Role role = getRoleOrThrow(id);
-        // Detach the role from every referencing collection BEFORE the soft-delete.
-        // t_user_roles/t_group_roles are owned by User.roles/Group.roles; leaving the
-        // join rows behind keeps managed collections referencing a deleted role, which
-        // fails the flush with TransientPropertyValueException (and leaves orphan rows).
+        // Detach from every referencing collection BEFORE the soft-delete — leftover
+        // join rows fail the flush (TransientPropertyValueException) and orphan rows.
         for (User holder : userRepository.findUsersByRole(id)) {
             holder.getRoles().remove(role);
         }
         for (Group carrier : groupRepository.findGroupsByRole(id)) {
             carrier.getRoles().remove(role);
         }
-        // Resolve revoke targets (direct + via active groups) while the role is still
-        // visible to the queries; the revoke itself fires after the guard.
+        // Resolve revoke targets while the role is still visible to the queries.
         List<UUID> holderIds = sessionRevocationService.resolveRoleHolderIds(id);
         roleRepository.delete(role);
-        // Last-admin guard AFTER the soft-delete (auto-flushed): the deleted role is
-        // invisible to the admin-closure queries, so deleting the last admin-capable
-        // role — or one whose only remaining enabled holder was its last admin — is
-        // rejected and the whole tx rolls back. Runs BEFORE the revoke so a rejected
-        // delete leaves no Redis-side refresh-token carnage behind.
+        // Guard AFTER the soft-delete flush and BEFORE the revoke — a rejection rolls
+        // back the whole tx without leaving Redis-side carnage behind.
         lastAdminGuard.assertActiveAdminExists();
         sessionRevocationService.revokeUsers(holderIds);
     }
@@ -155,8 +148,7 @@ public class RoleService {
     public RoleResponse setPermissions(UUID roleId, AssignPermissionsRequest request) {
         Role role = getRoleOrThrow(roleId);
         boolean all = Boolean.TRUE.equals(request.all());
-        // Capture the before-state for the audit delta (ALL_PERMISSIONS sentinel flags the
-        // all-permissions mode; otherwise the explicit permission-name set).
+        // Before-state for the audit delta (ALL_PERMISSIONS sentinel = the all-mode).
         java.util.Set<String> beforeNames = role.isAllPermissions()
                 ? java.util.Set.of(ALL_PERMISSIONS_SENTINEL)
                 : role.getPermissions().stream()
@@ -177,18 +169,15 @@ public class RoleService {
                 throw new ResourceNotFoundException("One or more permissions not found");
             }
             role.setAllPermissions(false);
-            // Mutate the persistent collection (don't replace the reference).
+            // Mutate the persistent collection — do not replace the reference.
             role.getPermissions().clear();
             role.getPermissions().addAll(permissions);
         }
-        // Last-admin guard BEFORE save: clearing the {@code all_permissions} flag (or
-        // emptying the role) may drop every admin below the one-active-admin floor —
-        // the closure queries auto-flush the pending flag/collection change first.
+        // Guard BEFORE save: clearing the all-permissions flag (or emptying the role)
+        // may drop below the one-active-admin floor (auto-flushed first).
         lastAdminGuard.assertActiveAdminExists();
         Role saved = roleRepository.save(role);
-        // Faz 1: a permission delta on this role changes what every bearer can do, but
-        // their outstanding tokens still embed the old permission set — revoke so the
-        // delta is enforced on the next request, not at access-token TTL.
+        // Revoke holders: their outstanding tokens still embed the old permission set.
         sessionRevocationService.revokeRoleHolders(saved.getId());
         // Faz 2b: set delta values for AOP aspect
         java.util.Set<String> afterNames = saved.isAllPermissions()
@@ -206,11 +195,8 @@ public class RoleService {
     }
 
     /**
-     * Faz 4a: replace this role's inherited parent roles. Acyclicity is enforced — no
-     * self-parent, and no candidate may transitively inherit from this role (else the
-     * assignment would create a cycle). A parent delta changes the effective permission
-     * set of every bearer, so holders are revoked (Faz 1) and the before/after parent set
-     * is audited (Faz 2b).
+     * Faz 4a: replaces the role's parents; acyclicity enforced (no self-parent, no
+     * transitive back-edge). Holders revoked; before/after parent set audited.
      */
     @Transactional
     @AuditLog(action = "role_parents_updated", entityType = "Role", entityId = "#result.id", entityName = "#result.name",
@@ -231,9 +217,7 @@ public class RoleService {
                 .map(Role::getName).collect(java.util.stream.Collectors.toSet());
         role.getParentRoles().clear();
         role.getParentRoles().addAll(parents);
-        // Last-admin guard: breaking an inheritance edge (e.g. removing an
-        // all-permissions parent) strips admin-capability from this role's holders —
-        // the downward-closure query auto-flushes the pending t_role_parents change.
+        // Guard: breaking an inheritance edge may strip admin-capability (auto-flushed first).
         lastAdminGuard.assertActiveAdminExists();
         Role saved = roleRepository.save(role);
         sessionRevocationService.revokeRoleHolders(saved.getId());

@@ -12,11 +12,7 @@ import lombok.ToString;
 
 import java.util.UUID;
 
-/**
- * A row of a custom {@link App} (K-15 / Epic 3.0.B). The row itself carries no data —
- * its cell values live in {@link AppRecordValue} rows (JSONB EAV, K-15). Only record
- * metadata (audit columns) lives here.
- */
+/** A row of a custom {@link App} (K-15) — cell values live in {@link AppRecordValue} (JSONB EAV). */
 @Entity
 @Getter
 @Setter

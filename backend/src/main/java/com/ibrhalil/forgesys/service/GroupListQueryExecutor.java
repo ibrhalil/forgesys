@@ -30,14 +30,10 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Read side of the group list (K-49): one flat Criteria DTO projection (scalars +
- * role/member count subqueries) plus TWO batch queries that resolve the page's role
- * and member summaries — replacing the per-row {@code findGroupMembers} +
- * {@code countMembers} calls (2N+1 queries) with a fixed 3-query shape per page.
- * The wire shape ({@link GroupResponse}) is unchanged.
- *
- * <p>Counts exclude soft-deleted roles/users (entity-path resolution applies
- * {@code @SQLRestriction}; the former native count saw raw join rows).
+ * Read side of the group list (K-49): one flat Criteria DTO projection + TWO batch
+ * queries for the page's role/member summaries — a fixed 3-query page (formerly 2N+1).
+ * Counts exclude soft-deleted roles/users (entity-path {@code @SQLRestriction}).
+ * Rationale: docs/CODE_NOTES.md (backend/service → GroupListQueryExecutor).
  */
 @Component
 public class GroupListQueryExecutor {
@@ -50,10 +46,7 @@ public class GroupListQueryExecutor {
         return UserDirectoryQueryExecutor.countMembers(Group_.ROLES);
     }
 
-    /**
-     * Members of the group row — the join table is owned by {@code User.groups}, so
-     * the correlated subquery starts from {@code User} and links back by group id.
-     */
+    /** Member count from the {@code User} side — the join table is owned by {@code User.groups}. */
     static FilterFieldSet.SubqueryExpression countMembers() {
         return (root, query, cb) -> {
             Subquery<Long> sq = query.subquery(Long.class);

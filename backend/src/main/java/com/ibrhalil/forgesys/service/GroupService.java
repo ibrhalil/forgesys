@@ -48,10 +48,8 @@ public class GroupService {
 
     /**
      * Filterable/sortable attributes of the group list (K-49); {@code q} matches
-     * {@code name} and {@code description}. {@code roleCount}/{@code memberCount} are
-     * subquery scalars (filter + sort); {@code roleIds}/{@code memberIds} are
-     * collection-membership filters (memberIds through the inverse {@code User.groups}
-     * side — the join table is owned by User).
+     * {@code name}/{@code description}. {@code memberIds} resolves through the inverse
+     * {@code User.groups} side (the join table is owned by User).
      */
     public static final FilterFieldSet FILTER_FIELDS = FilterFieldSet.builder()
             .field(Group_.NAME, FilterFieldType.STRING, true)
@@ -95,11 +93,8 @@ public class GroupService {
     }
 
     /**
-     * Sorted effective permission names this group grants its members: the union of the
-     * permissions of every role the group holds, expanded through transitive parent-role
-     * inheritance. Backs {@code GET /groups/{id}/effective-permissions} so the UI can
-     * show what a member of this group can do (a group carrying an admin role makes its
-     * members admins).
+     * Effective permission names the group grants its members (union of the group's
+     * roles, expanded through transitive parent inheritance).
      */
     @Transactional(readOnly = true)
     public List<String> effectivePermissions(UUID id) {
@@ -135,17 +130,14 @@ public class GroupService {
         if (request.active() != null) {
             group.setActive(request.active());
         }
-        // Last-admin guard: deactivating the group immediately strips its members'
-        // group-granted admin capacity — the existence query auto-flushes the pending
-        // active=false and skips inactive groups, so this sees the post-mutation state.
+        // Guard: deactivation strips members' group-granted admin capacity (the
+        // existence query auto-flushes the pending active=false first).
         if (wasActive && Boolean.FALSE.equals(request.active())) {
             lastAdminGuard.assertActiveAdminExists();
         }
         Group saved = groupRepository.save(group);
-        // Faz 1: deactivating a group drops every member's group-granted permissions
-        // (resolveAuthorities skips inactive groups) — revoke members so the loss is
-        // enforced immediately. Activation grants permissions members gain on their next
-        // login, so it needs no revoke.
+        // Deactivation drops members' permissions (resolveAuthorities skips inactive
+        // groups) → revoke; activation grants at next login, no revoke.
         if (wasActive && Boolean.FALSE.equals(request.active())) {
             sessionRevocationService.revokeGroupMembers(saved.getId());
         }
@@ -156,10 +148,8 @@ public class GroupService {
     @AuditLog(action = "group_deleted", entityType = "Group", entityId = "#id", entityName = "")
     public void delete(UUID id) {
         Group group = getGroupOrThrow(id);
-        // Detach the group from every member's collection BEFORE the soft-delete:
-        // t_user_groups is owned by User.groups, and leaving the join rows behind keeps
-        // managed collections referencing a deleted group (flush failure with
-        // TransientPropertyValueException) plus orphan rows.
+        // Detach from every member's collection BEFORE the soft-delete — leftover join
+        // rows fail the flush (TransientPropertyValueException) and orphan rows.
         List<UUID> memberIds = new java.util.ArrayList<>();
         for (User member : userRepository.findGroupMembers(id)) {
             if (member.getGroups().remove(group)) {
@@ -167,10 +157,8 @@ public class GroupService {
             }
         }
         groupRepository.delete(group);
-        // Last-admin guard AFTER the soft-delete (auto-flushed): the deleted group is
-        // invisible to the existence query, so deleting the last admin-carrying group
-        // is rejected and the whole tx rolls back. The revoke fires only after the
-        // guard, so a rejected delete leaves no Redis-side revoke behind.
+        // Guard AFTER the soft-delete flush, BEFORE the revoke — a rejection rolls back
+        // the tx without leaving Redis-side carnage behind.
         lastAdminGuard.assertActiveAdminExists();
         sessionRevocationService.revokeUsers(memberIds);
     }
@@ -185,13 +173,10 @@ public class GroupService {
                 .map(Role::getName).collect(java.util.stream.Collectors.toSet());
         group.getRoles().clear();
         group.getRoles().addAll(roles);
-        // Last-admin guard: stripping the group's admin-carrying role drops every
-        // member's group-granted admin capacity — auto-flushed before the check.
+        // Guard: stripping the admin-carrying role drops members' admin capacity (auto-flushed first).
         lastAdminGuard.assertActiveAdminExists();
         Group saved = groupRepository.save(group);
-        // Faz 1: a role delta on this group changes every member's effective permissions,
-        // but their outstanding tokens still embed the old set — revoke members so the
-        // delta is enforced on the next request, not at access-token TTL.
+        // Revoke members: their outstanding tokens still embed the old permission set.
         sessionRevocationService.revokeGroupMembers(saved.getId());
         // Faz 2b: set delta values for AOP aspect
         AuditDeltaContext.setOldValue(AuditService.namesJson(beforeNames));
@@ -199,11 +184,7 @@ public class GroupService {
         return toResponse(saved);
     }
 
-    /**
-     * Replace-semantics membership update. Since {@code User} owns the {@code t_user_groups}
-     * join, this mutates each affected user's group set: removes the group from users no
-     * longer targeted, adds it to newly targeted users.
-     */
+    /** Replace-semantics membership update; mutates each user's group set (User owns the join). */
     @Transactional
     @AuditLog(action = "group_members_updated", entityType = "Group", entityId = "#group.id", entityName = "#group.name")
     public GroupResponse setMembers(UUID groupId, AssignMembersRequest request) {
@@ -228,13 +209,11 @@ public class GroupService {
                 userRepository.save(target);
             }
         }
-        // Last-admin guard: removing the last admin from an admin-carrying group drops
-        // the tenant below the one-active-admin floor — the existence query
-        // auto-flushes the pending t_user_groups removals before running.
+        // Guard: removing the last admin from an admin-carrying group drops below the
+        // floor (the existence query auto-flushes the pending removals first).
         lastAdminGuard.assertActiveAdminExists();
-        // Faz 1: only REMOVED members lose the group's permissions (the security-relevant
-        // case). Added members gain permissions on their next login — no revoke, so adding
-        // someone to a group does not log them out.
+        // Only REMOVED members lose permissions — added members gain at next login
+        // (adding someone to a group must not log them out).
         sessionRevocationService.revokeUsers(removedMemberIds);
         return toResponse(group);
     }

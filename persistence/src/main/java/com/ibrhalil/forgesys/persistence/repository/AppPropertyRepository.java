@@ -29,11 +29,7 @@ public interface AppPropertyRepository extends JpaRepository<AppProperty, UUID> 
     @Query("select max(p.position) from AppProperty p where p.appId = :appId")
     Integer findMaxPosition(@Param("appId") UUID appId);
 
-    /**
-     * Hard-deletes the value rows of a property whose definition was (soft-)deleted —
-     * value rows are dependent data and carry no standalone meaning once the
-     * definition is gone ({@code t_app_record_values} has no soft-delete).
-     */
+    /** Hard-deletes the property's value rows — dependent data, no soft-delete (see {@code AppRecordValue}). */
     @Modifying
     @Query("delete from AppRecordValue v where v.propertyId = :propertyId")
     void deleteValuesByPropertyId(@Param("propertyId") UUID propertyId);

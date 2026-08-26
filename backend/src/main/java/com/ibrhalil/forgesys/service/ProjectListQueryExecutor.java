@@ -13,11 +13,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Component;
 
-/**
- * Read side of the project list (K-49): flat Criteria DTO projection. The
- * {@code parentProjectName} column (display + filter + sort) resolves as a correlated
- * scalar subquery over the plain self-FK column — a soft-deleted parent yields null.
- */
+/** Project list read side (K-49); {@code parentProjectName} via the self-FK subquery (soft-deleted parent → null). */
 @Component
 public class ProjectListQueryExecutor {
 

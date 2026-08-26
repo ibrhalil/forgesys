@@ -25,9 +25,8 @@ public interface ProjectRepository extends JpaRepository<Project, UUID>, JpaSpec
     Optional<Project> findFirstByNameAndTypeOrderByName(String name, ProjectType type);
 
     /**
-     * Id of the per-type default container ("Genel", K-45) — at most one live row per
-     * type ({@code uk_projects_default_type} in PG; {@code @SQLRestriction} hides
-     * soft-deleted rows on both H2 and PG). List + first() keeps H2 loose in tests.
+     * Ids of the per-type default container ("Genel", K-45) — at most one live row per
+     * type in PG ({@code uk_projects_default_type}); list + first() keeps H2 loose.
      */
     @Query("select p.id from Project p where p.type = :type and p.isDefault = true")
     List<UUID> findDefaultIdsByType(@Param("type") ProjectType type);

@@ -6,79 +6,36 @@ import java.util.UUID;
 
 /**
  * Storage abstraction for opaque refresh tokens (K-34) and active sessions (K-28).
- * Two profile-bound implementations: {@code RedisRefreshTokenStore} (dev/prod) and
- * {@code InMemoryRefreshTokenStore} (test, Docker-free build).
- *
- * <p>Only the SHA-256 hash of a token is ever persisted — a store/backup leak cannot
- * be replayed. Rotation is atomic and single-use: presenting an already-consumed
- * token is reported as {@link RotationResult.ReuseDetected}.
- *
- * <p>Tenant isolation: a session records its tenant schema; the caller validates the
- * session tenant against the request tenant so a token minted in tenant A cannot be
- * refreshed in tenant B (mirrors [RISK-19] access-token binding).
- *
- * <p>Session management (K-28): each issued session carries a stable {@code sessionId}
- * plus device metadata (IP / User-Agent / loginAt / lastSeen). {@link #listSessions}
- * exposes active sessions for the "where am I logged in" UI; {@link #revokeSession}
- * ends a single session by id (remote revoke); {@link #activeSessionFor} resolves the
- * session behind a presented token so the service can flag the caller's current
- * device. The store itself only owns refresh tokens; the service layer
- * ({@code SessionService}) additionally stamps {@code UserAccount.tokenInvalidBefore}
- * on revoke so the device's outstanding access token dies immediately, not at TTL.
+ * Profile-split: Redis (dev/prod) / in-memory (test). Only the SHA-256 hash of a token
+ * is ever persisted; rotation is atomic single-use — presenting a consumed token yields
+ * {@link RotationResult.ReuseDetected}.
  */
 public interface RefreshTokenStore {
 
-    /**
-     * Issues a brand-new refresh token (new session chain) and returns it + metadata.
-     *
-     * @param ipAddress client IP captured at login (for the session list), nullable
-     * @param userAgent User-Agent captured at login, nullable
-     */
+    /** Issues a new refresh token (new session chain); IP/User-Agent feed the session list (nullable). */
     IssuedRefresh issue(UUID userId, String email, String tenant, String ipAddress, String userAgent);
 
     /**
-     * Atomically consumes the presented token and issues a new one in the same chain
-     * (rotation). Device metadata and {@code sessionId} are preserved; {@code lastSeen}
-     * is bumped. An already-consumed token yields {@link RotationResult.ReuseDetected};
-     * an absent/expired token yields {@link RotationResult.Unknown}.
+     * Atomically consumes the token and issues a successor in the same chain (sessionId
+     * + device preserved, lastSeen bumped); consumed → ReuseDetected, absent/expired → Unknown.
      */
     RotationResult rotate(String presentedToken);
 
     /** Revokes (logs out) a single presented token. Returns {@code true} if it existed. */
     boolean revoke(String presentedToken);
 
-    /** Revokes every refresh token for a user (nuclear — password change/reset, reuse). */
+    /** Revokes every refresh token for a user (password change/reset, reuse detection). */
     void revokeAllForUser(UUID userId, String tenant);
 
-    /**
-     * Lists the user's active sessions (K-28), newest login first. Rotated/ended
-     * sessions are excluded; only currently usable refresh tokens are returned.
-     */
+    /** The user's active sessions (newest activity first; only currently usable tokens). */
     List<ActiveSession> listSessions(UUID userId, String tenant);
 
-    /**
-     * Lists <em>every</em> active session in the tenant (across all users), newest
-     * activity first — the admin "all sessions" view. Implemented without a write-path
-     * change by enumerating the tenant's per-user indexes (Redis SCAN /
-     * InMemory prefix scan) and aggregating {@link #listSessions(UUID, String)} per
-     * user. Bounded by the number of active refresh tokens (each expires); an
-     * admin-only, occasional read.
-     */
+    /** Every active session in the tenant (admin view) — enumerates per-user indexes and aggregates {@link #listSessions(UUID, String)}. */
     List<ActiveSession> listAllSessions(String tenant);
 
-    /**
-     * Ends a single session by its stable {@code sessionId} (remote revoke). Returns
-     * {@code true} if an active session matched and was removed. The session's refresh
-     * token is dropped, so it can no longer rotate; {@code SessionService} additionally
-     * stamps {@code tokenInvalidBefore} so the device's outstanding access token dies on
-     * its next request (not at TTL).
-     */
+    /** Ends one session by id (drops its refresh token); the service also stamps {@code tokenInvalidBefore}. */
     boolean revokeSession(UUID userId, String tenant, UUID sessionId);
 
-    /**
-     * Resolves the active session behind a presented refresh token (used to flag the
-     * caller's current device in the session list). Does not consume the token. Empty
-     * if the token is unknown/already consumed.
-     */
+    /** Session behind a presented token WITHOUT consuming it; empty if unknown/consumed. */
     Optional<ActiveSession> activeSessionFor(String presentedToken);
 }

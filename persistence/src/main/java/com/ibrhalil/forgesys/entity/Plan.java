@@ -10,11 +10,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
 
-/**
- * Subscription plan (K-16 / Epic 3.0.A). Reference data seeded from the code-side
- * {@code PlanDefinition} registry at startup ({@code PlanSyncRunner}) — soft-delete-less
- * ({@link GeneratedIdAuditEntity}).
- */
+/** Subscription plan (K-16) — reference data seeded from {@code PlanDefinition} at startup. */
 @Entity
 @Getter
 @Setter
@@ -35,10 +31,7 @@ public class Plan extends GeneratedIdAuditEntity {
     @Column(nullable = false, length = 100)
     private String name;
 
-    /**
-     * Ordering of plans (FREE &lt; PRO &lt; ENTERPRISE). A module's {@code minPlan} rank
-     * gates activation: tenant plan rank must be &gt;= module min rank.
-     */
+    /** Plan ordering (FREE &lt; PRO &lt; ENTERPRISE); a module's {@code minPlan} rank gates activation. */
     @Column(name = "plan_rank", nullable = false)
     private int rank;
 

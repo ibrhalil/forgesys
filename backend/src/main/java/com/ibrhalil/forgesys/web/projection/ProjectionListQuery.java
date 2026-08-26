@@ -20,23 +20,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Shared Criteria DTO projection executor behind the paged list endpoints (K-49).
- * Runs one content query — a constructor projection ({@code cb.construct}), so rows
- * are DTOs, never managed entities: no hydration overhead, no N+1, no dirty
- * checking — plus one count query with the same predicate. Sort properties are
- * translated through the feature's {@link FilterFieldSet} (wire name → expression),
- * so joined and subquery-derived columns filter, sort and project in the database
- * exactly like direct ones.
- *
- * <p>Flatness rule: the feature's registrations may JOIN only to-one associations
- * (LEFT) and must keep subquery fields scalar — a to-many join would multiply rows
- * and silently break both paging and the count query. Collection data (counts,
- * membership) goes through scalar subqueries / EXISTS predicates, mirroring the
- * former {@code UserDirectoryView} read model per feature.
- *
- * <p>Sort validation ({@code SortGuard}) runs at the controller layer; resolving a
- * non-registered or non-sortable property here throws {@link IllegalArgumentException}
- * as the last line of defense.
+ * Shared Criteria DTO projection executor behind the paged lists (K-49): one
+ * content query ({@code cb.construct} — rows are DTOs, never managed entities) +
+ * one count query with the same predicate; sorts resolve through the feature's
+ * {@link FilterFieldSet}, so joined/subquery columns sort like direct ones.
+ * rationale: docs/CODE_NOTES.md (backend/web → ProjectionListQuery)
  */
 public final class ProjectionListQuery {
 

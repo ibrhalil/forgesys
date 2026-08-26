@@ -17,20 +17,10 @@ import lombok.Setter;
 import lombok.ToString;
 
 /**
- * Tenant signup verification token (K-21). Issued when a {@code PROVISIONING} Company is
- * created ({@code createPendingCompany}) and consumed by {@code verifyAndProvision} to
- * promote the Company to {@code ACTIVE} (senkron schema CREATE + Flyway + admin user).
- *
- * <p>Lives in the {@code public} schema (the tenant schema does not exist yet at issue
- * time). Soft-delete-less ({@link GeneratedIdAuditEntity} — no {@code is_deleted}/
- * {@code version}); lifecycle is controlled by {@link #usedAt} + {@link #expiresAt}.
- * A token is single-use: once {@code usedAt} is set it is invalid forever.
- *
- * <p><strong>[RISK-30] Hash-at-rest:</strong> {@link #token} stores only the SHA-256
- * hex digest of the raw token; the raw value exists solely in the emailed link and
- * is never persisted. Consumers hash the presented token before lookup/claim. The
- * public {@code V3} migration backfilled pre-existing rows, so outstanding links
- * kept working.
+ * Tenant signup verification token (K-21), {@code public} schema (the tenant schema
+ * does not exist at issue time). Single-use ({@link #usedAt} + {@link #expiresAt});
+ * {@link #token} stores only the SHA-256 digest (RISK-30) — the raw value lives
+ * solely in the emailed link.
  */
 @Entity
 @Getter
@@ -46,10 +36,7 @@ import lombok.ToString;
 )
 public class TenantVerificationToken extends GeneratedIdAuditEntity {
 
-    /**
-     * SHA-256 hex digest of the raw token ([RISK-30] hash-at-rest — a DB leak cannot
-     * replay a pending signup link). The raw value lives only in the emailed link.
-     */
+    /** SHA-256 hex digest of the raw token (RISK-30) — a DB leak cannot replay a signup link. */
     @Column(nullable = false, length = 255, unique = true)
     private String token;
 
@@ -58,19 +45,15 @@ public class TenantVerificationToken extends GeneratedIdAuditEntity {
             foreignKey = @ForeignKey(name = "fk_tenant_verification_tokens_company"))
     private Company company;
 
-    /**
-     * Admin email captured at phase 1 ({@code createPendingCompany}). Phase 2 uses it to
-     * create the tenant's first user without re-prompting the user.
-     */
+    /** Admin email captured at phase 1; phase 2 creates the tenant's first user from it. */
     @Column(name = "admin_email", nullable = false, length = 150)
     private String adminEmail;
 
     /**
-     * Admin password, pre-hashed at phase 1 by {@code PepperingPasswordEncoder}. Phase 2
-     * stores it verbatim on the new {@code User} (no re-hash). The raw password never
-     * persists. [RISK-30] Nulled by {@code verifyAndProvision} once the admin user has
-     * been created — the token row must not outlive its purpose carrying credentials
-     * (nullable since public {@code V3}).
+     * Admin password, pre-hashed at phase 1 ({@code PepperingPasswordEncoder}) and
+     * stored verbatim on the new {@code User} in phase 2; the raw password never
+     * persists. Nulled by {@code verifyAndProvision} once the admin exists (nullable
+     * since public V3).
      */
     @Column(name = "admin_password_hash", length = 255)
     private String adminPasswordHash;

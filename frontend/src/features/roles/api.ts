@@ -1,15 +1,12 @@
 import { api, normalizePage, searchPost, toQuery } from '../../lib/api';
-import type { FilterCriteria, PageParams, PageResponse, SearchRequestBody } from '../../types';
+import type { PageParams, PageResponse, SearchOrListParams, SearchRequestBody } from '../../types';
 import type { Role, CreateRoleRequest, AssignPermissionsRequest, AssignRolesRequest } from './types';
-
-/** List params with the K-49 structured column-filter clauses. */
-export type RoleListParams = PageParams & { filters?: FilterCriteria[] };
 
 export const rolesApi = {
   list: (params: PageParams = {}) =>
     api.get<PageResponse<Role>>(`/api/v1/roles${toQuery(params)}`).then(normalizePage),
   /** Engine list read: clauses route through `POST /roles/search`, plain reads stay on GET. */
-  searchOrList: ({ filters, ...params }: RoleListParams) =>
+  searchOrList: ({ filters, ...params }: SearchOrListParams) =>
     filters?.length
       ? searchPost<Role>('/api/v1/roles/search', { ...params } satisfies SearchRequestBody)
       : rolesApi.list(params),

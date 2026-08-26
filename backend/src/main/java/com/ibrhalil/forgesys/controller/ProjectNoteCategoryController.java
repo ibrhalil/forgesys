@@ -24,10 +24,9 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Note categories nested under their NOTES-type project container (K-45) — the
- * TaskController pattern: 404 unknown container, 409 {@code project_type_mismatch}
- * for a non-NOTES one. Update/delete stay on the flat {@code /note-categories/{id}}
- * surface; a category's project is fixed at create time.
+ * Note categories nested under their NOTES-type container (K-45): unknown → 404,
+ * non-NOTES → 409 {@code project_type_mismatch}. Update/delete stay on the flat
+ * {@code /note-categories/{id}} surface (a category's project is fixed at create).
  */
 @RestController
 @RequestMapping("/api/v1/projects/{projectId}/note-categories")

@@ -17,10 +17,10 @@ import java.time.LocalDate;
 import java.util.UUID;
 
 /**
- * Validates a raw JSON cell value against its {@link PropertyType} definition (K-15 /
- * Epic 3.0.B). Reference-typed values (USER / RELATION) get an existence check against
- * the tenant's data — the JSONB column cannot carry an FK, so this is the integrity
- * gate (same rationale as {@code Task.assigneeId}: plain column + service validation).
+ * Validates a raw JSON cell value against its {@link PropertyType} definition (K-15).
+ * Reference-typed values (USER/RELATION) get an existence check against tenant data —
+ * the JSONB column cannot carry an FK (same rationale as {@code Task.assigneeId}).
+ * Rationale: docs/CODE_NOTES.md (backend/service → AppPropertyValueValidator).
  */
 @Component
 @RequiredArgsConstructor
@@ -34,10 +34,7 @@ public class AppPropertyValueValidator {
     private final AppRecordRepository appRecordRepository;
     private final ObjectMapper objectMapper;
 
-    /**
-     * @param value a non-null, non-JSON-null value node; throws
-     *              {@link ErrorCode#APP_RECORD_VALUE_INVALID} on any mismatch
-     */
+    /** Throws {@link ErrorCode#APP_RECORD_VALUE_INVALID} on any mismatch. */
     public void validate(AppProperty property, JsonNode value) {
         switch (property.getType()) {
             case TEXT -> validateText(property, value);
@@ -140,8 +137,7 @@ public class AppPropertyValueValidator {
             throw new BusinessException(ErrorCode.APP_PROPERTY_CONFIG_INVALID,
                     "Property '" + property.getName() + "' has no target app configured");
         }
-        // Re-checked cheaply: config was validated at property creation, but definitions
-        // can drift (e.g. target app hard-purged) — a dangling relation must fail loudly.
+        // Definitions can drift (target hard-purged) — a dangling relation must fail loudly.
         UUID targetAppId = UUID.fromString(target.stringValue());
         if (!appRepository.existsById(targetAppId)) {
             throw new BusinessException(ErrorCode.APP_PROPERTY_CONFIG_INVALID,

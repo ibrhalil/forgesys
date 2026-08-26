@@ -3,10 +3,8 @@ package com.ibrhalil.forgesys.dto;
 import java.time.OffsetDateTime;
 
 /**
- * Temporal account-activity summary for the user detail view: creation/update
- * stamps from the user entity, last login from the account row, and the most
- * recent failed login attempt from the append-only login history (K-19). Date-only
- * for the failed login by decision — reason/IP stay in the login-history page.
+ * Temporal account-activity summary: entity stamps, last login, and the most
+ * recent failed-login date (K-19; reason/IP stay on the login-history page).
  */
 public record UserActivityResponse(
         OffsetDateTime createdDate,

@@ -48,9 +48,8 @@ public class TenantFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
-        // Only tenant-creation endpoints lack a tenant context. Login and /me ARE
-        // tenant-specific (you authenticate against a company's schema resolved by
-        // subdomain), so they go through normal tenant resolution.
+        // Only tenant-creation endpoints lack a tenant context; login and /me ARE
+        // tenant-specific and go through normal subdomain resolution.
         return path.startsWith("/api/v1/auth/company/") || path.startsWith("/actuator/");
     }
 

@@ -5,7 +5,7 @@ import com.ibrhalil.forgesys.entity.ViewType;
 import java.util.UUID;
 
 /**
- * A saved view of a custom app (K-15 / Epic 3.0.B).
+ * A saved view of a custom app (K-15).
  */
 public record AppViewResponse(
         UUID id,

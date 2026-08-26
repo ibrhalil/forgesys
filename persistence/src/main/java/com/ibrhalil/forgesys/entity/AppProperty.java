@@ -15,16 +15,10 @@ import lombok.ToString;
 import java.util.UUID;
 
 /**
- * A column definition of a custom {@link App} (K-15 / Epic 3.0.B): name + type + a
- * {@code config} JSON whose shape depends on {@link PropertyType} — SELECT carries
- * {@code {"options":[...]}}; RELATION carries {@code {"targetAppId":"<uuid>"}}; others
- * carry no config. Config is validated in the backend service layer per type.
- *
- * <p>{@code app} is a plain {@code UUID} column (not {@code @ManyToOne}) — same
- * lazy-proxy/N+1 avoidance rationale as {@link Task#getProjectId()}; validity is
- * enforced by the service (app existence) and by FK in the module migration.
- * Soft-delete: deleting a property hard-deletes its orphaned value rows
- * (service-level; {@code t_app_record_values} has no soft-delete).
+ * A column definition of a custom {@link App} (K-15): name + {@link PropertyType} +
+ * type-dependent {@code config} JSON (SELECT {@code options}, RELATION
+ * {@code targetAppId}) validated in the service. {@code appId} is a plain UUID
+ * (Task convention).
  */
 @Entity
 @Getter

@@ -13,8 +13,8 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * Module catalog + activation endpoints (K-16 / Epic 3.0.A). Tenant-scoped: the company
- * is resolved from the {@code TenantFilter}-set context.
+ * Module catalog + activation endpoints (K-16); tenant resolved from the
+ * {@code TenantFilter} context.
  */
 @RestController
 @RequestMapping("/api/v1/modules")

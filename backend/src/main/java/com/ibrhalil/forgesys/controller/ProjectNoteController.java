@@ -25,10 +25,9 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Notes nested under their NOTES-type project container (K-45) — the TaskController
- * pattern: the container must exist (404) and be a NOTES container (409
- * {@code project_type_mismatch}). Update/delete stay on the flat {@code /notes/{id}}
- * surface (a note is addressable by its own id once created).
+ * Notes nested under their NOTES-type container (K-45): unknown container → 404,
+ * non-NOTES → 409 {@code project_type_mismatch}. Update/delete stay on the flat
+ * {@code /notes/{id}} surface.
  */
 @RestController
 @RequestMapping("/api/v1/projects/{projectId}/notes")

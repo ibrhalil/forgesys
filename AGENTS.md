@@ -18,7 +18,8 @@
 - [`README.md`](README.md) — setup, running, **build commands** (single source), API, troubleshooting. (TR/mixed)
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — architecture diagram, request lifecycle, schema-per-tenant, entity hierarchy, **config profiles** (single source). (TR/mixed)
 - [`docs/ROADMAP.md`](docs/ROADMAP.md) — remaining work + completed-epics summary (no ticket numbers). (TR/mixed)
-- [`docs/DECISIONS.md`](docs/DECISIONS.md) — decision log (K-XX architecture, RISK-XX risk, DEBT-XX tech debt) + **frozen decisions** (do not re-litigate). (TR/mixed)
+- [`docs/DECISIONS.md`](docs/DECISIONS.md) — decision log (K-XX architecture, RISK-XX risk, DEBT-XX tech debt) + **frozen decisions** (do not re-litigate).
+- [`docs/CODE_NOTES.md`](docs/CODE_NOTES.md) — "why" notes moved OUT of source comments (long narratives live here, not in code). TR/mixed. (TR/mixed)
 - Each module has its own `AGENTS.md`: [`common/`](common/AGENTS.md) · [`persistence/`](persistence/AGENTS.md) · [`backend/`](backend/AGENTS.md) · [`frontend/`](frontend/AGENTS.md). (all EN)
 
 > Completed initiatives live in `docs/DECISIONS.md` (K-15..K-44, RISK-19..RISK-36) and git history — this file carries current rules only.
@@ -66,6 +67,7 @@ Not source code; runtime/operational files. Details in `infra/README.md`.
 - **Versions live in the root `<properties>`** (`spring-boot.version`, `java.version`). Module poms do not pin versions.
 - **IDs are UUID everywhere** (`GenerationType.UUID`). Table names use the `t_` prefix.
 - **Code style:** package `com.ibrhalil.forgesys.*`, DTOs are `record`, centralized error handling via `@RestControllerAdvice` (`ApiErrorResponse` + `ErrorCode`), Lombok in the backend module.
+- **Comment policy:** code comments carry at most 1-3 lines of contract/critical-invariant — never long narratives. "Why" stories go to `docs/CODE_NOTES.md` (add a section + point to it); decision history goes to `docs/DECISIONS.md`. Do not re-grow essay javadocs.
 
 ## Engineering principles
 

@@ -1,11 +1,9 @@
 package com.ibrhalil.forgesys.service.mail;
 
 /**
- * Mail templates shipped on the classpath under {@code mail/<key>.<lang>.html}
- * ({@code tr}/{@code en}). The template body lives outside the enum so non-developers
- * can polish the copy without a rebuild; subjects are stable enough to stay in code.
- * {@code infra/templates/} externalization overrides the classpath files per template
- * (see {@code MailProperties.templatesDir}).
+ * Mail templates at {@code mail/<key>.<lang>.html} (tr/en) — bodies live outside the
+ * enum so non-developers can polish copy without a rebuild; subjects stay in code.
+ * {@code templatesDir} ({@code infra/templates/}) overrides classpath per template.
  */
 public enum MailTemplate {
 

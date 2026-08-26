@@ -43,12 +43,10 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Tenant-scoped typed project container CRUD (K-45). The {@code type} decides which
- * module's content lives inside the project; the creatable catalog derives from the
- * tenant's ACTIVE modules ({@link #listAvailableTypes()}). Write guards: a parent must
- * exist and must not create a containment cycle; the type is locked while the project
- * holds content; the per-type default container's type and parent are frozen. Same
- * soft-delete + audit pattern as the IAM services.
+ * Tenant-scoped typed project container CRUD (K-45): the {@code type} decides which
+ * module's content lives inside; the creatable catalog derives from ACTIVE modules.
+ * Guards: parent existence + cycle, type locked while content exists, default
+ * container's type/parent frozen. Rationale: docs/CODE_NOTES.md (backend/service → ProjectService).
  */
 @Service
 @RequiredArgsConstructor
@@ -57,8 +55,8 @@ public class ProjectService {
     /**
      * Filterable/sortable attributes of the project list (K-49); {@code q} matches
      * {@code name}, {@code description} and the resolved parent name.
-     * {@code parentProjectName} is a correlated scalar subquery over the plain self-FK
-     * column — a soft-deleted parent resolves to null.
+     * {@code parentProjectName} is a correlated subquery over the plain self-FK —
+     * a soft-deleted parent resolves to null.
      */
     public static final FilterFieldSet FILTER_FIELDS = FilterFieldSet.builder()
             .field(Project_.NAME, FilterFieldType.STRING, true)
@@ -72,7 +70,7 @@ public class ProjectService {
             .field(AuditEntity_.UPDATED_AT, FilterFieldType.TEMPORAL, false)
             .build();
 
-    /** Defensive cap for the ancestor-chain walk on re-parent (K-45: no unbounded traversal). */
+    /** Defensive cap for the ancestor-chain walk (K-45: no unbounded traversal). */
     private static final int MAX_PARENT_DEPTH = 50;
 
     private final ProjectRepository projectRepository;
@@ -108,11 +106,7 @@ public class ProjectService {
         return projectListQueryExecutor.search(spec, pageable);
     }
 
-    /**
-     * The creatable project-type catalog for the current tenant (K-45): one entry per
-     * ACTIVE module that supplies a project type, with the per-type default container
-     * id as the top-nav fallback target.
-     */
+    /** Creatable type catalog from ACTIVE modules, with the per-type default container id. */
     @Transactional(readOnly = true)
     public List<ProjectTypeResponse> listAvailableTypes() {
         Company company = currentCompany();
@@ -190,19 +184,15 @@ public class ProjectService {
         projectRepository.deleteById(id);
     }
 
-    /**
-     * Delegates to {@link ProjectContentGuard}: tasks + notes today, apps with their
-     * project-scoping migration (K-45 step 5).
-     */
+    /** Delegates to {@link ProjectContentGuard} (tasks + notes + apps). */
     private boolean projectHasContent(UUID projectId) {
         return projectContentGuard.hasContent(projectId);
     }
 
     /**
-     * K-45 activation gate: a project type is only creatable while the module that
-     * supplies its content is ACTIVE for the tenant. Applied on create (always) and on
-     * update (only when the type actually changes — a rename of a project whose module
-     * went inactive stays allowed; its content is merely read-only elsewhere).
+     * K-45 activation gate: a type is creatable only while its module is ACTIVE; on
+     * update only checked when the type actually changes (an inactive-module rename
+     * stays allowed — the content is merely read-only elsewhere).
      */
     private void assertTypeActivatable(ProjectType type) {
         ModuleDefinition module = ModuleDefinition.forProjectType(type)
@@ -219,10 +209,9 @@ public class ProjectService {
     }
 
     /**
-     * A new parent must exist and must not put the project inside itself. The ancestor
-     * chain is walked Hibernate-visibly (soft-deleted mid-chain rows end the walk — a
-     * deleted node's frozen parent link cannot be extended by this update, so no cycle
-     * can be created through it). Depth-capped: an over-deep chain is rejected outright.
+     * A new parent must exist and must not put the project inside itself. The
+     * Hibernate-visible ancestor walk ends at a soft-deleted mid-chain row (a deleted
+     * node's frozen parent link cannot create a cycle); depth-capped at 50.
      */
     private void assertParentAcceptable(UUID parentId, UUID selfId) {
         if (parentId == null) {
@@ -253,10 +242,9 @@ public class ProjectService {
     }
 
     /**
-     * The company owning the current tenant schema. Mirrors the Hibernate resolver's
-     * fallback ({@code public} when the context is unset — the H2 test layout); in
-     * production the filter always sets the context and no company owns "public",
-     * so the lookup degrades to {@link TenantNotFoundException}.
+     * Company owning the current schema; mirrors the Hibernate resolver's {@code public}
+     * fallback for an unset context (H2 test layout — prod degrades to
+     * {@link TenantNotFoundException}).
      */
     private Company currentCompany() {
         String schemaName = TenantContext.getCurrentTenant().orElse("public");

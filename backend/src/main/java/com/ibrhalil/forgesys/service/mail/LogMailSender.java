@@ -4,12 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
-/**
- * {@code dev}-profile {@link MailSender} — no SMTP dependency locally; logs the message
- * (including the action URL, which carries the raw token — dev-only convenience, the
- * same trade-off the former K-21 {@code LogVerificationSender} made). Prod uses
- * {@code SmtpMailSender}.
- */
+/** {@code dev}-profile {@link MailSender}: logs the message incl. the raw-token URL (dev-only convenience). */
 @Slf4j
 @Component
 @Profile("dev")

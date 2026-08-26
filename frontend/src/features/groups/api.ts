@@ -1,16 +1,13 @@
 import { api, normalizePage, searchPost, toQuery } from '../../lib/api';
-import type { FilterCriteria, PageParams, PageResponse, SearchRequestBody } from '../../types';
+import type { PageParams, PageResponse, SearchOrListParams, SearchRequestBody } from '../../types';
 import type { AssignRolesRequest } from '../roles/types';
 import type { Group, CreateGroupRequest, AssignMembersRequest } from './types';
-
-/** List params with the K-49 structured column-filter clauses. */
-export type GroupListParams = PageParams & { filters?: FilterCriteria[] };
 
 export const groupsApi = {
   list: (params: PageParams = {}) =>
     api.get<PageResponse<Group>>(`/api/v1/groups${toQuery(params)}`).then(normalizePage),
   /** Engine list read: clauses route through `POST /groups/search`, plain reads stay on GET. */
-  searchOrList: ({ filters, ...params }: GroupListParams) =>
+  searchOrList: ({ filters, ...params }: SearchOrListParams) =>
     filters?.length
       ? searchPost<Group>('/api/v1/groups/search', { ...params } satisfies SearchRequestBody)
       : groupsApi.list(params),

@@ -8,13 +8,9 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Builds {@link ApiErrorResponse} instances from {@link ErrorCode}s.
- *
- * <p>The {@code traceId} is resolved from the MDC, populated per request by
- * {@code com.ibrhalil.forgesys.web.RequestMetadataFilter} (which honors the
- * {@code X-Request-Id} header or generates a UUID). Outside a request thread
- * (or before the filter has run) a fresh UUID is generated so the field is never
- * null and remains useful for log correlation.
+ * Builds {@link ApiErrorResponse} instances. {@code traceId} comes from the MDC
+ * (populated per request by {@code RequestMetadataFilter}); a fresh UUID is generated
+ * outside a request thread so the field is never null.
  */
 public final class ApiErrorFactory {
 

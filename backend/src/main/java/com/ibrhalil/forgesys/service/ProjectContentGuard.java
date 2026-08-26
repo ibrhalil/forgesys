@@ -9,10 +9,9 @@ import org.springframework.stereotype.Component;
 import java.util.UUID;
 
 /**
- * Whether a typed project container holds content of its current type (K-45). While
- * it does, the project's type is locked ({@code project_type_change_forbidden}) —
- * mixed-content containers are the fragility this decision excludes. One check per
- * content module: tasks (pm), notes (notes), apps (apps).
+ * Whether a typed container holds content of its current type (K-45) — while it does,
+ * the type is locked ({@code project_type_change_forbidden}). One check per content
+ * module: tasks (pm), notes (notes), apps (apps).
  */
 @Component
 @RequiredArgsConstructor

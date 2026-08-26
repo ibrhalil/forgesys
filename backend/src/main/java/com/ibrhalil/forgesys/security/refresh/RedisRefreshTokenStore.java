@@ -27,25 +27,12 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Redis-backed {@link RefreshTokenStore} (dev/prod, K-34 + K-28). Token records are Redis
- * hashes keyed by {@code refresh:tok:<sha256>} (value carries state/userId/email/tenant
- * plus the K-28 session metadata: sessionId/ipAddress/userAgent/loginAt/lastSeen); a
- * per-user index set {@code refresh:idx:<tenant>:<userId>} backs
- * {@link #revokeAllForUser(UUID, String)} and {@link #listSessions(UUID, String)}.
- * TTL = refresh-token lifetime.
- *
- * <p>Rotation is an atomic Lua conditional: only an {@code ACTIVE} token flips to
- * {@code ROTATED} and returns its metadata; a {@code ROTATED} token reports reuse.
- * This closes the read-modify-write race two concurrent refreshes would otherwise open.
- * The stable {@code sessionId} and original device metadata are preserved across
- * rotation; only {@code lastSeen} advances.
- *
- * <p>Deliberate Redis-outage behavior ([RISK-36] P2 fix): {@link #issue} is the only
- * fail-closed path — a token that could not be stored must not be handed out, so the
- * exception propagates and maps to 503 {@code service_unavailable}. Every other
- * operation degrades: {@code rotate} reports {@code Unknown} (clean 401, no 500),
- * and the session/list/revoke reads return empty/false best-effort, matching the
- * store's existing best-effort contract. Recovery is automatic once Redis returns.
+ * Redis-backed {@link RefreshTokenStore} (dev/prod): token hashes at
+ * {@code refresh:tok:<sha256>} with session metadata, per-user index
+ * {@code refresh:idx:<tenant>:<userId>}, TTL = refresh lifetime. Rotation is an atomic
+ * Lua conditional (ACTIVE→ROTATED) closing the concurrent-refresh race. RISK-36: only
+ * {@link #issue} fails closed (→503); everything else degrades — rotate → Unknown
+ * (clean 401), session list/revoke → empty/false.
  */
 @Component
 @Profile("!test")
@@ -58,12 +45,7 @@ public class RedisRefreshTokenStore implements RefreshTokenStore {
     private static final String STATE_ACTIVE = "ACTIVE";
     private static final String STATE_ROTATED = "ROTATED";
 
-    /**
-     * Atomic rotate. Returns a flat list whose first element is a status
-     * ({@code OK}/{@code REUSE}/{@code NIL}); {@code OK} is followed by
-     * userId/email/tenant/sessionId/ipAddress/userAgent/loginAt so the caller can write
-     * the rotated record preserving the original device metadata.
-     */
+    /** Atomic rotate; returns {status, userId, email, tenant, sessionId, ip, ua, loginAt} so the rotated record preserves device metadata. */
     private static final RedisScript<List> ROTATE = new DefaultRedisScript<>("""
             if redis.call('EXISTS', KEYS[1]) == 0 then return {'NIL'} end
             if redis.call('HGET', KEYS[1], 'state') ~= 'ACTIVE' then
@@ -154,10 +136,8 @@ public class RedisRefreshTokenStore implements RefreshTokenStore {
         if (presented == null || presented.isBlank()) {
             return false;
         }
-        // Follow the rotation chain: a ROTATED record's `rotatedTo` successor is the
-        // live token of the SAME session (rotation preserves sessionId). Revoking an
-        // already-rotated token (logout racing a silent refresh) must kill the successor
-        // too, or the session survives logout and keeps showing ACTIVE to admins.
+        // Follow the rotation chain: revoking an already-rotated token (logout racing a
+        // silent refresh) must kill its rotatedTo successor too, or the session survives logout.
         boolean revokedAny = false;
         Set<String> visited = new HashSet<>();
         String currentHash = sha256Hex(presented);
@@ -236,10 +216,8 @@ public class RedisRefreshTokenStore implements RefreshTokenStore {
 
     @Override
     public List<ActiveSession> listAllSessions(String tenant) {
-        // Enumerate the tenant's per-user index keys (refresh:idx:<tenant>:<userId>) via
-        // SCAN, resolve the userId from each key, and reuse listSessions per user. No
-        // write-path change; bounded by the number of active refresh tokens. Tenant
-        // schema names contain no ':' so lastIndexOf cleanly splits the userId.
+        // Enumerate the tenant's per-user index keys via SCAN and aggregate listSessions
+        // per user; tenant schema names contain no ':' so lastIndexOf splits cleanly.
         String match = INDEX_PREFIX + (tenant == null ? "" : tenant) + ":*";
         Set<String> keys = new LinkedHashSet<>();
         try (Cursor<String> cursor = redis.scan(ScanOptions.scanOptions().match(match).count(200).build())) {

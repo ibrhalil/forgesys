@@ -7,7 +7,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * A record (row) of a custom app with its cell values (K-15 / Epic 3.0.B): map of
+ * A record (row) of a custom app with its cell values (K-15): map of
  * property id → raw JSON value. Absent key = empty cell.
  */
 public record AppRecordResponse(

@@ -10,12 +10,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * Renders {@link MailTemplate} HTML bodies. Lookup order per template: the {@code
- * forgesys.mail.templates-dir} filesystem override first ({@code infra/templates/} in
- * prod — ops can fix copy without a rebuild), then the classpath default
- * ({@code mail/<key>.<lang>.html}). Placeholders are plain {@code {{token}}} string
- * replacement — deliberately no expression language, so template content can never
- * execute code.
+ * Renders {@link MailTemplate} HTML bodies. Lookup per template: the
+ * {@code forgesys.mail.templates-dir} override first, then the classpath default.
+ * Placeholders are plain {@code {{token}}} string replacement — deliberately no
+ * expression language, so template content can never execute code.
  */
 @Component
 public class MailTemplateRenderer {
@@ -47,8 +45,7 @@ public class MailTemplateRenderer {
             if (Files.exists(override)) {
                 return readFile(override);
             }
-            // Fall through to the classpath default — a missing override must not
-            // silently disable a mail.
+            // Fall through to classpath — a missing override must not silently disable a mail.
         }
         try {
             ClassPathResource resource = new ClassPathResource("mail/" + fileName);
@@ -70,10 +67,7 @@ public class MailTemplateRenderer {
         return value == null ? "" : value;
     }
 
-    /**
-     * A fully rendered mail: final subject line + HTML body with every placeholder
-     * substituted.
-     */
+    /** A fully rendered mail: final subject + HTML body with placeholders substituted. */
     public record RenderedMail(String subject, String bodyHtml) {
     }
 }

@@ -14,11 +14,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 
-/**
- * Returns a uniform {@link ApiErrorResponse} (401, {@code auth_unauthenticated})
- * when an unauthenticated request reaches a protected resource. Replaces Spring
- * Security's default behavior of triggering a login redirect / 403 for stateless APIs.
- */
+/** Uniform JSON 401 {@code auth_unauthenticated} (replaces the default login redirect for stateless APIs). */
 @Component
 public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
 

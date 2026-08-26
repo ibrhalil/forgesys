@@ -15,22 +15,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.UUID;
 
 /**
- * Records administrative actions to {@code t_audit_logs} (K-19 layer 1). Each entry
- * captures <em>who</em> (actor id + name resolved from the Spring Security context),
- * <em>what</em> (action / entity type / entity id / entity name) and the request
- * metadata (client IP + trace id from {@link RequestContext}).
- *
- * <p><strong>Transaction isolation:</strong> the write runs in a
- * {@link Propagation#REQUIRES_NEW} transaction so it commits independently of the
- * caller's outcome &mdash; even if the audited operation rolls back, the attempt is
- * recorded. The write is best-effort: any failure is logged and swallowed so audit
- * logging can never break the business operation.
- *
- * <p>When there is no authenticated principal (startup, provisioning, background
- * jobs) the actor name falls back to {@link #SYSTEM_ACTOR} and the actor id is null.
- *
- * <p>Old/new value and high-risk request body capture are K-27 extensions and land
- * separately; this is the core <em>who-did-what-to-which-entity</em> record.
+ * Writes admin actions to {@code t_audit_logs} (K-19 layer 1): who (SecurityContext),
+ * what (action/entity), request metadata (IP + traceId from {@link RequestContext}).
+ * REQUIRES_NEW + best-effort — the write commits even when the business op rolls
+ * back and never breaks it. No authenticated principal → actor {@link #SYSTEM_ACTOR}.
+ * Rationale: docs/CODE_NOTES.md (backend/service → AuditService).
  */
 @Slf4j
 @Service
@@ -43,24 +32,11 @@ public class AuditService {
     private final AuditLogRepository auditLogRepository;
     private final ObjectProvider<AuditService> self;
 
-    /**
-     * @param action     stable action key, e.g. {@code user_created}
-     * @param entityType entity class label, e.g. {@code User}
-     * @param entityId   the affected entity's id, or {@code null} for bulk/cross-entity actions
-     * @param entityName human-readable entity label (email / name) for the activity feed, or {@code null}
-     */
     public void record(String action, String entityType, UUID entityId, String entityName) {
         recordDelta(action, entityType, entityId, entityName, null, null);
     }
 
-    /**
-     * Faz 2b delta capture: like {@link #record} but also persists the before/after state
-     * (as JSON strings in {@code old_value}/{@code new_value}) so the audit answers
-     * <em>"who granted/revoked which permission to whom"</em>, not just the action key.
-     * {@code oldValue}/{@code newValue} are caller-built JSON (see {@link #namesJson});
-     * {@code null} leaves a column unset. Use the plain {@link #record} overload when no
-     * delta applies (create/delete/status).
-     */
+    /** Like {@link #record}, plus the before/after delta (JSON via {@link #namesJson}). */
     public void recordDelta(String action, String entityType, UUID entityId, String entityName,
                             String oldValue, String newValue) {
         try {
@@ -71,11 +47,7 @@ public class AuditService {
         }
     }
 
-    /**
-     * Isolated write invoked through the {@code self} proxy so its REQUIRES_NEW
-     * commit (JPA flushes at commit, after the method body returns) is covered by
-     * {@link #record}'s try/catch, not the caller's transaction.
-     */
+    /** Isolated write via the self proxy — the flush-at-commit lands inside record's try/catch. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void recordInNewTx(String action, String entityType, UUID entityId, String entityName,
                               String oldValue, String newValue) {
@@ -94,12 +66,7 @@ public class AuditService {
         auditLogRepository.save(entry);
     }
 
-    /**
-     * Faz 2b: deterministic JSON array of names for the {@code old_value}/{@code new_value}
-     * audit columns (sorted, escaped). Dependency-free (names are simple role/permission/
-     * group strings); callers pass the before/after name collections so the audit record
-     * shows the exact privilege delta, not just the action key.
-     */
+    /** Deterministic sorted+escaped JSON array of names for the old/new value columns. */
     public static String namesJson(java.util.Collection<String> names) {
         if (names == null) {
             return null;

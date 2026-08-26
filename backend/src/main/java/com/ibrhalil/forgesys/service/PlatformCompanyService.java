@@ -34,10 +34,9 @@ import java.util.function.Supplier;
 public class PlatformCompanyService {
 
     /**
-     * Filterable/sortable attributes of the platform company list (K-49 — the list is
-     * now paged and engine-wired); {@code q} matches {@code name} and
-     * {@code subdomain}. {@code schemaName} stays deliberately unregistered (internal
-     * detail, same posture as {@link CompanyResponse}).
+     * Filterable/sortable attributes of the platform company list (K-49); {@code q}
+     * matches {@code name}/{@code subdomain}. {@code schemaName} deliberately
+     * unregistered (internal detail).
      */
     public static final FilterFieldSet FILTER_FIELDS = FilterFieldSet.builder()
             .field(Company_.NAME, FilterFieldType.STRING, true)
@@ -87,8 +86,7 @@ public class PlatformCompanyService {
                     .orElseThrow(() -> new ResourceNotFoundException("Company not found with id: " + id));
 
             if (!company.getStatus().canTransitionTo(status)) {
-                // [RISK-32] reject illegal transitions (e.g. TERMINATED->ACTIVE,
-                // ACTIVE->PROVISIONING) that would leave the tenant in a broken state.
+                // [RISK-32] reject transitions that would leave the tenant broken.
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR,
                         "Illegal company status transition: " + company.getStatus() + " -> " + status);
             }
@@ -99,11 +97,7 @@ public class PlatformCompanyService {
         return mapToResponse(saved);
     }
 
-    /**
-     * Executes the given operation with the TenantContext cleared,
-     * ensuring that queries hit the public schema without tenant interference.
-     * The original context is restored afterward.
-     */
+    /** Runs the op with TenantContext cleared (public schema) — the only sanctioned cross-tenant read path. */
     private <T> T executeWithoutTenantContext(Supplier<T> operation) {
         String originalTenant = TenantContext.getCurrentTenant().orElse(null);
         try {
@@ -117,8 +111,7 @@ public class PlatformCompanyService {
     }
 
     private CompanyResponse mapToResponse(Company company) {
-        // schemaName is intentionally omitted — internal detail, not part of
-        // the API contract (CompanyResponse internal leak cleanup).
+        // schemaName intentionally omitted — internal detail, not part of the API contract.
         return new CompanyResponse(
                 company.getId(),
                 company.getName(),

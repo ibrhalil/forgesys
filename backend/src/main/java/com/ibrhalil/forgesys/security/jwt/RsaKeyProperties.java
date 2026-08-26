@@ -3,16 +3,9 @@ package com.ibrhalil.forgesys.security.jwt;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * RSA key material for RS256 JWT signing/verification, loaded from externalized
- * config (e.g. {@code certs/*.pem} in prod). When neither PEM is configured, the
- * {@code JwtConfig} falls back to an ephemeral key pair (dev/test) — see
- * {@link RsaKeys#resolve(RsaKeyProperties)}.
- *
- * <p>Keys are NEVER committed (AGENTS "Never" rule). Generate with:
- * <pre>
- * openssl genrsa -out certs/private.pem 2048
- * openssl rsa -in certs/private.pem -pubout -out certs/public.pem
- * </pre>
+ * RSA key material for RS256 under {@code jwt.rsa.*} — NEVER committed.
+ * Generate: {@code openssl genrsa -out certs/private.pem 2048} then
+ * {@code openssl rsa -in certs/private.pem -pubout -out certs/public.pem}.
  */
 @ConfigurationProperties(prefix = "jwt.rsa")
 public record RsaKeyProperties(

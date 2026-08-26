@@ -13,17 +13,10 @@ import lombok.ToString;
 import java.util.UUID;
 
 /**
- * A tenant-shared note anchored to its NOTES-type project container (K-44, re-scoped
- * by K-45). Content is markdown text — rendered client-side with raw HTML disabled
- * (no server-side sanitizing burden; the client never injects HTML). The category is
- * a plain {@code UUID} column (not {@code @ManyToOne}) per the Task convention (no
- * lazy proxies / N+1); validity is enforced in the service and by the FK in
- * {@code module/notes/V1} ({@code ON DELETE SET NULL} — deleting a category keeps
- * its notes, they become uncategorized; the category must belong to the same project
- * as the note, enforced in the service).
- *
- * <p>Soft-deletable, optimistic-locked, tenant-audited. No uniqueness constraint
- * (note titles may repeat).
+ * Tenant-shared note anchored to its NOTES-type container (K-44, re-scoped by K-45).
+ * Content is markdown rendered client-side with raw HTML disabled; {@code categoryId}
+ * is a plain UUID (Task convention) with {@code ON DELETE SET NULL} in
+ * {@code module/notes/V1}. No uniqueness (titles may repeat).
  */
 @Entity
 @Getter

@@ -5,11 +5,9 @@ import { formatDate, shortenId } from '../../lib/format';
 // imports keep working.
 export { shortenId };
 
-/**
- * Pure helpers around app record cell values (JSON scalars keyed by property id).
- * Shared by the TABLE renderer display + inline edit and the record create modal —
- * kept free of React so they are directly unit-testable.
- */
+// Pure helpers around app record cell values (JSON scalars keyed by property id);
+// React-free by design so they stay directly unit-testable. Shared by the TABLE
+// renderer + record modal.
 
 /** Property types the UI can edit inline (USER/RELATION pickers land in a later part). */
 export const INLINE_EDITABLE_TYPES: readonly PropertyType[] = ['TEXT', 'NUMBER', 'SELECT', 'DATE'];
@@ -62,10 +60,7 @@ export function parseCellInput(
   }
 }
 
-/**
- * Seed the inline editor with the raw stored value ('' when empty). Dates come back
- * as yyyy-mm-dd already; NUMBER stays a string for the input field.
- */
+/** Seed the inline editor with the raw stored value ('' when empty); dates are already yyyy-mm-dd. */
 export function cellEditValue(prop: AppProperty, record: AppRecord): string {
   const value = record.values[prop.id];
   return value === undefined || value === null ? '' : String(value);
@@ -77,9 +72,8 @@ export function firstTextProperty(properties: AppProperty[]): AppProperty | unde
 }
 
 /**
- * Card title for the non-TABLE renderers (BOARD/CALENDAR/LIST/GALLERY): the first
- * TEXT property's value, falling back to a shortened record id. `resolve` (when
- * provided) lets callers swap in picker-aware labels (valueLabels resolver).
+ * Card title for the non-TABLE renderers: the first TEXT property's value (via the
+ * optional picker-aware `resolve`), falling back to a shortened record id.
  */
 export function recordTitle(
   record: AppRecord,
@@ -106,10 +100,9 @@ export interface RecordPatchResult {
 }
 
 /**
- * Diff a raw-string form draft against a record's stored values. For create, pass a
- * record with an empty `values` map — every filled field then becomes a change.
- * USER/RELATION drafts are picker-sourced ids and pass through without parsing
- * (the server validates existence).
+ * Diff a raw-string form draft against a record's stored values (for create, pass a
+ * record with an empty `values` map). USER/RELATION drafts are picker-sourced ids
+ * and pass through unvalidated (the server checks existence).
  */
 export function buildRecordPatch(
   properties: AppProperty[],

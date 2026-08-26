@@ -32,12 +32,10 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Flat custom-app surface (K-15, re-scoped by K-45): the cross-container list —
- * {@code ?projectId=} narrows it to one APPS container. Writes without an explicit
- * {@code projectId} land in the tenant's default APPS container. Properties/views are
- * nested under {@code /apps/{appId}/...} (see {@link AppPropertyController} /
- * {@link AppViewController}); records under {@link AppRecordController};
- * container-nested reads/writes on {@link ProjectAppController}.
+ * Flat cross-container app surface (K-15/K-45): {@code ?projectId=} narrows the
+ * list; writes without a {@code projectId} land in the default APPS container.
+ * Properties/views under {@code /apps/{appId}/...}; records in
+ * {@link AppRecordController}; container-nested paths in {@link ProjectAppController}.
  */
 @RestController
 @RequestMapping("/api/v1/apps")
@@ -48,9 +46,8 @@ public class AppController {
     private final PlanLimitService planLimitService;
 
     /**
-     * Plan limits for the App Builder usage indicators (K-42). Declared BEFORE the
-     * {@code /{id}} mapping for readability — Spring MVC gives literal segments
-     * precedence over path variables regardless of order.
+     * Plan limits for the App Builder usage indicators (K-42). Literal segments
+     * take precedence over {@code /{id}} path variables regardless of order.
      */
     @GetMapping("/plan-limits")
     @PreAuthorize("hasAuthority('apps:app:read')")
@@ -71,10 +68,7 @@ public class AppController {
         return ResponseEntity.ok(PageResponse.of(appBuilderService.search(q, qFields, projectId, pageable)));
     }
 
-    /**
-     * Filter-engine variant of the list: paging + multi-sort + structured filters +
-     * global {@code q} (optionally narrowed via {@code qFields}) in one POST body.
-     */
+    /** Filter-engine variant of the list: paging + multi-sort + filters + {@code q} in one POST body. */
     @PostMapping("/search")
     @PreAuthorize("hasAuthority('apps:app:read')")
     public ResponseEntity<PageResponse<AppResponse>> search(@Valid @RequestBody SearchRequest request) {

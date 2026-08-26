@@ -13,14 +13,7 @@ import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Base64;
 
-/**
- * Resolves the RSA key pair used for JWT signing/verification.
- *
- * <p>If both PEMs are configured (prod), they are parsed into an {@link KeyPair}.
- * Otherwise (dev/test) an ephemeral 2048-bit key pair is generated — convenient for
- * local development and tests, but tokens do not survive a restart and must never be
- * used in production (a warning is logged).
- */
+/** Resolves the RSA key pair: configured PEMs when present, otherwise ephemeral (dev/test only). */
 public final class RsaKeys {
 
     private static final Logger log = LoggerFactory.getLogger(RsaKeys.class);
@@ -29,18 +22,9 @@ public final class RsaKeys {
     }
 
     /**
-     * Resolves the RSA key pair used for JWT signing/verification.
-     *
-     * <p>If both PEMs are configured, they are parsed into an {@link KeyPair}. If not
-     * configured, the behavior depends on {@code failIfUnconfigured}:
-     * <ul>
-     *   <li>{@code true} (prod) — throws {@link IllegalStateException} fail-fast. An
-     *       unconfigured prod deployment must not silently start on an ephemeral key
-     *       (tokens wouldn't survive a restart and multi-instance clusters would each
-     *       mint under different keys → random 401s). [RISK-23]</li>
-     *   <li>{@code false} (dev/test) — generates an ephemeral 2048-bit key pair
-     *       (warning logged) so local dev/tests need no cert files.</li>
-     * </ul>
+     * PEMs when configured; otherwise fail-fast in prod (ephemeral keys break restarts
+     * and multi-instance clusters — RISK-23) or ephemeral 2048-bit with a warning in
+     * dev/test.
      */
     public static KeyPair resolve(RsaKeyProperties properties, boolean failIfUnconfigured) {
         if (properties != null && properties.isConfigured()) {

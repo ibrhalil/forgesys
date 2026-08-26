@@ -57,14 +57,10 @@ export function RecordTable({
 }) {
   const { t } = useT();
   const storageKey = `app-records-${app.id}`;
-  const { page, setPage, pageSize, setPageSize, sort, toggleSort } =
+  const { page, setPage, pageSize, setPageSize, sort, toggleSort, listParams } =
     useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' }, storageKey });
   // Self-mode server query is disabled while the panel feeds records (override).
-  const { data, isLoading, isFetching } = useRecords(override ? undefined : app.id, {
-    page,
-    size: pageSize,
-    sorts: [sort],
-  });
+  const { data, isLoading, isFetching } = useRecords(override ? undefined : app.id, listParams);
   const client = useClientPagination(override?.records ?? [], 10, storageKey);
   const patch = usePatchRecord(app.id);
   const delRecord = useDeleteRecord(app.id);

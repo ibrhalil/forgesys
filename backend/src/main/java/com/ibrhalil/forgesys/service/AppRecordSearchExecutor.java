@@ -17,22 +17,14 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Native PostgreSQL JSONB search over {@code t_app_record_values} (K-15 / Epic 3.0.B).
- * Executes filter/sort clauses already validated by {@link AppQueryValidator} — the SQL
- * is assembled exclusively from enum-derived fragments and explicitly numbered
- * positional parameters, so user input never becomes SQL text (the filter/sort criteria
- * ARE the query DSL — the deliberate 3.0.B spike outcome: no expression language, no
- * injection surface).
- *
- * <p>PostgreSQL-only ({@code @>} containment, {@code #>>} accessor, {@code ILIKE},
- * {@code ::numeric} casts — GIN-index backed via {@code jsonb_path_ops}); plain record
- * CRUD is portable and covered by H2 tests, this path is verified by the gated
- * {@code AppBuilderIT} against real PostgreSQL. Runs on the tenant's
- * {@code search_path} through the multi-tenant {@link EntityManager}.
- *
- * <p>Empty-cell semantics: a record with no value row for a property matches only
- * IS_EMPTY / IS_NOT_EMPTY — value operators ({@code EQ}, {@code GT}, ...) implicitly
- * require the cell to be non-empty.
+ * Native PostgreSQL JSONB search over {@code t_app_record_values} (K-15): executes
+ * clauses pre-validated by {@link AppQueryValidator} — SQL is assembled exclusively
+ * from enum-derived fragments + explicitly numbered {@code ?N} parameters, so user
+ * input never becomes SQL text (no expression language, no injection surface).
+ * PG-only ({@code @>}, {@code #>>}, {@code ILIKE}, {@code ::numeric}; GIN
+ * {@code jsonb_path_ops}) — verified by the gated {@code AppBuilderIT}. Empty cells
+ * match only IS_EMPTY/IS_NOT_EMPTY.
+ * Rationale: docs/CODE_NOTES.md (backend/service → AppRecordSearchExecutor).
  */
 @Repository
 public class AppRecordSearchExecutor {
@@ -44,8 +36,7 @@ public class AppRecordSearchExecutor {
 
     public Page<UUID> search(UUID appId, List<ValidatedFilter> filters, List<ValidatedSort> sorts,
                              Pageable pageable) {
-        // Fragments are appended strictly in final-SQL appearance order, with an
-        // explicit running parameter index (?1, ?2, ...) matching the bind list.
+        // Fragments appended in final-SQL order; the running ?N index matches the bind list.
         ParamSql where = new ParamSql();
         where.append("r.app_id = ?", appId);
         where.append("r.is_deleted = false");

@@ -7,10 +7,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.UUID;
 
-/**
- * Request/trace log entries (tenant schema). Read access is Specification-driven
- * (filter engine) — request logs have no associations, so no {@code @EntityGraph} is needed.
- */
+/** Request/trace log entries (tenant schema) — Specification-driven reads, no associations. */
 @Repository
 public interface RequestLogRepository extends JpaRepository<RequestLog, UUID>, JpaSpecificationExecutor<RequestLog> {
 }

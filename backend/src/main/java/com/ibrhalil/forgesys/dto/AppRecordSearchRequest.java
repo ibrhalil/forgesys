@@ -7,11 +7,9 @@ import jakarta.validation.constraints.Size;
 import java.util.List;
 
 /**
- * Body of {@code POST /api/v1/apps/{appId}/records/search} (K-15 / Epic 3.0.B):
- * property-value filters/sorts + paging, executed against the JSONB EAV store
- * (PostgreSQL {@code @>} containment / {@code #>>} text accessors, GIN-backed).
- * Limits mirror the generic filter engine: ≤10 filters, ≤5 sorts, page size ≤100
- * (value scans are heavier than column reads, so the page cap is tighter).
+ * Body of {@code POST /apps/{appId}/records/search} (K-15): property-value
+ * filters/sorts executed against the JSONB EAV store (PostgreSQL-only). Limits:
+ * ≤10 filters, ≤5 sorts, size ≤100 (value scans are heavier than column reads).
  */
 public record AppRecordSearchRequest(
         @Min(0) Integer page,

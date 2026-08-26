@@ -4,9 +4,8 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 /**
- * Note view. Carries the container/project and category names alongside the ids so
- * list rows can render chips without a second round-trip (the join-free lookups
- * happen server-side, batched per page — K-45).
+ * Note view carrying container/category names so list rows render chips without
+ * a second round-trip (batched server-side, K-45).
  */
 public record NoteResponse(
         UUID id,

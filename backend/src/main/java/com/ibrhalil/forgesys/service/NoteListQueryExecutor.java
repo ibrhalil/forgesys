@@ -22,15 +22,11 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Component;
 
 /**
- * Read side of the note list (K-49): a single Criteria DTO projection that carries
- * the category/project names as correlated scalar subqueries over the plain FK
- * columns (the K-45 convention — notes hold {@code categoryId}/{@code projectId} as
- * UUIDs, not associations), replacing the per-page batch name-resolution queries.
- * The resolved names are first-class filter/sort targets ({@code projectName},
- * {@code categoryName}) and stay in sync with the row by construction.
- *
- * <p>The referenced entity's {@code @SQLRestriction} applies inside the subqueries —
- * a soft-deleted category/project resolves to {@code null} rather than a stale name.
+ * Read side of the note list (K-49): category/project names carried as correlated
+ * scalar subqueries over the plain FK columns (K-45 — notes hold UUIDs, not
+ * associations), making them first-class filter/sort targets that stay in sync with
+ * the row by construction. {@code @SQLRestriction} applies inside the subqueries —
+ * a soft-deleted reference resolves to null.
  */
 @Component
 public class NoteListQueryExecutor {
@@ -38,11 +34,7 @@ public class NoteListQueryExecutor {
     @PersistenceContext
     private EntityManager entityManager;
 
-    /**
-     * Correlated scalar subquery resolving a referenced entity's name through a plain
-     * FK column (no association): {@code (select t.<nameAttr> from Target t where
-     * t.<idAttr> = root.<linkAttr>)}.
-     */
+    /** Correlated scalar subquery resolving a referenced entity's name via a plain FK column. */
     static FilterFieldSet.SubqueryExpression referencedName(Class<?> targetEntity, String linkIdAttribute,
             String targetIdAttribute, String targetNameAttribute) {
         return (root, query, cb) -> {

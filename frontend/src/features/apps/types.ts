@@ -3,13 +3,13 @@
 /** PropertyType (backend rejects FORMULA on create — deferred type). */
 export type PropertyType = 'TEXT' | 'NUMBER' | 'SELECT' | 'DATE' | 'USER' | 'RELATION' | 'FORMULA';
 
-/** ViewType — view CRUD/renderers land in a later part; typed for the detail response. */
+/** ViewType — how a view renders its records. */
 export type ViewType = 'TABLE' | 'BOARD' | 'CALENDAR' | 'GALLERY' | 'LIST';
 
 // ─── View filter/sort DSL (mirrors backend AppValueFilterCriteria et al.) ───
 
 /**
- * AppValueOperator — the 9 ops of the backend value DSL. BETWEEN/IN do not exist
+ * AppValueOperator — the 9 ops of the backend value DSL; BETWEEN/IN do not exist
  * (an open range is two rows: GTE + LT/LTE). Wire = uppercase enum name.
  */
 export type AppValueOperator =
@@ -100,10 +100,7 @@ export interface AppDetail extends App {
   views: AppView[];
 }
 
-/**
- * Plan limits for the usage indicators (GET /apps/plan-limits). Values come from
- * the backend PlanDefinition registry — never hardcoded client-side; -1 = unlimited.
- */
+/** Plan limits (GET /apps/plan-limits) — values from the backend registry; -1 = unlimited. */
 export interface AppPlanLimits {
   planKey: string;
   planName: string;
@@ -129,8 +126,7 @@ export interface AppRecord {
 
 export interface AppPropertyRequest {
   name: string;
-  /** Required on create AND update (backend @NotNull); on edit it must repeat
-   *  the existing type — changing it is rejected by the service. */
+  /** Required on create AND update (backend @NotNull); on edit it must repeat the existing type. */
   type: PropertyType;
   config?: AppPropertyConfig;
   required?: boolean;
@@ -143,10 +139,7 @@ export interface AppRecordRequest {
   values: Record<string, string | number | null>;
 }
 
-/**
- * View create/update payload: position is optional — create appends at max+1,
- * update keeps the current tab order (edits always resend the current position).
- */
+/** View create/update payload: position optional — create appends at max+1, update keeps current. */
 export interface AppViewRequest {
   name: string;
   type: ViewType;
@@ -156,10 +149,8 @@ export interface AppViewRequest {
 }
 
 /**
- * App create/update payload. Full PUT: `icon: null` clears it (the backend sets
- * the field unconditionally); omit only on create when empty. `projectId`: absent
- * on create → the default APPS container; on update a value moves the app between
- * APPS containers (null = unchanged).
+ * App create/update payload (full PUT): `icon: null` clears it; `projectId` absent
+ * on create → default APPS container, on update moves the app (null = unchanged).
  */
 export interface AppRequest {
   name: string;

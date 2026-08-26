@@ -1,10 +1,6 @@
 package com.ibrhalil.forgesys.exception;
 
-/**
- * Authentication failures (bad credentials, invalid/expired/revoked token, etc.).
- * Use the {@code ErrorCode}-based constructor to pick the precise failure code;
- * convenience factories cover the most common cases.
- */
+/** Authentication failures; convenience factories cover the most common codes. */
 public class AuthException extends BusinessException {
 
     public AuthException(ErrorCode errorCode, String message) {

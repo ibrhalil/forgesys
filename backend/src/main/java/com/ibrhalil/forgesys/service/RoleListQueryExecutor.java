@@ -4,10 +4,8 @@ import com.ibrhalil.forgesys.dto.PermissionResponse;
 import com.ibrhalil.forgesys.dto.RoleResponse;
 import com.ibrhalil.forgesys.dto.RoleSummary;
 import com.ibrhalil.forgesys.entity.BaseEntity_;
-import com.ibrhalil.forgesys.entity.Permission;
 import com.ibrhalil.forgesys.entity.Role;
 import com.ibrhalil.forgesys.entity.Role_;
-import com.ibrhalil.forgesys.web.filter.FilterFieldSet;
 import com.ibrhalil.forgesys.web.projection.ProjectionListQuery;
 import jakarta.annotation.Nullable;
 import jakarta.persistence.EntityManager;
@@ -28,13 +26,11 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Read side of the role list (K-49): one flat Criteria DTO projection (scalars +
- * permission count subquery) plus two batch queries resolving the page's explicit
- * permission and parent-role summaries. {@code permissions}/{@code parents} stay
- * batched lists rather than projection columns (they carry descriptions / full
- * summaries); the count subquery makes the column filterable and sortable in the
- * database. Soft-deleted permissions/parents are excluded by the entity-path
- * {@code @SQLRestriction}.
+ * Read side of the role list (K-49): one flat Criteria DTO projection + two batch
+ * queries resolving the page's explicit-permission and parent summaries.
+ * {@code permissions}/{@code parents} stay batched lists (they carry full summaries);
+ * the count subquery keeps {@code permissionCount} filterable/sortable in the DB.
+ * Soft-deleted excluded by the entity-path {@code @SQLRestriction}.
  */
 @Component
 public class RoleListQueryExecutor {

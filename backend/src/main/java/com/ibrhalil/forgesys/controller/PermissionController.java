@@ -44,10 +44,7 @@ public class PermissionController {
         return ResponseEntity.ok(PageResponse.of(permissionService.search(q, qFields, pageable)));
     }
 
-    /**
-     * Filter-engine variant of the list: paging + multi-sort + structured filters +
-     * global {@code q} (optionally narrowed via {@code qFields}) in one POST body.
-     */
+    /** Filter-engine variant of the list: paging + multi-sort + filters + {@code q} in one POST body. */
     @PostMapping("/search")
     @PreAuthorize("hasAuthority('iam:permission:read')")
     public ResponseEntity<PageResponse<PermissionResponse>> search(@Valid @RequestBody SearchRequest request) {

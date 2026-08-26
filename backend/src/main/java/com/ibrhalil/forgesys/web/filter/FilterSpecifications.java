@@ -18,15 +18,12 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Translates a global {@code q} (optionally narrowed to {@code qFields}) plus
- * {@link FilterCriteria} clauses into a combined {@link Specification} (filters
- * AND-joined; {@code q} OR-CONTAINS over the registered searchable fields, or over
- * the selected subset when {@code qFields} is given). All validation happens here,
- * eagerly at build time — an invalid request fails with 400 {@code validation_error}
- * before any query runs, never as a mid-execution 500. Value parsing goes through
- * {@link FilterValueParser}; expression resolution through {@link FilterFieldSet#resolve}
- * (direct / to-one-joined / subquery fields) and EXISTS predicates for membership
- * fields.
+ * Builds the combined {@link Specification} from a global {@code q} (optionally
+ * narrowed to {@code qFields}) plus {@link FilterCriteria} clauses (filters
+ * AND-joined, {@code q} OR-CONTAINS over searchable fields). All validation is
+ * eager at build time — invalid requests fail 400 {@code validation_error} before
+ * any query runs.
+ * rationale: docs/CODE_NOTES.md (backend/web → FilterSpecifications)
  */
 public final class FilterSpecifications {
 
@@ -42,8 +39,7 @@ public final class FilterSpecifications {
 
     /**
      * @param qFields optional subset of searchable field names the {@code q} term is
-     *                matched against (smart-search field targeting); unknown or
-     *                non-searchable names fail with 400
+     *                matched against; unknown or non-searchable names fail with 400
      */
     public static <T> Specification<T> from(FilterFieldSet fields, String q, List<String> qFields,
             List<FilterCriteria> filters) {
@@ -58,8 +54,6 @@ public final class FilterSpecifications {
         }
         return parts.isEmpty() ? Specification.unrestricted() : Specification.allOf(parts);
     }
-
-    // ── q: OR over searchable fields, case-insensitive containment ──
 
     private static <T> Specification<T> search(FilterFieldSet fields, List<String> qFields, String q) {
         List<FilterFieldSet.RegisteredField> searchable = fields.searchableFields();
@@ -96,8 +90,6 @@ public final class FilterSpecifications {
         }
         return selected;
     }
-
-    // ── single clause ──
 
     private static <T> Specification<T> criteria(FilterFieldSet fields, FilterCriteria criteria) {
         FilterFieldSet.RegisteredField field = fields.get(criteria.field());
@@ -140,17 +132,10 @@ public final class FilterSpecifications {
         };
     }
 
-    // ── membership (collection contains / is empty) — correlated EXISTS ──
-
     /**
-     * Membership predicates over a plural association of the root: {@code IN} /
-     * {@code NOT_IN} restrict the EXISTS to members whose id is in the values;
-     * {@code IS_NULL} / {@code IS_NOT_NULL} run it unrestricted (empty / non-empty
-     * collection). Direct form correlates the association on the root; inverse form
-     * starts from the member entity and correlates back through its association
-     * (join tables owned by the other side). Correlated joins apply the member
-     * entity's {@code @SQLRestriction} (soft-deleted members are excluded), so the
-     * semantics match what the associations resolve to elsewhere.
+     * Correlated EXISTS: {@code IN}/{@code NOT_IN} restrict to member ids,
+     * {@code IS_NULL}/{@code IS_NOT_NULL} test emptiness. Correlated joins apply the
+     * member entity's {@code @SQLRestriction} (soft-deleted members excluded).
      */
     private static Predicate membershipPredicate(FilterFieldSet.RegisteredField field, FilterOperator operator,
             List<Object> values, Root<?> root, CriteriaQuery<?> query, CriteriaBuilder cb) {
@@ -200,16 +185,10 @@ public final class FilterSpecifications {
         }
     }
 
-    // ── criteria helpers (LIKE escaping, Comparable casts) ──
-
     /**
-     * Case-insensitive LIKE: the column is lowered by the DB and the pattern was
-     * lowered with {@code Locale.ROOT} in Java. This assumes the DB lower() folds
-     * ASCII the same way Locale.ROOT does — true for the en-locale PostgreSQL
-     * instances and for the H2 test JVM (whose default locale is pinned to English
-     * via the surefire {@code user.language=en} argLine; a Turkish-locale JVM would
-     * otherwise turn {@code lower('I')} into {@code 'ı'} and break case-insensitive
-     * search on H2).
+     * Case-insensitive LIKE: column lowered by the DB, pattern lowered with
+     * {@code Locale.ROOT} — assumes the DB lower() folds ASCII identically
+     * (en-locale PG; H2 test JVM pinned via surefire {@code user.language=en}).
      */
     private static Predicate likeIgnoreCase(CriteriaBuilder cb, Expression<String> path, String pattern) {
         return cb.like(cb.lower(path), pattern, '\\');
@@ -230,13 +209,7 @@ public final class FilterSpecifications {
         return cast;
     }
 
-    /**
-     * Comparison predicates for {@code Comparable}-typed fields (TEMPORAL, DATE,
-     * NUMERIC, INT). The unchecked casts pin one {@code Y} for the whole
-     * expression/value pair, which resolves the {@code CriteriaBuilder} overload
-     * ambiguity — values were parsed to the field's declared type by
-     * {@link FilterValueParser}, so erasure keeps them type-correct at runtime.
-     */
+    /** Unchecked casts pin one {@code Y} per expression/value pair — resolves the {@code CriteriaBuilder} overload ambiguity. */
     @SuppressWarnings("unchecked")
     private static <Y extends Comparable<? super Y>> Predicate comparablePredicate(
             CriteriaBuilder cb, Expression<?> path, FilterOperator operator, List<Object> values) {

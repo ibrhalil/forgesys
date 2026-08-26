@@ -5,10 +5,9 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * The single self endpoint ({@code GET /api/v1/users/me}): the full self view (DB
- * profile) plus the caller's authorities embedded in the access token (K-37 — the
- * former claims-only {@code GET /api/v1/auth/me} was removed; this endpoint serves
- * both the SPA bootstrap and the profile page).
+ * The single self view ({@code GET /api/v1/users/me}, K-37): DB profile + the
+ * authorities embedded in the access token; backs the SPA bootstrap and the
+ * profile page.
  */
 public record MeResponse(
         UUID id,

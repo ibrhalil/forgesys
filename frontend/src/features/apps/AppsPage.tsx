@@ -20,16 +20,9 @@ import { AppFormModal } from './components/AppFormModal';
 
 export function AppsPage() {
   const { t } = useT();
-  const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, searchFields, setSearchFields, filters, setFilters, q } =
+  const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, searchFields, setSearchFields, filters, setFilters, q, listParams } =
     useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'apps' });
-  const { data, isLoading, isFetching } = useApps({
-    page,
-    size: pageSize,
-    sorts: [sort],
-    q: q || undefined,
-    qFields: searchFields.length ? searchFields : undefined,
-    filters: filters.length ? filters : undefined,
-  });
+  const { data, isLoading, isFetching } = useApps(listParams);
   // Usage indicator: unfiltered total via a one-row probe (the list above is q-filtered).
   const { data: usage } = useApps({ page: 0, size: 1 });
   const { data: planLimits } = usePlanLimits();

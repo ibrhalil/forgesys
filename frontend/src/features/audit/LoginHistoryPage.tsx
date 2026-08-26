@@ -28,18 +28,13 @@ export function LoginHistoryPage() {
   const [success, setSuccess] = useState<'all' | 'true' | 'false'>('all');
   const {
     page, setPage, pageSize, setPageSize, sort, toggleSort,
-    search, setSearch, searchFields, setSearchFields, filters, setFilters, q,
+    search, setSearch, searchFields, setSearchFields, filters, setFilters, listParams,
   } = useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' }, storageKey: 'login-history' });
 
   const successParam = success === 'all' ? undefined : success === 'true';
   const { data, isLoading, isFetching } = useLoginHistory({
-    page,
-    size: pageSize,
-    sort: `${sort.field},${sort.dir}`,
+    ...listParams,
     success: successParam,
-    q: q || undefined,
-    qFields: searchFields.length ? searchFields : undefined,
-    filters: filters.length ? filters : undefined,
   });
 
   // Aligned with the backend's searchable registrations (AuditQueryService.LOGIN_HISTORY_FIELDS).

@@ -10,15 +10,10 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 
 /**
- * Redis-backed {@link TokenBlacklistService} (dev/prod, K-34). One key per revoked
- * {@code jti}: {@code bl:jti:<jti> = "1"}, TTL = remaining access-token lifetime.
- *
- * <p>Deliberate Redis-outage behavior: the blacklist is a defense-in-depth layer on
- * top of signature + expiry + {@code tokenInvalidBefore} ([RISK-21]), so both
- * operations degrade rather than throwing — a Redis blip must not 500 every
- * authenticated request or break logout. {@link #blacklist} is best-effort (the
- * skipped entry simply expires with the token's TTL); {@link #isBlacklisted} fails
- * OPEN (the exposure window is bounded by the short access-token lifetime).
+ * Redis-backed blacklist (dev/prod): {@code bl:jti:<jti>} = "1", TTL = remaining
+ * token lifetime. Fail-open by design (RISK-36) — defense-in-depth on top of signature
+ * + expiry + {@code tokenInvalidBefore}, so a Redis blip must not 500 every request:
+ * writes are best-effort (the token expires anyway), reads fail OPEN.
  */
 @Component
 @Profile("!test")

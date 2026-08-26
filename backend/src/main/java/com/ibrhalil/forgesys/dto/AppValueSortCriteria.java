@@ -6,10 +6,8 @@ import jakarta.validation.constraints.Pattern;
 import java.util.Locale;
 
 /**
- * One sort clause over a custom app property value (K-15 / Epic 3.0.B).
- * {@code propertyId} is either a property id of the app or the reserved
- * {@code createdAt} (record creation time). {@code direction} defaults to {@code asc}
- * (same normalization as {@link SortCriteria}).
+ * One sort clause over a custom app property value (K-15); {@code propertyId}
+ * is a property id or the reserved {@code createdAt}. Direction defaults to asc.
  */
 public record AppValueSortCriteria(
         @NotBlank String propertyId,

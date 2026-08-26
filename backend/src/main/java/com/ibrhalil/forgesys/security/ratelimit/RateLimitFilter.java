@@ -18,16 +18,11 @@ import tools.jackson.databind.ObjectMapper;
 import java.io.IOException;
 
 /**
- * Edge rate limiting on the public auth endpoints (Faz 3). Complements the per-account
- * brute-force lockout ([RISK-22]) with a per client-IP + tenant limit, closing the
- * credential-stuffing path (one IP guessing across many accounts, and the unknown-email
- * path that never increments any account's lockout counter).
- *
- * <p>Runs inside the Spring Security chain (registered before {@code JwtAuthenticationFilter})
- * so a blocked request never reaches the controller or pays the BCrypt cost. Keyed by
- * {@code scope:tenant:clientIp}; scope is derived from the request path (login / verify /
- * refresh). On block it short-circuits with {@code 429 auth_rate_limited} + a
- * {@code Retry-After} header. Disabled wholesale via {@code forgesys.security.rate-limit.enabled}.
+ * Edge rate limiting of the public auth endpoints (Faz 3), keyed by
+ * {@code scope:tenant:clientIp} — complements the per-account lockout (RISK-22) by
+ * closing the credential-stuffing path (one IP across many accounts; unknown emails
+ * never increment any lockout counter). Runs before JWT decode; a blocked request
+ * short-circuits with {@code 429 auth_rate_limited} + {@code Retry-After}.
  */
 @Component
 public class RateLimitFilter extends OncePerRequestFilter {

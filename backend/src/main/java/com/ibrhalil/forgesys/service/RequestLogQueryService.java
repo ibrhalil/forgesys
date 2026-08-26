@@ -22,21 +22,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * Read side of the request/trace log (K-19 layer 3 + K-27). Returns paged views
- * over a tenant's {@code t_request_logs}; the controller guards it with
- * {@code iam:audit:read}.
- */
+/** Read side of the request/trace log (K-19 layer 3 + K-27); {@code iam:audit:read} in the controller. */
 @Service
 @RequiredArgsConstructor
 public class RequestLogQueryService {
 
     /**
-     * Filterable/sortable attributes of the request log (K-49 — every displayed
-     * column); {@code q} matches {@code path}, {@code traceId}, {@code username},
-     * {@code userAgent}. {@code status} is INT-typed (HTTP status code — numeric
-     * compare, e.g. GTE 400); {@code requestBody} stays deliberately unregistered
-     * (masked high-risk payload, not a filter target).
+     * Filterable/sortable request-log attributes (K-49); {@code q} matches path,
+     * traceId, username, userAgent. {@code status} is INT (numeric compare, e.g.
+     * GTE 400); {@code requestBody} deliberately unregistered (masked payload).
      */
     public static final FilterFieldSet REQUEST_LOG_FIELDS = FilterFieldSet.builder()
             .field(RequestLog_.TRACE_ID, FilterFieldType.STRING, true)

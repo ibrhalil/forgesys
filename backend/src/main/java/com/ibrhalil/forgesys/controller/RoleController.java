@@ -46,10 +46,7 @@ public class RoleController {
         return ResponseEntity.ok(PageResponse.of(roleService.search(q, qFields, pageable)));
     }
 
-    /**
-     * Filter-engine variant of the list: paging + multi-sort + structured filters +
-     * global {@code q} (optionally narrowed via {@code qFields}) in one POST body.
-     */
+    /** Filter-engine variant of the list: paging + multi-sort + filters + {@code q} in one POST body. */
     @PostMapping("/search")
     @PreAuthorize("hasAuthority('iam:role:read')")
     public ResponseEntity<PageResponse<RoleResponse>> search(@Valid @RequestBody SearchRequest request) {
@@ -89,7 +86,7 @@ public class RoleController {
         return ResponseEntity.ok(roleService.setPermissions(id, request));
     }
 
-    /** Faz 4a: replace the roles this role inherits permissions from (role inheritance). */
+    /** Replaces the roles this role inherits permissions from (role inheritance). */
     @PutMapping("/{id}/parents")
     @PreAuthorize("hasAuthority('iam:role:write')")
     public ResponseEntity<RoleResponse> setParents(@PathVariable UUID id,

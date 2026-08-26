@@ -8,11 +8,9 @@ import jakarta.validation.constraints.Size;
 import java.util.List;
 
 /**
- * One filter clause of a {@link SearchRequest}. {@code values} are wire strings parsed
- * by the filter engine per the field's registered type (UUID / ISO-8601 / boolean /
- * enum name / raw string); a parse failure is a 400 {@code validation_error} naming the
- * field. Operator-specific arity (e.g. BETWEEN = exactly 2, IN = 1..100) is enforced
- * by the engine.
+ * One filter clause of a {@link SearchRequest}; {@code values} are wire strings
+ * parsed per the field's registered type (parse failure → 400 naming the field).
+ * Operator arity (BETWEEN = 2, IN = 1..100) is enforced by the engine.
  */
 public record FilterCriteria(
         @NotBlank String field,

@@ -15,12 +15,10 @@ import java.util.UUID;
 
 /**
  * Validates a view config against the app's property set and serializes the canonical
- * JSON stored in {@code t_app_views.config} (K-15 / Epic 3.0.B). Filters/sorts are
- * delegated to {@link AppQueryValidator} (shared with record search — one wire shape);
- * this class owns the view-type-specific anchors: BOARD requires a {@code groupBy}
- * (SELECT property), CALENDAR requires a {@code dateProperty} (DATE property), other
- * view types carry neither. Structured JSON only — the deliberate 3.0.B spike outcome:
- * no free-text expression language, so no expression-injection surface exists.
+ * JSON for {@code t_app_views.config} (K-15). Filters/sorts delegated to
+ * {@link AppQueryValidator}; this class owns the type anchors: BOARD requires a
+ * {@code groupBy} (SELECT), CALENDAR a {@code dateProperty} (DATE). Structured JSON
+ * only — no expression language, no injection surface.
  */
 @Component
 @RequiredArgsConstructor
@@ -30,10 +28,8 @@ public class AppViewConfigValidator {
     private final ObjectMapper objectMapper;
 
     /**
-     * @return the canonical JSON to persist, or {@code null} for an absent config.
-     * A {@code null} config is treated as an EMPTY config — required anchors (BOARD
-     * {@code groupBy}, CALENDAR {@code dateProperty}) are enforced even when the
-     * request carries no config object at all.
+     * @return canonical JSON to persist ({@code null} for an absent config). Required
+     * anchors are enforced even when the request carries no config object at all.
      */
     public String validateAndSerialize(ViewType viewType, AppViewConfigDto config,
                                        Map<UUID, AppProperty> properties) {

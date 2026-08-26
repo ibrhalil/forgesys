@@ -14,16 +14,10 @@ import jakarta.persistence.EntityListeners;
 import java.util.UUID;
 
 /**
- * One cell of the EAV model (K-15 / Epic 3.0.B): the {@link PropertyType}-validated
- * value of one {@link AppProperty} on one {@link AppRecord}, stored as raw JSON text in
- * a {@code jsonb} column (mapped as plain {@code String} + {@code columnDefinition} —
- * the established codebase JSONB convention from {@link AuditLog}, with
- * {@code stringtype=unspecified} handling the PG bind).
- *
- * <p><em>No soft delete</em> ({@link GeneratedIdAuditEntity}): value rows are dependent
- * data — clearing a value removes the row, re-setting inserts it again (plain UNIQUE
- * {@code (record_id, property_id)} instead of a partial index). A JSON {@code null}
- * value is not stored; absence of a row = empty cell.
+ * One EAV cell (K-15): raw JSON in a {@code jsonb} column (String mapping, the
+ * {@link AuditLog} convention; relies on {@code stringtype=unspecified}). No soft
+ * delete — clear = row delete, re-set = insert (plain UNIQUE
+ * {@code (record_id, property_id)}); a missing row means an empty cell.
  */
 @Entity
 @Getter
@@ -47,10 +41,9 @@ public class AppRecordValue extends GeneratedIdAuditEntity {
     private UUID propertyId;
 
     /**
-     * Raw JSON text (type-validated by the service before persisting). The backticks
-     * force identifier quoting — {@code value} is a reserved word on H2 (test profile
-     * DDL) and quoting keeps PostgreSQL consistent (unquoted folds to lowercase there,
-     * the migration column is lowercase too).
+     * Raw JSON text, type-validated by the service. Backticks force identifier
+     * quoting — {@code value} is a reserved word on H2; quoting stays consistent
+     * with PG's lowercase folding.
      */
     @Column(name = "`value`", columnDefinition = "jsonb")
     private String value;

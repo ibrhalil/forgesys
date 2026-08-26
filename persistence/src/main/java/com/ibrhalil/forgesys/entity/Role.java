@@ -40,12 +40,8 @@ public class Role extends BaseEntity {
     private String description;
 
     /**
-     * Whether this role implicitly holds <em>every</em> permission in the tenant. When
-     * true, {@code CustomUserDetailsService.resolvePermissionNames} returns all
-     * permission names for any user whose effective-role closure includes this role,
-     * ignoring the explicit {@link #permissions} set (which is a subset). The built-in
-     * {@code Admin} role is seeded true; user-defined roles are toggled via the
-     * permissions UI ({@code AssignPermissionsRequest.all}). Backed by tenant V8.
+     * Implicitly holds <em>every</em> permission in the tenant — the seeded
+     * {@code Admin} role carries it; user-defined roles toggle it via the permissions UI.
      */
     @Column(name = "all_permissions", nullable = false)
     private boolean allPermissions;
@@ -65,12 +61,8 @@ public class Role extends BaseEntity {
     private Set<Permission> permissions = new HashSet<>();
 
     /**
-     * Faz 4a role inheritance: the roles whose permissions this role <em>inherits</em>.
-     * A role's effective permission set is its own {@link #permissions} plus the
-     * (transitive) permissions of every {@code parentRoles} entry. Resolved recursively
-     * by {@code CustomUserDetailsService.resolveAuthorities} with a visited-set guard, so
-     * even a malformed cycle can't infinite-loop. {@code RoleService.setParents} enforces
-     * acyclicity (no self-parent, no path back to the child) on assignment.
+     * Faz 4a role inheritance: the roles whose permissions this role <em>inherits</em>
+     * (transitively; {@code RoleService.setParents} enforces acyclicity).
      */
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(

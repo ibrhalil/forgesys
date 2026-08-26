@@ -46,31 +46,12 @@ import java.time.ZoneOffset;
 import java.util.UUID;
 
 /**
- * Two-phase tenant provisioning (K-21). Replaces the legacy single-phase
- * {@code provisionTenant} flow (removed alongside the {@code email_domain} column).
- *
- * <ol>
- *   <li>{@link #createPendingCompany} — light, fully transactional: validates
- *       uniqueness, inserts a {@code PROVISIONING} {@link Company} and a
- *       {@link TenantVerificationToken}, then hands the verification URL to
- *       {@link com.ibrhalil.forgesys.service.mail.MailSender}. NO schema CREATE, NO Flyway, NO admin user —
- *       squatting is cheap.</li>
- *   <li>{@link #verifyAndProvision} — heavy, triggered by the user clicking the link:
- *       consumes the token, runs {@code CREATE SCHEMA} + programmatic Flyway, creates
- *       the admin user (with RBAC seed), flips the Company to {@code ACTIVE}, marks
- *       the token {@code usedAt}.</li>
- * </ol>
- *
- * <p>The system-tenant bootstrap (K-24, {@code SystemAdminBootstrapRunner}) avoids the
- * mail loop by calling {@link #provisionSystemTenant}, which runs both phases back to
- * back with verification sending suppressed.
- *
- * <p><strong>DEBT-10 (partial resolution):</strong> {@code createPendingCompany} is
- * fully transactional (DB writes only). {@code verifyAndProvision} is annotated
- * {@code @Transactional} for the Company/token/user writes, but {@code CREATE SCHEMA}
- * is an implicit commit in PostgreSQL so DDL escapes the transaction — partial-write
- * recovery is idempotency ({@code CREATE SCHEMA IF NOT EXISTS}, token {@code usedAt}
- * guard) rather than rollback.
+ * Two-phase tenant provisioning (K-21): {@link #createPendingCompany} (light,
+ * transactional — no schema/DDL/admin) + {@link #verifyAndProvision} (heavy: CREATE
+ * SCHEMA + Flyway + admin user + ACTIVE). Bootstrap (K-24) uses
+ * {@link #provisionSystemTenant} (both phases, no mail). CREATE SCHEMA is an implicit
+ * commit in PostgreSQL — recovery is idempotency, not rollback (DEBT-10 partial).
+ * Rationale: docs/CODE_NOTES.md (backend/service → TenantProvisioningService).
  */
 @Slf4j
 @Service
@@ -92,12 +73,8 @@ public class TenantProvisioningService {
     private final MailSender mailSender;
     // Optional: RbacSeeder is @Profile("!test") — absent in tests, which never exercise provisioning.
     private final ObjectProvider<RbacSeeder> rbacSeederProvider;
-    // Self-proxy reference so createAdminUser can be invoked through the Spring proxy,
-    // which is required for @Transactional(REQUIRES_NEW) to take effect (RISK-26 fix:
-    // the outer verifyAndProvision transaction holds a public-schema connection acquired
-    // before TenantContext is switched; the admin user + RBAC seed must run in a fresh
-    // transaction that re-resolves the tenant schema and acquires a connection with the
-    // correct search_path).
+    // Self-proxy: @Transactional(REQUIRES_NEW) only takes effect through the proxy; the
+    // outer session is public-pinned (RISK-26) — see createAdminUser.
     private final ObjectProvider<TenantProvisioningService> self;
 
     @Value("${forgesys.security.app-base-url:http://localhost:3000}")
@@ -126,22 +103,9 @@ public class TenantProvisioningService {
     }
 
     /**
-     * Phase 2 — promotes a {@code PROVISIONING} Company to {@code ACTIVE}: creates the
-     * tenant schema, runs Flyway, creates the admin user, consumes the token.
-     *
-     * <p>[RISK-25] Token consumption is an atomic conditional UPDATE
-     * ({@link TenantVerificationTokenRepository#claimToken}) rather than the previous
-     * read-modify-write, so two concurrent verify requests sharing the same link cannot
-     * both pass the {@code isUsed()} check and double-provision the tenant. The first
-     * caller wins (claim returns 1); the second sees 0 and gets
-     * {@code TENANT_TOKEN_ALREADY_USED}. Validity/expiry are still checked by SELECT
-     * beforehand so the precise error code is preserved.
-     *
-     * <p>[RISK-30] The presented raw token is hashed before every lookup/claim — the
-     * DB stores only digests. After {@code createAdminUser} succeeds the token's
-     * {@code adminPasswordHash} is nulled (managed entity, flushes at commit); should
-     * this transaction roll back, the null rolls back too, so a DEBT-10 recovery
-     * retry still finds the hash.
+     * Phase 2 — promotes a {@code PROVISIONING} Company to {@code ACTIVE}: schema +
+     * Flyway + admin user + token consumption. Token claim is an atomic conditional
+     * UPDATE ([RISK-25]); the raw token is hash-at-rest ([RISK-30]).
      */
     @Transactional
     public CompanyVerifyResponse verifyAndProvision(String rawToken) {
@@ -157,19 +121,17 @@ public class TenantProvisioningService {
 
         Company company = verification.getCompany();
         if (company.getStatus() != CompanyStatus.PROVISIONING) {
-            // Token exists but the Company already moved past PROVISIONING — reject defensively.
+            // Company already moved past PROVISIONING — reject defensively.
             throw new BusinessException(ErrorCode.TENANT_TOKEN_ALREADY_USED);
         }
 
-        // [RISK-25] Atomic claim: only one concurrent caller wins. A 0 count means
-        // another verify request already stamped used_at between our SELECT and UPDATE.
+        // [RISK-25] Atomic claim: 0 rows means a concurrent verify already won.
         OffsetDateTime claimedAt = OffsetDateTime.now(ZoneOffset.UTC);
         int claimedRows = tokenRepository.claimToken(tokenHash, claimedAt);
         if (claimedRows == 0) {
             throw new BusinessException(ErrorCode.TENANT_TOKEN_ALREADY_USED);
         }
-        // Keep the managed entity in sync with the row the UPDATE just wrote (avoids a
-        // redundant second UPDATE; claimToken already persisted used_at).
+        // Keep the managed entity in sync with the UPDATE (avoids a redundant second UPDATE).
         verification.setUsedAt(claimedAt);
 
         log.info("Verifying tenant: subdomain={}, companyId={}", company.getSubdomain(), company.getId());
@@ -177,10 +139,8 @@ public class TenantProvisioningService {
         String schemaName = company.getSchemaName();
         createSchema(schemaName);
         runTenantMigrations(schemaName);
-        // RISK-26: set TenantContext BEFORE the REQUIRES_NEW proxy opens its Hibernate
-        // session — CurrentTenantIdentifierResolver resolves at session-open time, so the
-        // session must see the switched context to acquire a tenant-schema connection.
-        // (createAdminUser also sets it defensively, and clears in finally.)
+        // RISK-26: set TenantContext BEFORE the REQUIRES_NEW session opens — the
+        // schema resolver runs at session-open time (createAdminUser also sets defensively).
         TenantContext.setCurrentTenant(schemaName);
         User adminUser;
         try {
@@ -189,22 +149,19 @@ public class TenantProvisioningService {
             TenantContext.clear();
         }
 
-        // [RISK-30] The admin user exists — drop the pre-hashed credentials from the
-        // token row. Managed entity in this transaction: the null flushes at commit,
-        // and a rollback restores the hash (DEBT-10 recovery retries still work).
+        // [RISK-30] Drop the pre-hashed credentials now; a rollback restores the hash
+        // (DEBT-10 recovery retries still work).
         verification.setAdminPasswordHash(null);
 
-        // K-16 / Epic 3.0.A: FREE subscription + default module activations (permission
-        // seed + activation record; pm needs no extra migration — baseline tables).
-        // activateForCompany manages its own TenantContext + REQUIRES_NEW transaction.
+        // FREE subscription + default module activations (K-16); activateForCompany
+        // manages its own TenantContext + transaction.
         createDefaultSubscription(company);
         moduleActivationService.activateDefaultModules(company);
 
         company.setStatus(CompanyStatus.ACTIVE);
         Company saved = companyRepository.save(company);
 
-        // K-47: sample data seed — afterCommit so the seed's REQUIRES_NEW transaction
-        // sees the committed activation records + subscription (see registerSampleDataSeed).
+        // K-47: afterCommit so the seed's REQUIRES_NEW tx sees the committed rows.
         registerSampleDataSeed(saved, adminUser.getId());
 
         log.info("Tenant verified and provisioned: subdomain={}", saved.getSubdomain());
@@ -218,11 +175,8 @@ public class TenantProvisioningService {
     }
 
     /**
-     * Bootstrap-only auto-verify (K-24): runs phase 1 (no mail) then phase 2 in one
-     * call so the {@code SystemAdminBootstrapRunner} can provision the reserved
-     * {@code system} tenant without an email loop. Returns the activated Company.
-     * [RISK-30] phase 1 hands the raw token over in memory — the DB only keeps its
-     * digest, so re-reading the row is no longer possible.
+     * Bootstrap-only auto-verify (K-24): phase 1 (no mail) + phase 2 in one call; the
+     * raw token moves in memory only ([RISK-30] — the DB keeps just its digest).
      */
     @Transactional
     public Company provisionSystemTenant(CompanyRegisterRequest request) {
@@ -235,26 +189,14 @@ public class TenantProvisioningService {
 
     // --- internal helpers -------------------------------------------------
 
-    /**
-     * Phase 1 result: the register response plus the RAW token. The raw value never
-     * touches the DB ([RISK-30] hash-at-rest) — it is handed to the mail link or, on
-     * the bootstrap path, straight to {@code verifyAndProvision} in memory.
-     */
+    /** Phase 1 result + the RAW token ([RISK-30] hash-at-rest — raw never touches the DB). */
     private record PendingSignup(CompanyRegisterResponse response, String rawToken) {
     }
 
     /**
-     * K-47: registers the sample-data seed to run AFTER the provisioning transaction
-     * commits. The seed opens its own REQUIRES_NEW transaction (the outer session is
-     * {@code public}-pinned, RISK-26) and that transaction must SEE the
-     * {@code t_tenant_modules} activation records and the FREE subscription written by
-     * this one — under read-committed an inner transaction cannot, so a
-     * same-transaction call would fail the module gate (MODULE_NOT_ACTIVE) and the
-     * plan chain (SUBSCRIPTION_NOT_FOUND) and be silently swallowed by the seed's own
-     * fail-safe. afterCommit keeps the flow synchronous (same request) while ordering
-     * the seed after the commit; the guard covers non-transactional callers (unit
-     * tests). Fail-safe is two-layered: {@code seedForCompany} catches internally and
-     * the callback catches again, so a synchronization surprise never escapes.
+     * K-47: registers the seed to run AFTER commit — the seed's REQUIRES_NEW tx must
+     * see the committed activation + subscription rows; a same-tx call would fail
+     * those gates invisibly (read-committed) and be swallowed by the fail-safe.
      */
     private void registerSampleDataSeed(Company company, UUID adminUserId) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
@@ -302,8 +244,7 @@ public class TenantProvisioningService {
 
     private void issueToken(Company company, CompanyRegisterRequest request, String rawToken) {
         TenantVerificationToken token = new TenantVerificationToken();
-        // [RISK-30] hash-at-rest: only the SHA-256 digest is persisted; the raw token
-        // lives in the emailed link alone.
+        // [RISK-30] hash-at-rest: only the digest is persisted.
         token.setToken(TokenHasher.sha256Hex(rawToken));
         token.setCompany(company);
         token.setAdminEmail(request.adminEmail());
@@ -353,14 +294,10 @@ public class TenantProvisioningService {
     }
 
     /**
-     * Creates the tenant's first admin user (with the pre-hashed credentials carried by
-     * the verification token) and runs the RBAC seed; returns the persisted admin (its
-     * id feeds the post-commit sample-data seed, K-47). Runs in its own transaction
-     * (REQUIRES_NEW, invoked via the {@code self} proxy) because {@code verifyAndProvision}'s
-     * outer transaction holds a {@code public}-schema connection acquired before
-     * {@link TenantContext#setCurrentTenant(String)} is called; without a fresh
-     * transaction the admin write + RBAC seed would be issued against {@code search_path=public}
-     * and fail with "relation does not exist" (RISK-26).
+     * Creates the tenant's first admin (pre-hashed credentials from the token) + RBAC
+     * seed. REQUIRES_NEW via the self proxy: the outer session is {@code public}-pinned
+     * (RISK-26) — without a fresh tx the admin write would run against
+     * {@code search_path=public} and fail "relation does not exist".
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public User createAdminUser(String schemaName, TenantVerificationToken verification) {
@@ -385,10 +322,8 @@ public class TenantProvisioningService {
             user.setUserProfile(profile);
 
             userRepository.save(user);
-            // Seed RBAC (permission catalog + Admin role), then explicitly grant Admin
-            // to this first admin user — the ONLY place Admin is auto-assigned. Startup
-            // seeding never touches user roles (privilege-escalation fix, 2026-08-16).
-            // No-op in tests.
+            // assignAdminTo is the ONLY automatic Admin grant — startup seeding never
+            // touches user roles (2026-08-16 privilege-escalation fix). No-op in tests.
             rbacSeederProvider.ifAvailable(seeder -> {
                 seeder.seedForCurrentTenant();
                 seeder.assignAdminTo(user);
@@ -425,9 +360,8 @@ public class TenantProvisioningService {
     }
 
     /**
-     * Writes the new tenant's initial FREE subscription (K-16). Real plan selection /
-     * upgrades arrive in Faz 6. Fails fast when the plan row is missing —
-     * {@code PlanSyncRunner} seeds plans before any provisioning can run.
+     * Writes the initial FREE subscription (K-16); fails fast when the plan row is
+     * missing ({@code PlanSyncRunner} seeds plans before any provisioning runs).
      */
     private void createDefaultSubscription(Company company) {
         Plan freePlan = planRepository.findByKey(PlanDefinition.FREE.key())

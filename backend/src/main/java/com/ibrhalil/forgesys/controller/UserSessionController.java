@@ -21,25 +21,12 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Active-session management (K-28). Lists a user's currently usable refresh-token
- * sessions (one per device) and ends individual sessions or all of them.
- *
- * <p>Owns the {@code /api/v1/users/{id}/sessions} sub-resource namespace (K-37 rename:
- * name = path; the tenant-wide view lives in {@link SessionController}).
- * <p>Split by scope:
- * <ul>
- *   <li>Self — {@code /api/v1/users/me/sessions}: any authenticated user manages their
- *       own sessions. The literal {@code me} segment takes precedence over the
- *       {@code /{id}} variable (mirrors {@link UserProfileController}). The current
- *       device is flagged via the {@code sf_refresh_token} cookie.</li>
- *   <li>Admin — {@code /api/v1/users/{id}/sessions}: a holder of
- *       {@code iam:user:write} views or ends another user's sessions (remote revoke).</li>
- * </ul>
- *
- * <p>Ending a session drops its refresh token and stamps
- * {@code tokenInvalidBefore} (via {@link SessionService} -> {@code SessionRevocationService})
- * so the device's outstanding access token dies on its next request rather than at TTL.
- * See {@link SessionService}.
+ * Active-session management (K-28): self ({@code /users/me/sessions}, any
+ * authenticated user; current device flagged via the refresh cookie) and admin
+ * ({@code /users/{id}/sessions}, remote revoke). Ending a session drops its
+ * refresh token and stamps {@code tokenInvalidBefore} so the device's access
+ * token dies on its next request rather than at TTL.
+ * rationale: docs/CODE_NOTES.md (backend/web → UserSessionController)
  */
 @RestController
 @RequestMapping("/api/v1/users")
@@ -67,8 +54,7 @@ public class UserSessionController {
             HttpServletResponse response) {
         String refreshToken = cookieProperties.readRefreshCookie(request);
         sessionService.revokeMySession(principal.getUserId(), sessionId);
-        // If the caller ended their own current device, clear the refresh cookie so the
-        // browser stops sending a now-dead token.
+        // Clear the refresh cookie if the caller ended their own current device.
         expireIfCurrent(response, refreshToken, sessionId);
         return ResponseEntity.noContent().build();
     }
@@ -101,9 +87,7 @@ public class UserSessionController {
         }
         boolean currentEnded = sessionService.isCurrentSession(refreshToken, sessionId);
         if (currentEnded) {
-            // The caller ended their own current device: clear BOTH cookies so the
-            // browser drops the (now server-side-dead) access token immediately for an
-            // instant logout, not just the refresh cookie.
+            // Clear BOTH cookies — instant logout, not just the (now-dead) refresh.
             response.addHeader(HttpHeaders.SET_COOKIE, cookieProperties.expireCookie(
                     cookieProperties.effectiveCookieName(), "/"));
             response.addHeader(HttpHeaders.SET_COOKIE, cookieProperties.expireCookie(

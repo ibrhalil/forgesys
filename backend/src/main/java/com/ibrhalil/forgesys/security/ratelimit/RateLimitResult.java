@@ -1,9 +1,5 @@
 package com.ibrhalil.forgesys.security.ratelimit;
 
-/**
- * Outcome of a single rate-limit token consumption (Faz 3). When {@code allowed} is
- * {@code false} the request must be rejected with {@code 429} and {@code retryAfterSeconds}
- * surfaced as the {@code Retry-After} header so a well-behaved client backs off.
- */
+/** Token-consumption outcome; when blocked, surface {@code retryAfterSeconds} as {@code Retry-After}. */
 public record RateLimitResult(boolean allowed, long retryAfterSeconds) {
 }

@@ -12,11 +12,10 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * Tenant-wide active-session admin view (the "all sessions" table). Distinct from
- * {@link UserSessionController} (self / per-user under {@code /api/v1/users/*}) — this lists
- * every active session across all users of the request tenant so an admin can see who is
- * signed in where. Requires {@code iam:user:write} (same as the other admin session
- * endpoints); ending a session reuses {@code DELETE /api/v1/users/{id}/sessions/{sessionId}}.
+ * Tenant-wide active-session admin view ({@code iam:user:write}) — every active
+ * session across all users. Distinct from {@link UserSessionController} (self /
+ * per-user); ending a session reuses
+ * {@code DELETE /api/v1/users/{id}/sessions/{sessionId}}.
  */
 @RestController
 @RequestMapping("/api/v1/sessions")

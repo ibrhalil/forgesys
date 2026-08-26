@@ -6,10 +6,8 @@ import jakarta.validation.constraints.Size;
 import java.util.List;
 
 /**
- * Type-dependent config of a custom app property (K-15 / Epic 3.0.B): SELECT carries
- * {@code options} (required, non-empty), RELATION carries {@code targetAppId}
- * (required), all other types carry no config. Validated per type in
- * {@code AppBuilderService}; stored as canonical JSON in {@code t_app_properties.config}.
+ * Type-dependent config of a custom app property (K-15): SELECT carries
+ * {@code options}, RELATION carries {@code targetAppId}, others carry none.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record AppPropertyConfigDto(

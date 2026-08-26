@@ -46,17 +46,15 @@ public class AuthController {
 
     @PostMapping("/company/register")
     public ResponseEntity<CompanyRegisterResponse> registerCompany(@Valid @RequestBody CompanyRegisterRequest request) {
-        // K-21 phase 1: creates a PROVISIONING Company + verification token and emails the
-        // link. The tenant schema and admin user do not exist yet — the resource is not
-        // ready, so 202 Accepted (not 201 Created).
+        // Phase 1 only: PROVISIONING Company + token email — tenant not ready yet,
+        // so 202 Accepted, not 201 Created.
         CompanyRegisterResponse body = tenantProvisioningService.createPendingCompany(request);
         return ResponseEntity.accepted().body(body);
     }
 
     @PostMapping("/company/verify")
     public ResponseEntity<CompanyVerifyResponse> verifyCompany(@Valid @RequestBody CompanyVerifyRequest request) {
-        // K-21 phase 2: consumes the token, runs CREATE SCHEMA + Flyway + admin user,
-        // promotes the Company to ACTIVE. Synchronous (heavy) — see TenantProvisioningService.
+        // Phase 2: CREATE SCHEMA + Flyway + admin user; synchronous and heavy.
         CompanyVerifyResponse body = tenantProvisioningService.verifyAndProvision(request.token());
         return ResponseEntity.ok(body);
     }
@@ -67,21 +65,14 @@ public class AuthController {
         return ResponseEntity.ok(subdomainSuggestionService.suggest(request.name()));
     }
 
-    /**
-     * Consumes an email-verification token (user lifecycle, optional policy). Public —
-     * the tenant is resolved by {@code TenantFilter} from the subdomain-anchored link
-     * host; the token itself is single-use and digest-stored.
-     */
+    /** Consumes a single-use email-verification token; tenant resolved from the subdomain-anchored link host. */
     @PostMapping("/verify-email")
     public ResponseEntity<EmailVerificationResponse> verifyEmail(@Valid @RequestBody EmailVerifyRequest request) {
         userService.verifyEmail(request.token());
         return ResponseEntity.ok(new EmailVerificationResponse("E-posta adresiniz doğrulandı. Giriş yapabilirsiniz."));
     }
 
-    /**
-     * Starts the self-service password reset. ALWAYS 200 — unknown addresses and
-     * mail failures are indistinguishable from success (no account enumeration).
-     */
+    /** ALWAYS 200 — unknown addresses and mail failures are indistinguishable (no enumeration). */
     @PostMapping("/forgot-password")
     public ResponseEntity<EmailVerificationResponse> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
         userService.requestPasswordReset(request.email());
@@ -89,10 +80,7 @@ public class AuthController {
                 "E-posta adresi kayıtlıysa şifre sıfırlama bağlantısı gönderildi."));
     }
 
-    /**
-     * Completes the self-service password reset: consumes the single-use token,
-     * applies the new password and kills all of the user's sessions.
-     */
+    /** Consumes the reset token, applies the new password, kills all of the user's sessions. */
     @PostMapping("/reset-password")
     public ResponseEntity<EmailVerificationResponse> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
         userService.resetPasswordWithToken(request.token(), request.newPassword());
@@ -108,11 +96,7 @@ public class AuthController {
         return ResponseEntity.ok(body);
     }
 
-    /**
-     * Rotates the refresh token (cookie or body) and mints a fresh access token (K-34).
-     * Public (no access token required) — the tenant is resolved by {@code TenantFilter}
-     * and the new access token is bound to it.
-     */
+    /** Rotates the refresh token (cookie or body) and mints a fresh access token (K-34); public. */
     @PostMapping("/refresh")
     public ResponseEntity<LoginResponse> refresh(@RequestBody(required = false) RefreshRequest body,
                                                  HttpServletRequest request,
@@ -128,9 +112,8 @@ public class AuthController {
     public ResponseEntity<Void> logout(@AuthenticationPrincipal CustomUserDetails principal,
                                        HttpServletRequest request,
                                        HttpServletResponse response) {
-        // [K-34] Per-session logout: consume this device's refresh token + blacklist the
-        // current access token's jti (granular revoke). Other devices keep working — the
-        // user-scoped tokenInvalidBefore is reserved for password change/reset/reuse.
+        // Per-session logout (K-34): consume this device's refresh + blacklist the jti.
+        // tokenInvalidBefore stays reserved for password change/reset/reuse.
         UUID userId = principal == null ? null : principal.getUserId();
         String jti = principal == null ? null : principal.getJti();
         String refreshToken = resolveRefreshToken(null, request);

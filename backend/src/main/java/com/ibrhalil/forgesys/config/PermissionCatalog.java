@@ -3,26 +3,11 @@ package com.ibrhalil.forgesys.config;
 import java.util.List;
 
 /**
- * Catalog of built-in <em>core</em> permissions seeded into every tenant schema by
- * {@link RbacSeeder}. Permission names follow {@code {module}:{resource}:{action}`.
- *
- * <p>Two core namespaces:
- * <ul>
- *   <li>{@code iam:*} — tenant-scoped identity/admin operations (User/Role/Permission/Group
- *       CRUD + module management), enforced by {@code @PreAuthorize} on the RBAC controllers.</li>
- *   <li>{@code platform:*} — cross-tenant/platform operations (company management), reserved
- *       for the system tenant admin; enforced on {@code /api/v1/platform/**}.</li>
- * </ul>
- *
- * <p>Product-module permissions (e.g. {@code pm:*}) are owned by their
- * {@link ModuleDefinition} and seeded on module activation (K-16 / Epic 3.0.A), not into
- * every tenant — {@link #CORE} drives only the always-present rows in {@code t_permissions}.
- *
- * <p>The built-in {@code Admin} role implicitly holds every permission via the
- * {@code all_permissions} flag (set by {@code RbacSeeder}, resolved dynamically by
- * {@code CustomUserDetailsService} — no per-permission grant rows), so it stays complete
- * without the seeder re-syncing explicit grants; module permissions reach it automatically
- * once their rows are seeded on activation.
+ * Built-in CORE permission catalog seeded into every tenant: {@code iam:*} (tenant
+ * admin) + {@code platform:*} (cross-tenant, system tenant). Product-module
+ * permissions (pm/apps/notes) are owned by their {@link ModuleDefinition} and seed on
+ * activation. The Admin role holds everything via {@code all_permissions} — no grant
+ * rows to keep in sync.
  */
 public final class PermissionCatalog {
 
@@ -49,9 +34,8 @@ public final class PermissionCatalog {
     public static final String PLATFORM_COMPANY_READ = "platform:company:read";
     public static final String PLATFORM_COMPANY_WRITE = "platform:company:write";
 
-    // pm:* — project-management (the first product feature module, Faz 3 Stage 1).
-    // Definitions live in ModuleDefinition.PM (module-owned, seeded on activation);
-    // the constants stay here as the single naming source referenced by controllers.
+    // pm:* — definitions live in ModuleDefinition.PM (module-owned); constants here
+    // are the single naming source referenced by controllers.
     public static final String PM_PROJECT_READ = "pm:project:read";
     public static final String PM_PROJECT_WRITE = "pm:project:write";
     public static final String PM_PROJECT_DELETE = "pm:project:delete";
@@ -59,10 +43,8 @@ public final class PermissionCatalog {
     public static final String PM_TASK_WRITE = "pm:task:write";
     public static final String PM_TASK_DELETE = "pm:task:delete";
 
-    // apps:* — custom app builder (K-15 / Epic 3.0.B). Definitions live in
-    // ModuleDefinition.APPS (module-owned, seeded on activation); the constants stay
-    // here as the single naming source referenced by controllers. Property/view CRUD
-    // is covered by apps:app:write (they are part of the app definition, not data).
+    // apps:* — definitions in ModuleDefinition.APPS; property/view CRUD rides
+    // apps:app:write (part of the definition, not data).
     public static final String APPS_APP_READ = "apps:app:read";
     public static final String APPS_APP_WRITE = "apps:app:write";
     public static final String APPS_APP_DELETE = "apps:app:delete";
@@ -70,10 +52,8 @@ public final class PermissionCatalog {
     public static final String APPS_RECORD_WRITE = "apps:record:write";
     public static final String APPS_RECORD_DELETE = "apps:record:delete";
 
-    // notes:* — standalone notes module (K-44 / Epic 3.2). Definitions live in
-    // ModuleDefinition.NOTES (module-owned, seeded on activation); the constants stay
-    // here as the single naming source referenced by controllers. Category delete is
-    // covered by notes:category:write (categories are shared taxonomy, not data).
+    // notes:* — definitions in ModuleDefinition.NOTES; category delete rides
+    // notes:category:write (categories are shared taxonomy, not data).
     public static final String NOTES_NOTE_READ = "notes:note:read";
     public static final String NOTES_NOTE_WRITE = "notes:note:write";
     public static final String NOTES_NOTE_DELETE = "notes:note:delete";

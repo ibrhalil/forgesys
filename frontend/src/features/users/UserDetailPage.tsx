@@ -26,25 +26,12 @@ import { PERMISSIONS } from '../../lib/permissions';
 import { useT } from '../../lib/i18n';
 
 /**
- * The single user screen: view, edit and create in one page.
- *
- * - `/users/new` — create mode: full form (identity + initial roles/groups), on
- *   success navigates to the created user's view mode.
- * - `/users/:userId` — view mode: read-only panels (identity, profile, role/group
- *   chips). The Edit button puts the WHOLE page into edit mode — identity form plus
- *   role/group pickers under one Save/Cancel (email/username stay read-only — the
- *   backend only updates first/last name + enabled). This mirrors create exactly:
- *   one editing surface, one footer.
- *
- * Edit-mode save is diff-based and sequential (NOT atomic): only the changed parts
- * are sent (identity update / role set / group set), so unchanged assignments never
- * trigger redundant session revocations. A mid-sequence failure keeps edit mode
- * with the drafts intact; re-saving is idempotent (the already-sent part no longer
- * shows as dirty against the refetched user).
- *
- * Drafts are populated once, on entering edit mode (startEdit) — NOT from a `user`
- * effect — so a background refetch (a save invalidates ['users']) can never clobber
- * in-progress edits.
+ * The single user screen: create (`/users/new`) and view/edit (`/users/:userId`) in
+ * one page. Edit-mode save is diff-based and sequential (NOT atomic): only changed
+ * parts are sent (identity update / role set / group set), a mid-sequence failure
+ * keeps the drafts intact and re-saving is idempotent. Drafts are seeded once in
+ * `startEdit` — never from a `user` effect — so a background refetch (a save
+ * invalidates ['users']) cannot clobber in-progress edits.
  */
 export function UserDetailPage() {
   const { t } = useT();
@@ -73,7 +60,6 @@ export function UserDetailPage() {
   const [unlocking, setUnlocking] = useState(false);
   const [showPerms, setShowPerms] = useState(false);
 
-  // Form state (create + edit)
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
@@ -98,7 +84,6 @@ export function UserDetailPage() {
   };
 
   const cancelEdit = () => {
-    // Restore every draft from the loaded user.
     if (user) {
       setFirstName(user.firstName ?? '');
       setLastName(user.lastName ?? '');
@@ -116,7 +101,6 @@ export function UserDetailPage() {
 
   const handleSubmit = async (e?: FormEvent) => {
     e?.preventDefault();
-    // Client-side checks first — no backend round-trip for obviously invalid input.
     const errors: Record<string, string> = {};
     if (isCreate) {
       if (!email.trim()) errors.email = t('common.fieldRequired');
@@ -144,8 +128,7 @@ export function UserDetailPage() {
         return;
       }
       if (!user) return;
-      // Unified edit: diff each part against the persisted user and send only what
-      // changed (sequential, not atomic — see the component docblock).
+      // Diff-based sequential save — see the component docblock.
       const identityDirty =
         (user.firstName ?? '') !== firstName ||
         (user.lastName ?? '') !== lastName ||
@@ -192,17 +175,13 @@ export function UserDetailPage() {
       title={heading}
       actions={!isCreate && user ? (
         <>
-          {/* Head pattern: at most one visible action + overflow menu (RowMenu).
-              Same authority gates as the list row menu — the backend enforces the
-              real security; an empty items array renders no trigger. */}
           {canWrite && !editing && (
             <Button size="sm" variant="ghost" onClick={startEdit}>
               <LuPencil className="h-3.5 w-3.5" />
               {t('common.edit')}
             </Button>
           )}
-          {/* Hidden while editing — a dirty form must not trigger parallel mutations
-              (password reset, delete) from the overflow. */}
+          {/* Hidden while editing — a dirty form must not trigger parallel mutations. */}
           {!formActive && (
             <RowMenu
               ariaLabel={t('common.actions')}
@@ -212,7 +191,7 @@ export function UserDetailPage() {
                   ? [
                       { label: t('users.passwordBtn'), onClick: () => setResetting(true), icon: LuKeyRound },
                       { label: t('nav.sessions'), onClick: () => navigate(`/admin/users/${user.id}/sessions`), icon: LuMonitor },
-                      // Optional-policy email verification: only meaningful pre-verification.
+                      // Optional email verification: only meaningful pre-verification.
                       ...(user.emailVerified ? [] : [{
                         label: t('users.resendVerification'),
                         onClick: async () => {
@@ -225,16 +204,15 @@ export function UserDetailPage() {
                         },
                         icon: LuMailCheck,
                       }]),
-                    ]
-                  : []),
-                // Unlock only makes sense while an active lock window is running.
+                     ]
+                   : []),
+                // Unlock only while an active lock window is running.
                 ...(canWrite && isLocked(user)
                   ? [{ label: t('users.unlock'), onClick: () => setUnlocking(true), icon: LuLockOpen }]
                   : []),
-                // Effective permissions live behind a searchable modal — the page itself
-                // is iam:user:read gated, so every viewer may open it.
+                // iam:user:read gates the page — every viewer may open the modal.
                 { label: t('users.viewEffectivePerms'), onClick: () => setShowPerms(true), icon: LuListChecks },
-                /* Self-delete is rejected by the backend (409 self_delete_forbidden) — omit it on the actor's own page. */
+                // Self-delete is rejected by the backend (409) — omit on the actor's own page.
                 ...(canDelete && user.id !== currentUserId
                   ? [{ label: t('common.delete'), onClick: () => setDeleting(true), icon: LuTrash2, danger: true }]
                   : []),
@@ -280,8 +258,7 @@ export function UserDetailPage() {
               </>
             ) : (
               <>
-                {/* Identity-bearing fields are immutable by contract — shown as disabled
-                    inputs (bound straight to the persisted user, no draft state). */}
+                {/* Identity-bearing fields are immutable by contract — disabled, bound to the persisted user. */}
                 <TextField
                   label={t('common.email')}
                   type="email"
@@ -311,9 +288,8 @@ export function UserDetailPage() {
               <Toggle checked={enabled} onChange={setEnabled} label={t('common.accountEnabled')} />
             </div>
             {!isCreate && (
-              /* Read-only status indicator — the backend has no admin endpoint to
-                 toggle email verification (re-send lives in the overflow menu);
-                 same labels as the view-mode field. */
+              /* Read-only indicator — no admin endpoint toggles verification
+                 (re-send lives in the overflow menu). */
               <div className="flex items-center gap-2 self-end pb-2">
                 <Badge tone={user?.emailVerified ? 'blue' : 'warning'}>
                   {user?.emailVerified ? t('common.verified') : t('common.unverified')}
@@ -356,8 +332,7 @@ export function UserDetailPage() {
         )}
       </DetailPanel>
 
-      {/* Profile fields are self-service only (the admin API cannot update them) —
-          read-only here. Meaningless before the user exists, so create mode skips it. */}
+      {/* Profile is self-service only (the admin API cannot update it); skipped in create mode. */}
       {!isCreate && (
         <DetailPanel title={t('users.profileSection')}>
           <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
@@ -370,8 +345,7 @@ export function UserDetailPage() {
         </DetailPanel>
       )}
 
-      {/* Account activity: temporal summary (audit stamps + login history), read-only
-          by nature — fetched in parallel, never part of the edit surface. */}
+      {/* Temporal summary (audit stamps + login history) — read-only, fetched in parallel. */}
       {!isCreate && (
         <DetailPanel title={t('users.activitySection')}>
           <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
@@ -385,11 +359,8 @@ export function UserDetailPage() {
         </DetailPanel>
       )}
 
-      {/* Roles / groups: pickers while editing (create saves them with the
-          CreateUserRequest; edit saves them in the unified diff-based submit),
-          read-only name chips in view mode — pickers only ever appear behind the
-          canWrite-gated Edit/Create, so read-only viewers never see an editable
-          select. */}
+      {/* Pickers only appear behind the canWrite-gated edit/create — read-only viewers
+          never see an editable select. */}
       {formActive ? (
         <>
           <div className="grid gap-6 lg:grid-cols-2">
@@ -412,8 +383,7 @@ export function UserDetailPage() {
               />
             </DetailPanel>
           </div>
-          {/* Standard action footer: bottom-right of the editing surface (the whole
-              page is the editing surface in unified mode). */}
+          {/* Action footer: bottom-right of the editing surface (the whole page here). */}
           <div className="mt-4 flex items-center justify-end gap-3">
             <Button variant="primary" loading={saving} onClick={() => handleSubmit()}>
               {t('common.save')}

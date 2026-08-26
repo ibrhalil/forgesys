@@ -1,13 +1,9 @@
 package com.ibrhalil.forgesys.security;
 
 /**
- * Granular per-token revoke for access tokens (K-34, complementing the user-scoped
- * {@code tokenInvalidBefore}). On per-session logout the current access token's
- * {@code jti} is blacklisted here with a TTL equal to the token's remaining lifetime;
- * {@code JwtAuthenticationFilter} then rejects it (→ 401) without waiting for expiry.
- *
- * <p>Two profile-bound implementations: {@code RedisTokenBlacklistService} (dev/prod)
- * and {@code InMemoryTokenBlacklistService} (test, Docker-free build).
+ * Granular per-{@code jti} access-token revoke (K-34, complementing the user-scoped
+ * {@code tokenInvalidBefore}); entries live for the token's remaining lifetime.
+ * Profile-split: Redis (dev/prod) / in-memory (test).
  */
 public interface TokenBlacklistService {
 

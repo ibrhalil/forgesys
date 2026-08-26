@@ -41,14 +41,11 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * Record (row) CRUD of custom apps (K-15 / Epic 3.0.B) — the EAV data path on top of
- * {@code t_app_records} + {@code t_app_record_values(value jsonb)}. A record is only
- * addressable through its owning app (nested lookup, 404 on cross-app access — same
- * scoping as {@code TaskService}). Values are validated per {@link PropertyType}
- * ({@link AppPropertyValueValidator}) before persisting; the per-app plan limit is
- * soft-blocked on create. List/get responses bulk-fetch the value rows (one query per
- * page — no N+1); search runs the PostgreSQL JSONB path
- * ({@link AppRecordSearchExecutor}).
+ * Record (row) CRUD of custom apps (K-15) on {@code t_app_records} +
+ * {@code t_app_record_values(value jsonb)}. A record is addressable only through its
+ * owning app (404 on cross-app access); values validated per {@link PropertyType};
+ * per-app plan limit soft-blocked on create; value rows bulk-fetched per page (no N+1).
+ * Rationale: docs/CODE_NOTES.md (backend/service → AppRecordService).
  */
 @Service
 @RequiredArgsConstructor
@@ -89,11 +86,7 @@ public class AppRecordService {
         return toResponse(record, values.getOrDefault(recordId, Map.of()));
     }
 
-    /**
-     * PostgreSQL JSONB search (property-value filters/sorts). Request clauses are
-     * validated against the app's property set before the native query is built —
-     * see {@link AppRecordSearchExecutor}.
-     */
+    /** PostgreSQL JSONB search; clauses validated before the native query is built. */
     @Transactional(readOnly = true)
     public Page<AppRecordResponse> search(UUID appId, AppRecordSearchRequest request) {
         App app = getAppOrThrow(appId);
@@ -138,10 +131,7 @@ public class AppRecordService {
                 .getOrDefault(saved.getId(), Map.of()));
     }
 
-    /**
-     * PATCH semantics: only provided keys are touched — a JSON {@code null} clears the
-     * value (rejected for required properties), an absent key keeps it unchanged.
-     */
+    /** PATCH semantics: JSON {@code null} clears (rejected for required), absent keys keep. */
     @Transactional
     @AuditLog(action = "app_record_updated", entityType = "AppRecord", entityId = "#recordId", entityName = "#app.name")
     public AppRecordResponse update(UUID appId, UUID recordId, AppRecordRequest request) {

@@ -58,10 +58,6 @@ const ThemeDemoPage = import.meta.env.DEV
   ? lazy(() => import('../features/demo/pages/ThemeDemoPage').then((m) => ({ default: m.ThemeDemoPage })))
   : null;
 
-
-
-
-
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {

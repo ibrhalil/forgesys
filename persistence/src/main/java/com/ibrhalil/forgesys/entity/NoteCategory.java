@@ -13,12 +13,9 @@ import lombok.Setter;
 import lombok.ToString;
 
 /**
- * A note category (taxonomy inside a NOTES-type project container — K-44, re-scoped
- * by K-45). Soft-deletable, optimistic-locked, tenant-audited. Name uniqueness is a
- * partial index ({@code WHERE is_deleted = false}) in {@code module/notes/V1}; the
- * entity-side {@code unique = true} only shapes H2 create-drop in tests ([RISK-17]).
- * The owning project is fixed at create time (categories do not move — their notes
- * would become cross-project orphans).
+ * Note category inside a NOTES-type container (K-44/K-45). Name uniqueness is a
+ * partial index in {@code module/notes/V1}; the entity {@code unique = true} only
+ * shapes H2 create-drop (RISK-17). Project is fixed at create — categories never move.
  */
 @Entity
 @Getter
