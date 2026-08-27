@@ -3,7 +3,6 @@ package com.ibrhalil.forgesys.persistence.repository;
 import com.ibrhalil.forgesys.entity.Permission;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
-import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -34,14 +33,4 @@ public interface PermissionRepository extends JpaRepository<Permission, UUID>, J
     @Query("select case when count(r) > 0 then true else false end "
             + "from Role r join r.permissions p where p.id = :permissionId")
     boolean isInUse(@Param("permissionId") UUID permissionId);
-
-    /**
-     * RISK-18 closure (K-50 F3): removes retired {@code platform:*} permission rows
-     * from the current tenant schema. Bulk JPQL is a hard delete (bypasses
-     * {@code @SQLDelete}); {@code t_role_permissions} grant rows fall with the DB
-     * {@code ON DELETE CASCADE}.
-     */
-    @Modifying
-    @Query("delete from Permission p where p.name like 'platform:%'")
-    int deleteAllByPlatformPrefix();
 }

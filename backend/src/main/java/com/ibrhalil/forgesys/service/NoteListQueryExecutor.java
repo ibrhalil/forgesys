@@ -25,7 +25,7 @@ import org.springframework.stereotype.Component;
  * Read side of the note list (K-49): category/project names carried as correlated
  * scalar subqueries over the plain FK columns (K-45 — notes hold UUIDs, not
  * associations), making them first-class filter/sort targets that stay in sync with
- * the row by construction. {@code @SQLRestriction} applies inside the subqueries —
+ * the row by construction. The soft-delete filter applies inside the subqueries —
  * a soft-deleted reference resolves to null.
  */
 @Component

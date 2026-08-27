@@ -67,20 +67,8 @@ public class RbacSeeder implements ApplicationRunner {
     /** Ensures catalog + Admin role in the CURRENT tenant context; caller sets/clears {@link TenantContext}. */
     @Transactional
     public void seedForCurrentTenant() {
-        removeRetiredPlatformPermissions();
         ensurePermissions();
         ensureAdminRole();
-    }
-
-    /**
-     * RISK-18 closure: drops retired {@code platform:*} rows from this tenant schema
-     * (role grants cascade at the DB level). No-op once every schema is clean.
-     */
-    private void removeRetiredPlatformPermissions() {
-        int removed = permissionRepository.deleteAllByPlatformPrefix();
-        if (removed > 0) {
-            log.info("Removed {} retired platform:* permission rows from tenant schema", removed);
-        }
     }
 
     private Map<String, Permission> ensurePermissions() {

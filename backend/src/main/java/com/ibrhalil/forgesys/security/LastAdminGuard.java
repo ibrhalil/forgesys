@@ -24,7 +24,7 @@ import java.util.UUID;
  * (NOT the role name "Admin", NOT a specific permission), expanded DOWNWARD through
  * child roles. Check after the mutation but inside the same tx (JPQL auto-flushes
  * pending changes; violation → 409 rollback). For deletes, resolve bearers BEFORE the
- * soft-delete ({@code @SQLRestriction} hides deleted rows from JPQL).
+ * soft-delete (the soft-delete filter hides deleted rows from JPQL).
  * rationale: docs/CODE_NOTES.md (backend/security → LastAdminGuard)
  */
 @Component
@@ -57,7 +57,7 @@ public class LastAdminGuard {
     /**
      * All-permissions roles plus their transitive children ({@code t_role_parents} walked
      * to a fixpoint — acyclic by {@code RoleService.setParents}); soft-deleted roles are
-     * filtered by {@code @SQLRestriction}. K-50: also the impersonation target's
+     * filtered by the soft-delete filter. K-50: also the impersonation target's
      * admin-capability definition (PlatformSwitchService reuses this closure).
      */
     public Set<UUID> adminCapableRoleIds() {

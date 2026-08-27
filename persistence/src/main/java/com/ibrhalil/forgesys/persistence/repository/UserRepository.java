@@ -24,7 +24,7 @@ import java.util.UUID;
  * RISK-21/27 background: docs/CODE_NOTES.md (persistence → UserRepository).
  */
 @Repository
-public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificationExecutor<User> {
+public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificationExecutor<User>, UserRepositoryCustom {
 
     Optional<User> findByEmail(String email);
 
@@ -62,7 +62,7 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
             + "where u.id = :userId and g.active = true")
     List<UUID> findActiveGroupRoleIds(@Param("userId") UUID userId);
 
-    /** One hop of role inheritance; soft-deleted parents filtered by {@code @SQLRestriction}. */
+    /** One hop of role inheritance; soft-deleted parents filtered by the soft-delete filter. */
     @Query("select distinct p.id from Role r join r.parentRoles p where r.id in :roleIds")
     List<UUID> findParentRoleIds(@Param("roleIds") Collection<UUID> roleIds);
 

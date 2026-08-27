@@ -100,7 +100,7 @@ public class SessionRevocationService {
     }
 
     /**
-     * Holder ids resolved WITHOUT revoking — before the soft-delete ({@code @SQLRestriction}
+     * Holder ids resolved WITHOUT revoking — before the soft-delete (the soft-delete filter
      * would hide the role) and before the last-admin guard (a rejected delete leaves no revoke behind).
      */
     public List<UUID> resolveRoleHolderIds(UUID roleId) {

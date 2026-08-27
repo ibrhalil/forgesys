@@ -102,21 +102,6 @@ class RbacSeederTest {
         verify(userRepository, never()).save(any(User.class));
     }
 
-    /**
-     * RISK-18 closure (K-50 F3): seeding purges retired {@code platform:*} rows from
-     * the tenant schema before syncing the IAM catalog — platform permissions live in
-     * code only ({@code PlatformPermissionCatalog}) and must not linger in tenant
-     * schemas (role grants fall with the DB FK cascade).
-     */
-    @Test
-    void seedForCurrentTenant_removesRetiredPlatformPermissions() {
-        stubCatalogPresent();
-
-        seeder.seedForCurrentTenant();
-
-        verify(permissionRepository).deleteAllByPlatformPrefix();
-    }
-
     // --- helpers ---------------------------------------------------------
 
     /** Catalog fully present in the tenant — seed must be a no-op beyond the flag re-sync. */

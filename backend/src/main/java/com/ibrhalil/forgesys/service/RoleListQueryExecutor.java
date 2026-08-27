@@ -30,7 +30,7 @@ import java.util.UUID;
  * queries resolving the page's explicit-permission and parent summaries.
  * {@code permissions}/{@code parents} stay batched lists (they carry full summaries);
  * the count subquery keeps {@code permissionCount} filterable/sortable in the DB.
- * Soft-deleted excluded by the entity-path {@code @SQLRestriction}.
+ * Soft-deleted excluded by the entity-path soft-delete filter.
  */
 @Component
 public class RoleListQueryExecutor {

@@ -25,7 +25,7 @@ public interface CustomAppPropertyRepository extends JpaRepository<CustomAppProp
     boolean existsByCustomAppIdAndNameAndIdNot(UUID customAppId, String name, UUID id);
 
     /** Highest position among the custom app's live properties (null when it has none) —
-     *  create appends at max+1. Soft-delete scope via the entity @SQLRestriction. */
+     *  create appends at max+1. Soft-delete scope via the entity soft-delete filter. */
     @Query("select max(p.position) from CustomAppProperty p where p.customAppId = :customAppId")
     Integer findMaxPosition(@Param("customAppId") UUID customAppId);
 

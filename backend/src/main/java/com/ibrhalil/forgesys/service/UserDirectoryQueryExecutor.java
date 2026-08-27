@@ -29,7 +29,7 @@ import org.springframework.stereotype.Component;
  * role/group counts as ONE Criteria DTO projection ({@link ProjectionListQuery}) —
  * replaced the former {@code @Subselect UserDirectoryView} read model; nothing is
  * hydrated (N+1 impossible). Soft-delete rides the joined entities'
- * {@code @SQLRestriction} → counts exclude soft-deleted roles/groups.
+ * soft-delete filter → counts exclude soft-deleted roles/groups.
  * Rationale: docs/CODE_NOTES.md (backend/service → UserDirectoryQueryExecutor).
  */
 @Component

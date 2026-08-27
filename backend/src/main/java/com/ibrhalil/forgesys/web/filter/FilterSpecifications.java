@@ -135,7 +135,7 @@ public final class FilterSpecifications {
     /**
      * Correlated EXISTS: {@code IN}/{@code NOT_IN} restrict to member ids,
      * {@code IS_NULL}/{@code IS_NOT_NULL} test emptiness. Correlated joins apply the
-     * member entity's {@code @SQLRestriction} (soft-deleted members excluded).
+     * member entity's soft-delete filter (soft-deleted members excluded).
      */
     private static Predicate membershipPredicate(FilterFieldSet.RegisteredField field, FilterOperator operator,
             List<Object> values, Root<?> root, CriteriaQuery<?> query, CriteriaBuilder cb) {

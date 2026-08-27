@@ -81,7 +81,7 @@
 ### RoleService
 - `FILTER_FIELDS` (K-49): `permissionCount` subquery counts explicit grants only (0 for all-permissions roles); `permissionIds`/`parentIds` membership filters.
 - `ALL_PERMISSIONS_SENTINEL`: audit-delta sentinel marking the all_permissions mode in old/new value JSON.
-- `delete`: join tables `t_user_roles`/`t_group_roles` are owned by User.roles/Group.roles — leftover join rows after soft-delete keep managed collections referencing a deleted role → flush fails `TransientPropertyValueException` + orphan rows; hence detach BEFORE soft-delete. Revoke targets (direct + via active groups) resolved while the role is still visible (pre-`@SQLRestriction`); guard AFTER flush sees the deleted role (admin-closure queries) and runs BEFORE the revoke so a rejected delete leaves no Redis-side carnage.
+- `delete`: join tables `t_user_roles`/`t_group_roles` are owned by User.roles/Group.roles — leftover join rows after soft-delete keep managed collections referencing a deleted role → flush fails `TransientPropertyValueException` + orphan rows; hence detach BEFORE soft-delete. Revoke targets (direct + via active groups) resolved while the role is still visible (pre-soft-delete-filter); guard AFTER flush sees the deleted role (admin-closure queries) and runs BEFORE the revoke so a rejected delete leaves no Redis-side carnage.
 - `setPermissions`: last-admin guard BEFORE save — clearing the `all_permissions` flag (or emptying the role) can drop every admin below the one-active-admin floor; closure queries auto-flush the pending change first. Faz 1 revoke: holders' outstanding tokens still embed the old permission set.
 - `setParents` (Faz 4a): acyclicity — no self-parent, no candidate that transitively inherits from this role (`reaches` DFS). Faz 1 revoke + Faz 2b audit delta; guard covers inheritance-edge removal (e.g. removing an all-permissions parent).
 - Persistent-collection mutation: clear+addAll on the managed collection, never replace the reference.
@@ -116,7 +116,7 @@
 ### NoteCategoryService
 - Categories are design-bounded data (a handful per container) → plain paged read + `q` name search.
 - Project fixed at create (a move would strand notes in the old container; `projectId` change on update rejected 409). Per-project taxonomy, but name uniqueness stays TENANT-wide for now (cross-container same names are legal siblings).
-- `delete`: FK's `ON DELETE SET NULL` never fires (soft-delete is an UPDATE); `@SQLRestriction` hides the row from reads; notes keep their `categoryId` value and `resolveCategoryName` treats a soft-deleted category as absent (name chip simply disappears).
+- `delete`: FK's `ON DELETE SET NULL` never fires (soft-delete is an UPDATE); the soft-delete filter hides the row from reads; notes keep their `categoryId` value and `resolveCategoryName` treats a soft-deleted category as absent (name chip simply disappears).
 
 ### CustomAppService
 - K-15 / Faz 3.0.B re-scoped by K-45: apps live in APPS-type containers; flat writes default to "Genel"; PUT moves apps between APPS containers. Plan limits (`PlanLimitService`) are TENANT-level (not per container), soft-blocked on create. TOCTOU posture: `existsBy*` pre-check + `DataIntegrityViolationException` constraint-map fallback (RISK-28).
@@ -215,10 +215,10 @@
 
 ### List query executors (K-49 family)
 - Shared pattern: one Criteria DTO projection (`cb.construct`, no entity hydration) + one count query with the same predicate; batched summary lists resolve in ONE extra query per kind per page. Flatness rule: JOINED targets to-one ONLY, SUBQUERY scalar (a to-many join would multiply rows and silently break paging).
-- UserDirectoryQueryExecutor: replaced the former `@Immutable @Subselect` `UserDirectoryView` entity with an in-code projection the filter engine can filter/sort natively (joined columns, count subqueries, membership). Soft-delete semantics ride the joined entities' `@SQLRestriction` (applied to the LEFT JOIN ON) — role/group counts exclude soft-deleted rows.
+- UserDirectoryQueryExecutor: replaced the former `@Immutable @Subselect` `UserDirectoryView` entity with an in-code projection the filter engine can filter/sort natively (joined columns, count subqueries, membership). Soft-delete semantics ride the joined entities' soft-delete filter (applied to the LEFT JOIN ON) — role/group counts exclude soft-deleted rows.
 - GroupListQueryExecutor: fixed 3-query page replacing per-row `findGroupMembers` + `countMembers` (2N+1). Member count starts from `User` (join table owned by `User.groups`). Former native count saw raw join rows; entity-path resolution now filters soft-deleted.
 - RoleListQueryExecutor: `permissions`/`parents` stay batched lists (they carry descriptions/full summaries) rather than projection columns; the count subquery keeps `permissionCount` filterable/sortable in-DB.
-- NoteListQueryExecutor: `referencedName` — correlated scalar subquery over a plain FK column (K-45 convention: notes/apps hold `categoryId`/`projectId` as UUIDs, not associations); `@SQLRestriction` applies inside the subquery → soft-deleted ref resolves null. `projectNameOf` reused by ProjectService (self-FK) and CustomAppService.
+- NoteListQueryExecutor: `referencedName` — correlated scalar subquery over a plain FK column (K-45 convention: notes/apps hold `categoryId`/`projectId` as UUIDs, not associations); the soft-delete filter applies inside the subquery → soft-deleted ref resolves null. `projectNameOf` reused by ProjectService (self-FK) and CustomAppService.
 - PlatformCompanyListQueryExecutor: replaced the unpaged `findAll()` (last K-37 paging violation); runs INSIDE `executeWithoutTenantContext` — cleared context pins the multi-tenant EM to the public schema.
 
 ### ProjectContainerSupport
@@ -262,7 +262,7 @@
 - `invalidateAccessTokens`: used by single-session admin revoke — the targeted device's own
   refresh token was already dropped, so the stamp signs it out on next request; siblings
   recover automatically via silent refresh (momentary blip, not a sign-out).
-- `resolveRoleHolderIds`: post-soft-delete, `@SQLRestriction` hides the role and the lookup
+- `resolveRoleHolderIds`: post-soft-delete, the soft-delete filter hides the role and the lookup
   returns nobody; deferring revoke until after the last-admin guard means a rejected delete
   leaves no Redis-side revoke behind.
 - `revokeAllPermissionsRoleHolders`: outstanding tokens embed the prior permission snapshot;
@@ -390,7 +390,7 @@
   direction reversed: flag roles are expanded DOWNWARD through `t_role_parents` (children
   of an admin role are admin-capable) before checking for holders. "Admin" the NAME is
   only a seed convention; a specific permission is NOT the test.
-- Invariant detail: non-deleted AND `enabled=true` (`@SQLRestriction` hides soft-deleted
+- Invariant detail: non-deleted AND `enabled=true` (the soft-delete filter hides soft-deleted
   users; disabled admins don't count).
 - Usage mechanics: the existence query is JPQL → Hibernate auto-flushes pending entity
   changes (removed role/group join rows, `enabled=false`, soft-delete UPDATE) before it
@@ -668,7 +668,7 @@
   BETWEEN exactly 2, IN/NOT_IN 1..100, IS_NULL/IS_NOT_NULL 0.
 - Membership predicates: correlated EXISTS; direct form correlates the root
   association, inverse form starts from the member entity. Correlated joins
-  apply the member entity's `@SQLRestriction`, so soft-deleted members are
+  apply the member entity's soft-delete filter, so soft-deleted members are
   excluded — semantics match what the associations resolve to elsewhere.
 - `likeIgnoreCase`: column lowered by DB, pattern lowered with
   `Locale.ROOT` in Java. Assumes DB lower() folds ASCII the same way — true for
@@ -937,7 +937,7 @@
   :userIds` doğrudan kullanıcı PK'sıdır (`@MapsId`). "Etkilenen herkes" kümesi: rolü
   direkt tutanlar + AKTİF grup üzerinden tutanlar (pasif grup anında yetim bırakır).
 - **`existsEnabledByRoleIds`**: "en az bir aktif admin kalsın" (LastAdminGuard) —
-  soft-delete'liler `@SQLRestriction` ile gizli, disabled hesap admin sayılmaz.
+  soft-delete'liler soft-delete filter ile gizli, disabled hesap admin sayılmaz.
 - **Görünürlük kapsamı** (`findGroupIdsByUserId` + `findUserIdsByGroupIds`):
   `iam:group-member:read` — çağıran, kendi gruplarının üyelerini + kendisini görür;
   grubu olmayan kullanıcı da kendini görsün diye kendi id'sini çağıran ekler.
