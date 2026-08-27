@@ -51,6 +51,60 @@ const PLAN_OPTIONS: SelectOption<string>[] = [
   { value: 'enterprise', label: 'Enterprise' },
 ];
 
+// Tenant switch (F6 impersonation): the reason field lives here so typing never
+// re-renders the whole detail page.
+function SwitchTenantModal({
+  open,
+  companyId,
+  onClose,
+}: {
+  open: boolean;
+  companyId: string | undefined;
+  onClose: () => void;
+}) {
+  const { t } = useT();
+  const startSwitch = useStartSwitch(companyId ?? '');
+  const [reason, setReason] = useState('');
+
+  return (
+    <Modal
+      open={open}
+      title={t('platform.company.switchTitle')}
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            {t('common.cancel')}
+          </Button>
+          <Button
+            variant="primary"
+            loading={startSwitch.isPending}
+            disabled={!reason.trim()}
+            onClick={async () => {
+              await startSwitch.mutateAsync({ reason: reason.trim() });
+              onClose();
+              setReason('');
+            }}
+          >
+            {t('platform.company.switchOpen')}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <p className="m-0 text-sm text-muted">{t('platform.company.switchDesc')}</p>
+        <TextField
+          id="switch-reason"
+          label={t('platform.company.switchReason')}
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder={t('platform.company.switchReasonPh')}
+        />
+      </div>
+    </Modal>
+  );
+}
+
 /**
  * Company detail (K-50): status actions, subscription plan change, module
  * activation toggles, usage report and the "enter tenant" switch (F6 token
@@ -70,7 +124,6 @@ export function PlatformCompanyDetailPage() {
   const updateStatus = useUpdateCompanyStatus(companyId ?? '');
   const updateSubscription = useUpdateSubscription(companyId ?? '');
   const updateModules = useUpdateModules(companyId ?? '');
-  const startSwitch = useStartSwitch(companyId ?? '');
 
   const canWriteStatus = hasAuthority(PLATFORM_PERMISSIONS.COMPANY_WRITE);
   const canLifecycle = hasAuthority(PLATFORM_PERMISSIONS.TENANT_LIFECYCLE);
@@ -81,7 +134,6 @@ export function PlatformCompanyDetailPage() {
   const [planModalOpen, setPlanModalOpen] = useState(false);
   const [planKey, setPlanKey] = useState<string | null>(null);
   const [switchModalOpen, setSwitchModalOpen] = useState(false);
-  const [switchReason, setSwitchReason] = useState('');
   // Local toggle state seeded from the server snapshot; committed with Save.
   const [moduleDraft, setModuleDraft] = useState<Record<string, boolean> | null>(null);
   const moduleState = moduleDraft ?? Object.fromEntries((modules ?? []).map((m) => [m.key, m.active]));
@@ -329,41 +381,7 @@ export function PlatformCompanyDetailPage() {
       </Modal>
 
       {/* Tenant switch (impersonation) */}
-      <Modal
-        open={switchModalOpen}
-        title={t('platform.company.switchTitle')}
-        onClose={() => setSwitchModalOpen(false)}
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setSwitchModalOpen(false)}>
-              {t('common.cancel')}
-            </Button>
-            <Button
-              variant="primary"
-              loading={startSwitch.isPending}
-              disabled={!switchReason.trim()}
-              onClick={async () => {
-                await startSwitch.mutateAsync({ reason: switchReason.trim() });
-                setSwitchModalOpen(false);
-                setSwitchReason('');
-              }}
-            >
-              {t('platform.company.switchOpen')}
-            </Button>
-          </>
-        }
-      >
-        <div className="flex flex-col gap-4">
-          <p className="m-0 text-sm text-muted">{t('platform.company.switchDesc')}</p>
-          <TextField
-            id="switch-reason"
-            label={t('platform.company.switchReason')}
-            value={switchReason}
-            onChange={(e) => setSwitchReason(e.target.value)}
-            placeholder={t('platform.company.switchReasonPh')}
-          />
-        </div>
-      </Modal>
+      <SwitchTenantModal open={switchModalOpen} companyId={companyId} onClose={() => setSwitchModalOpen(false)} />
     </Page>
   );
 }

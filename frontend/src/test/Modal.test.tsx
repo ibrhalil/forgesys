@@ -32,6 +32,22 @@ function ModalHost() {
   );
 }
 
+// Regression pattern for the per-keystroke focus-loss bug: modal rendered inline
+// with an unstable onClose closure + input state lifted to the host. Each keystroke
+// re-renders the host and must NOT re-trigger the Modal focus effect.
+function ControlledHost() {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState('');
+  return (
+    <div>
+      <button type="button" onClick={() => setOpen(true)}>opener</button>
+      <Modal open={open} title="Edit" onClose={() => setOpen(false)}>
+        <input aria-label="Controlled" value={value} onChange={(e) => setValue(e.target.value)} />
+      </Modal>
+    </div>
+  );
+}
+
 describe('Modal', () => {
   it('renders a dialog only while open', () => {
     const { rerender } = render(
@@ -90,5 +106,25 @@ describe('Modal', () => {
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'opener' })).toHaveFocus();
+  });
+
+  it('keeps focus in a controlled input across keystrokes despite an unstable onClose (focus-loss regression)', async () => {
+    const user = userEvent.setup();
+    window.localStorage.clear();
+    useLocaleStore.setState({ locale: 'en' });
+    render(<ControlledHost />);
+    await user.click(screen.getByRole('button', { name: 'opener' }));
+
+    const input = screen.getByLabelText('Controlled');
+    await user.click(input);
+    await user.type(input, 'a');
+    expect(input).toHaveFocus();
+    await user.type(input, 'bc');
+    expect(input).toHaveFocus();
+    expect(input).toHaveValue('abc');
+
+    // The latest onClose must still fire (Escape) even after host re-renders.
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });

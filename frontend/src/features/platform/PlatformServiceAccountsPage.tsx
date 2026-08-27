@@ -60,6 +60,75 @@ function RawKeyModal({ rawKey, onClose }: { rawKey: string | null; onClose: () =
   );
 }
 
+function CreateServiceAccountModal({
+  open,
+  onClose,
+  onCreated,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreated: (rawKey: string) => void;
+}) {
+  const { t } = useT();
+  const create = useCreateServiceAccount();
+  const [name, setName] = useState('');
+  const [scopes, setScopes] = useState<SelectOption<string>[]>([]);
+  const [expiresAt, setExpiresAt] = useState('');
+
+  const submit = async () => {
+    const created = await create.mutateAsync({
+      name: name.trim(),
+      scopes: scopes.map((s) => s.value),
+      expiresAt: expiresAt ? new Date(expiresAt).toISOString() : undefined,
+    });
+    onClose();
+    onCreated(created.rawKey);
+  };
+
+  return (
+    <Modal
+      open={open}
+      title={t('platform.svc.createTitle')}
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            {t('common.cancel')}
+          </Button>
+          <Button variant="primary" loading={create.isPending} disabled={!name.trim() || scopes.length === 0} onClick={submit}>
+            {t('common.create')}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <TextField
+          id="svc-name"
+          label={t('platform.svc.name')}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <SelectInput
+          label={t('platform.svc.scopes')}
+          options={SCOPE_OPTIONS}
+          value={scopes}
+          onChange={(v) => setScopes((v as SelectOption<string>[]) ?? [])}
+          isMulti
+          placeholder={t('common.typeToSearch')}
+        />
+        <TextField
+          id="svc-expires"
+          label={t('platform.svc.expiresAt')}
+          type="date"
+          value={expiresAt}
+          onChange={(e) => setExpiresAt(e.target.value)}
+          hint={t('platform.svc.expiresHint')}
+        />
+      </div>
+    </Modal>
+  );
+}
+
 /**
  * Service accounts (K-50 F5): API-keyed programmatic identities. The raw key is
  * shown exactly once in a copy modal after creation — the list never carries it.
@@ -71,13 +140,9 @@ export function PlatformServiceAccountsPage() {
     search, setSearch, listParams,
   } = useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' }, storageKey: 'platform-svc' });
   const { data, isLoading, isFetching } = useServiceAccounts(listParams);
-  const create = useCreateServiceAccount();
   const revoke = useRevokeServiceAccount();
 
   const [createOpen, setCreateOpen] = useState(false);
-  const [name, setName] = useState('');
-  const [scopes, setScopes] = useState<SelectOption<string>[]>([]);
-  const [expiresAt, setExpiresAt] = useState('');
   const [rawKey, setRawKey] = useState<string | null>(null);
   const [revokeTarget, setRevokeTarget] = useState<ServiceAccount | null>(null);
 
@@ -125,19 +190,6 @@ export function PlatformServiceAccountsPage() {
     },
   ];
 
-  const submitCreate = async () => {
-    const created = await create.mutateAsync({
-      name: name.trim(),
-      scopes: scopes.map((s) => s.value),
-      expiresAt: expiresAt ? new Date(expiresAt).toISOString() : undefined,
-    });
-    setCreateOpen(false);
-    setName('');
-    setScopes([]);
-    setExpiresAt('');
-    setRawKey(created.rawKey);
-  };
-
   return (
     <Page
       breadcrumb={[{ label: t('platform.console') }, { label: t('platform.nav.serviceAccounts') }]}
@@ -183,46 +235,11 @@ export function PlatformServiceAccountsPage() {
         actionsHeader={t('common.actions')}
       />
 
-      <Modal
+      <CreateServiceAccountModal
         open={createOpen}
-        title={t('platform.svc.createTitle')}
         onClose={() => setCreateOpen(false)}
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setCreateOpen(false)}>
-              {t('common.cancel')}
-            </Button>
-            <Button variant="primary" loading={create.isPending} disabled={!name.trim() || scopes.length === 0} onClick={submitCreate}>
-              {t('common.create')}
-            </Button>
-          </>
-        }
-      >
-        <div className="flex flex-col gap-4">
-          <TextField
-            id="svc-name"
-            label={t('platform.svc.name')}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <SelectInput
-            label={t('platform.svc.scopes')}
-            options={SCOPE_OPTIONS}
-            value={scopes}
-            onChange={(v) => setScopes((v as SelectOption<string>[]) ?? [])}
-            isMulti
-            placeholder={t('common.typeToSearch')}
-          />
-          <TextField
-            id="svc-expires"
-            label={t('platform.svc.expiresAt')}
-            type="date"
-            value={expiresAt}
-            onChange={(e) => setExpiresAt(e.target.value)}
-            hint={t('platform.svc.expiresHint')}
-          />
-        </div>
-      </Modal>
+        onCreated={setRawKey}
+      />
 
       <RawKeyModal rawKey={rawKey} onClose={() => setRawKey(null)} />
 
