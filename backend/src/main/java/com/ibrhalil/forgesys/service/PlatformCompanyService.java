@@ -18,7 +18,7 @@ import com.ibrhalil.forgesys.entity.TenantModule;
 import com.ibrhalil.forgesys.exception.BusinessException;
 import com.ibrhalil.forgesys.exception.ErrorCode;
 import com.ibrhalil.forgesys.exception.ResourceNotFoundException;
-import com.ibrhalil.forgesys.persistence.repository.AppRepository;
+import com.ibrhalil.forgesys.persistence.repository.CustomAppRepository;
 import com.ibrhalil.forgesys.persistence.repository.CompanyRepository;
 import com.ibrhalil.forgesys.persistence.repository.NoteRepository;
 import com.ibrhalil.forgesys.persistence.repository.PlanRepository;
@@ -80,7 +80,7 @@ public class PlatformCompanyService {
     private final ModuleActivationService moduleActivationService;
     private final UserRepository userRepository;
     private final ProjectRepository projectRepository;
-    private final AppRepository appRepository;
+    private final CustomAppRepository customAppRepository;
     private final NoteRepository noteRepository;
     private final PlatformAuditService platformAuditService;
     private final PlatformUserRepository platformUserRepository;
@@ -234,7 +234,7 @@ public class PlatformCompanyService {
                 company.getId(),
                 userRepository.count(),
                 projectRepository.count(),
-                appRepository.count(),
+                customAppRepository.count(),
                 noteRepository.count());
     }
 

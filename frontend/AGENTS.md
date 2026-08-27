@@ -40,13 +40,13 @@ Every dependency is pinned to an **exact version** (`.npmrc`: `save-exact=true`)
 ```
 src/
   main.tsx                 # entry (StrictMode + ErrorBoundary + Toaster)
-  app/App.tsx              # providers (QueryClient) + router; shell children are
+  app/CustomApp.tsx              # providers (QueryClient) + router; shell children are
                            # generated from app/Routes.ts (public routes + layout explicit)
 app/Routes.ts            # SHELL_ROUTES config list: path/Component/authority per route —
-                            # App maps it to <Route> + RequirePermission (authorities mirror
+                            # CustomApp maps it to <Route> + RequirePermission (authorities mirror
                             # app/Navigation.ts). Pages are React.lazy chunks; AppShell's
                             # <Suspense> around <Outlet/> covers chunk loading
-  app/App.tsx              # providers (QueryClient) + router; tenant shell + platform shell wired
+  app/CustomApp.tsx              # providers (QueryClient) + router; tenant shell + platform shell wired
                             # in parallel: authStore.fetchMe() + platformAuthStore.fetchPlatformMe();
                             # /platform/login static route + /platform subtree (RequirePlatformAuth →
                             # PlatformShell → RequirePlatformPermission per route; index → companies)
@@ -77,7 +77,7 @@ components/              # cross-feature/shared components
                             #   (warning strip + `[imp]` document.title prefix; exit via logout)
     detail/                #   DetailPanel/DetailField/PermissionBadges + AssignSection (IAM detail pages)
     pickers/               #   reference-data selects: UserPicker/RolePicker/GroupPicker/ProjectPicker/
-                            #   AppPicker (async `q` typeahead over list endpoints, single or isMulti,
+                            #   CustomAppPicker (async `q` typeahead over list endpoints, single or isMulti,
                             #   id→label bookkeeping with fallback ids) + useDebouncedLoadOptions
                             #   (debounce + stale-response guard). Reference-data selects use these —
                             #   never capped one-page list fetches.
@@ -98,16 +98,16 @@ components/              # cross-feature/shared components
     projects/              #   Typed project containers (K-45): ProjectsPage (create modal's type
                            #   options derive from the ACTIVE-module catalog — useProjectTypes), the
                            #   three-way ProjectDetailPage switch (TaskBoard / ProjectNotesPanel /
-                           #   ProjectAppsPanel — panels live in their feature folders, cross-feature
+                           #   ProjectCustomAppsPanel — panels live in their feature folders, cross-feature
                            #   hook/panel imports), TaskBoard (components/)
     modules/               #   Module catalog + activation page (K-16, iam:module:read)
-    apps/                  #   App Builder UI (Epic 4.2 / K-42, K-45 project-scoped): app (project
-                           #   column + AppFormModal projectId anchor)/property/view/record CRUD,
+    apps/                  #   Custom App Builder UI (Epic 4.2 / K-42, K-45 project-scoped): app (project
+                           #   column + CustomAppFormModal projectId anchor)/property/view/record CRUD,
                            #   RecordFormModal (create+edit), TABLE/BOARD/CALENDAR/LIST/GALLERY
                            #   renderers, row-based filter/sort DSL editor (client-applied),
                            #   User/Relation pickers + id→label resolvers, plan usage indicators
                            #   (GET /apps/plan-limits — numbers from the backend registry) +
-                           #   components/ProjectAppsPanel (the APPS container body)
+                           #   components/ProjectCustomAppsPanel (the APPS container body)
 audit/                 #   AuditLogs + LoginHistory (iam:audit:read)
       sessions/              #   self/admin/all sessions pages + SessionList component (K-28)
       notes/                 #   Notes module (K-44, K-45 project-scoped): NotesPage (DataTable +
@@ -121,7 +121,7 @@ audit/                 #   AuditLogs + LoginHistory (iam:audit:read)
                              #   RequirePlatformAuth/RequirePlatformPermission + platformAuthStore +
                              #   platformApi.ts (createApiClient factory, no tenant header) + i18n platform.*/impersonation.*
       demo/                  #   DEV-only UI style-guide/pattern demos (lazy-imported behind
-                             #   import.meta.env.DEV in app/App.tsx — tree-shaken from prod builds):
+                             #   import.meta.env.DEV in app/CustomApp.tsx — tree-shaken from prod builds):
                             #   component showcase pages + pages/patterns/* list/detail/form/dashboard
                             #   pattern references. Not in Routes.ts; unreferenced in prod.
 lib/                     # api (fetch + 401 refresh), i18n (t/useT + messages), notify, format, select, cn,
@@ -179,7 +179,7 @@ lib/                     # api (fetch + 401 refresh), i18n (t/useT + messages), 
 - **Query key discipline:** list queries key on the params object (`['users', params]`); detail on id. Effective-permissions keys are `['users', id, 'effective-permissions']`.
 - **`SelectInput`** is the single select component (react-select). Behavior is prop-driven: single (default), `isMulti`, `isClearable`, `creatable`, async `loadOptions`, and `size="sm"` for compact inline controls (e.g. TaskCard status mover). Menu renders in a portal (escapes Modal overflow). The old native `SelectField` was removed.
 - **Icons:** `react-icons` (Lucide set, subpath import `react-icons/lu` — Vite tree-shakes). Never add inline SVGs; pick a Lucide icon.
-- **Light corporate theme tokens:** `src/index.css` `@theme` — pale-sky page bg (`--color-bg: #e0f2fe`), white surfaces (`--color-surface/sidebar`), raspberry accent (`--color-accent: #c2185b`); utilities like `bg-surface`/`text-muted`/`border-glass`. App is light-only (dark theme removed). Never use raw `text-white`/`bg-white/5` outside the gradient logo tiles — use tokens so a future theme stays possible.
+- **Light corporate theme tokens:** `src/index.css` `@theme` — pale-sky page bg (`--color-bg: #e0f2fe`), white surfaces (`--color-surface/sidebar`), raspberry accent (`--color-accent: #c2185b`); utilities like `bg-surface`/`text-muted`/`border-glass`. CustomApp is light-only (dark theme removed). Never use raw `text-white`/`bg-white/5` outside the gradient logo tiles — use tokens so a future theme stays possible.
 - **Tests (K-39):** Vitest + React Testing Library, `npm test` (CI runs it too). Suite lives in `src/test/` (`setup.ts` + `*.test.ts(x)`); config in `vitest.config.ts` (jsdom, `globals: false` — tests import `describe/it/expect/vi` from `'vitest'` explicitly; `setup.ts` registers RTL cleanup + jest-dom matchers). Mocks: `vi.stubGlobal('fetch', ...)` for `lib/api` (no MSW), `useStore.setState({...})` for zustand stores, `useLocaleStore.setState({ locale: 'en' })` for stable query strings. **A new frontend feature does not merge without tests** — at minimum a hook/logic test plus a render test for new UI primitives.
 - **Kanban DnD:** boards use DndContext per board (PointerSensor distance:5 + TouchSensor delay:200), droppable columns + DragOverlay; moves are optimistic (setQueryData + rollback onError); the card select-mover stays as the keyboard/touch alternative.
 

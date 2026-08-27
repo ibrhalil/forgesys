@@ -22,8 +22,8 @@ const SessionsPage = lazy(() => import('../features/sessions/SessionsPage').then
 const AllSessionsPage = lazy(() => import('../features/sessions/AllSessionsPage').then((m) => ({ default: m.AllSessionsPage })));
 const UserSessionsPage = lazy(() => import('../features/sessions/UserSessionsPage').then((m) => ({ default: m.UserSessionsPage })));
 const ModulesPage = lazy(() => import('../features/modules/ModulesPage').then((m) => ({ default: m.ModulesPage })));
-const AppsPage = lazy(() => import('../features/apps/AppsPage').then((m) => ({ default: m.AppsPage })));
-const AppDetailPage = lazy(() => import('../features/apps/AppDetailPage').then((m) => ({ default: m.AppDetailPage })));
+const CustomAppsPage = lazy(() => import('../features/custom-apps/CustomAppsPage').then((m) => ({ default: m.CustomAppsPage })));
+const CustomAppDetailPage = lazy(() => import('../features/custom-apps/CustomAppDetailPage').then((m) => ({ default: m.CustomAppDetailPage })));
 const NotesPage = lazy(() => import('../features/notes/NotesPage').then((m) => ({ default: m.NotesPage })));
 const NoteEditorPage = lazy(() => import('../features/notes/NoteEditorPage').then((m) => ({ default: m.NoteEditorPage })));
 
@@ -60,8 +60,8 @@ export const SHELL_ROUTES: AppRoute[] = [
   { path: 'all-sessions', Component: AllSessionsPage, authority: PERMISSIONS.USER_WRITE },
   { path: 'admin/users/:userId/sessions', Component: UserSessionsPage, authority: PERMISSIONS.USER_WRITE },
   { path: 'modules', Component: ModulesPage, authority: PERMISSIONS.MODULE_READ },
-  { path: 'apps', Component: AppsPage, authority: PERMISSIONS.APP_READ },
-  { path: 'apps/:appId', Component: AppDetailPage, authority: PERMISSIONS.APP_READ },
+  { path: 'custom-apps', Component: CustomAppsPage, authority: PERMISSIONS.CUSTOM_APP_READ },
+  { path: 'apps/:customAppId', Component: CustomAppDetailPage, authority: PERMISSIONS.CUSTOM_APP_READ },
   { path: 'notes', Component: NotesPage, authority: PERMISSIONS.NOTE_READ },
   { path: 'notes/new', Component: NoteEditorPage, authority: PERMISSIONS.NOTE_WRITE },
   { path: 'notes/:noteId', Component: NoteEditorPage, authority: PERMISSIONS.NOTE_READ },

@@ -11,6 +11,6 @@ public record CompanyReportResponse(
         UUID companyId,
         long userCount,
         long projectCount,
-        long appCount,
+        long customAppCount,
         long noteCount) {
 }

@@ -60,16 +60,16 @@ class PlanLimitServiceTest {
     @Test
     void maxApps_resolvesFromActivePlan() {
         stubActiveSubscription("free");
-        assertThat(service.maxApps()).isEqualTo(PlanDefinition.FREE.maxApps());
-        assertThat(service.maxRecordsPerApp()).isEqualTo(PlanDefinition.FREE.maxRecordsPerApp());
+        assertThat(service.maxCustomApps()).isEqualTo(PlanDefinition.FREE.maxCustomApps());
+        assertThat(service.maxRecordsPerCustomApp()).isEqualTo(PlanDefinition.FREE.maxRecordsPerCustomApp());
     }
 
     @Test
     void maxApps_reflectsHigherPlans() {
         stubActiveSubscription("pro");
-        assertThat(service.maxApps()).isEqualTo(PlanDefinition.PRO.maxApps());
+        assertThat(service.maxCustomApps()).isEqualTo(PlanDefinition.PRO.maxCustomApps());
         stubActiveSubscription("enterprise");
-        assertThat(service.maxApps()).isEqualTo(-1);
+        assertThat(service.maxCustomApps()).isEqualTo(-1);
     }
 
     @Test
@@ -79,7 +79,7 @@ class PlanLimitServiceTest {
         pending.setStatus(null);
         when(subscriptionRepository.findByCompanyId(company.getId())).thenReturn(Optional.of(pending));
 
-        assertThatThrownBy(() -> service.maxApps())
+        assertThatThrownBy(() -> service.maxCustomApps())
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.SUBSCRIPTION_NOT_FOUND);
     }
@@ -88,7 +88,7 @@ class PlanLimitServiceTest {
     void maxApps_withUnknownPlanKey_throws() {
         stubActiveSubscription("mystery");
 
-        assertThatThrownBy(() -> service.maxApps())
+        assertThatThrownBy(() -> service.maxCustomApps())
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.SUBSCRIPTION_NOT_FOUND);
     }
@@ -97,7 +97,7 @@ class PlanLimitServiceTest {
     void assertWithin_blocksAtLimitButAllowsUnlimited() {
         assertThatThrownBy(() -> service.assertWithin(3, 3, "apps"))
                 .isInstanceOf(BusinessException.class)
-                .extracting("errorCode").isEqualTo(ErrorCode.APP_LIMIT_REACHED);
+                .extracting("errorCode").isEqualTo(ErrorCode.CUSTOM_APP_LIMIT_REACHED);
         assertThatCode(() -> service.assertWithin(2, 3, "apps")).doesNotThrowAnyException();
         assertThatCode(() -> service.assertWithin(Long.MAX_VALUE, -1, "records")).doesNotThrowAnyException();
     }

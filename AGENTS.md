@@ -2,7 +2,7 @@
 
 ## Project
 
-**ForgeSys** — modular multi-tenant SaaS platform. Java 21 + Spring Boot 4.1, PostgreSQL 16, Redis 7.4, Flyway. Hybrid model: built-in modules (pm: Projects & Tasks, apps: App Builder, notes — Odoo/ERPNext style) + tenant custom apps (Notion/Airtable style, JSONB EAV). **Schema-per-tenant** isolation; **tenant *users* live in tenant schemas; *platform* identities live in `public`** (K-50); RBAC (User-Role + Group-Role + Role-Permission, inheritance, `all_permissions` flag).
+**ForgeSys** — modular multi-tenant SaaS platform. Java 21 + Spring Boot 4.1, PostgreSQL 16, Redis 7.4, Flyway. Hybrid model: built-in modules (pm: Projects & Tasks, apps: Custom App Builder, notes — Odoo/ERPNext style) + tenant custom apps (Notion/Airtable style, JSONB EAV). **Schema-per-tenant** isolation; **tenant *users* live in tenant schemas; *platform* identities live in `public`** (K-50); RBAC (User-Role + Group-Role + Role-Permission, inheritance, `all_permissions` flag).
 
 ## Language Policy (token optimization)
 

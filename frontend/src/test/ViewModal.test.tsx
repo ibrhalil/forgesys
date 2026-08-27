@@ -2,25 +2,25 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ViewModal } from '../features/apps/components/ViewModal';
-import type { AppProperty, AppView } from '../features/apps/types';
+import { ViewModal } from '../features/custom-apps/components/ViewModal';
+import type { CustomAppProperty, CustomAppView } from '../features/custom-apps/types';
 import { useLocaleStore } from '../store/localeStore';
 
 const APP_ID = '55555555-5555-5555-5555-555555555555';
 
-const PROPERTIES: AppProperty[] = [
-  { id: 'p-title', appId: APP_ID, name: 'Title', type: 'TEXT', config: null, required: false, position: 0 },
-  { id: 'p-status', appId: APP_ID, name: 'Status', type: 'SELECT', config: { options: ['Todo', 'Done'] }, required: false, position: 1 },
-  { id: 'p-due', appId: APP_ID, name: 'Due', type: 'DATE', config: null, required: false, position: 2 },
+const PROPERTIES: CustomAppProperty[] = [
+  { id: 'p-title', customAppId: APP_ID, name: 'Title', type: 'TEXT', config: null, required: false, position: 0 },
+  { id: 'p-status', customAppId: APP_ID, name: 'Status', type: 'SELECT', config: { options: ['Todo', 'Done'] }, required: false, position: 1 },
+  { id: 'p-due', customAppId: APP_ID, name: 'Due', type: 'DATE', config: null, required: false, position: 2 },
 ];
 
 let calls: { method: string; url: string; body?: string }[] = [];
 
-function renderModal(view?: AppView) {
+function renderModal(view?: CustomAppView) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <ViewModal appId={APP_ID} properties={PROPERTIES} view={view} onClose={vi.fn()} />
+      <ViewModal customAppId={APP_ID} properties={PROPERTIES} view={view} onClose={vi.fn()} />
     </QueryClientProvider>,
   );
 }
@@ -54,7 +54,7 @@ describe('ViewModal', () => {
     await user.click(screen.getByRole('button', { name: 'Create' }));
 
     const post = calls.find((c) => c.method === 'POST');
-    expect(post?.url).toBe(`/api/v1/apps/${APP_ID}/views`);
+    expect(post?.url).toBe(`/api/v1/custom-apps/${APP_ID}/views`);
     expect(JSON.parse(post!.body!)).toEqual({ name: 'Main', type: 'TABLE', config: {} });
   });
 
@@ -91,9 +91,9 @@ describe('ViewModal', () => {
 
   it('edits while preserving filters/sorts and resending the position', async () => {
     const user = userEvent.setup();
-    const view: AppView = {
+    const view: CustomAppView = {
       id: 'v-1',
-      appId: APP_ID,
+      customAppId: APP_ID,
       name: 'Board',
       type: 'BOARD',
       config: {
@@ -110,7 +110,7 @@ describe('ViewModal', () => {
     await user.click(screen.getByRole('button', { name: 'Save' }));
 
     const put = calls.find((c) => c.method === 'PUT');
-    expect(put?.url).toBe(`/api/v1/apps/${APP_ID}/views/v-1`);
+    expect(put?.url).toBe(`/api/v1/custom-apps/${APP_ID}/views/v-1`);
     expect(JSON.parse(put!.body!)).toEqual({
       name: 'Renamed',
       type: 'BOARD',

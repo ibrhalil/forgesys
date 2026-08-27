@@ -70,11 +70,11 @@ describe('ProjectDetailPage (typed container bodies)', () => {
               ],
               meta: { page: 0, pageSize: 50, totalElements: 1, totalPages: 1, hasNext: false, hasPrevious: false },
             }
-          : url.includes('/apps?')
+          : url.includes('/custom-apps?')
             ? {
                 data: [
                   {
-                    id: 'app-1',
+                    id: 'customApp-1',
                     name: 'CRM',
                     description: null,
                     icon: '📊',
@@ -113,30 +113,30 @@ describe('ProjectDetailPage (typed container bodies)', () => {
     });
   });
 
-  it('an APPS project renders its app collection with a container-anchored create', async () => {
+  it('an APPS project renders its customApp collection with a container-anchored create', async () => {
     const user = userEvent.setup();
     projectPayload = {
-      id: 'p-apps',
+      id: 'p-customApps',
       name: 'Ops Apps',
       description: null,
       type: 'APPS',
       parentProjectId: null,
       isDefault: false,
     };
-    renderAt('/projects/p-apps');
+    renderAt('/projects/p-customApps');
 
     expect(await screen.findByText('📊 CRM')).toBeInTheDocument();
     expect(screen.getByText('Apps in this project')).toBeInTheDocument();
 
-    // Create from the panel anchors the new app to this container (projectId in the POST).
-    await user.click(screen.getByRole('button', { name: '+ New App' }));
+    // Create from the panel anchors the new customApp to this container (projectId in the POST).
+    await user.click(screen.getByRole('button', { name: '+ New Custom App' }));
     const nameField = await screen.findByPlaceholderText('e.g. Order Tracking');
     await user.type(nameField, 'Inventory');
     await user.click(screen.getByRole('button', { name: 'Create' }));
 
     await waitFor(() => {
-      const post = calls.find((c) => c.method === 'POST' && c.url === '/api/v1/apps');
-      expect(post?.body).toMatchObject({ name: 'Inventory', projectId: 'p-apps' });
+      const post = calls.find((c) => c.method === 'POST' && c.url === '/api/v1/custom-apps');
+      expect(post?.body).toMatchObject({ name: 'Inventory', projectId: 'p-customApps' });
     });
   });
 });

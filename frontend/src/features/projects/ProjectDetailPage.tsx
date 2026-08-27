@@ -4,7 +4,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Page } from '../../components/Page';
 import { TaskBoard } from './components/TaskBoard';
 import { ProjectNotesPanel } from '../notes/components/ProjectNotesPanel';
-import { ProjectAppsPanel } from '../apps/components/ProjectAppsPanel';
+import { ProjectCustomAppsPanel } from '../custom-apps/components/ProjectCustomAppsPanel';
 import { useT } from '../../lib/i18n';
 import { DetailLoading, DetailNotFound } from '../../components/detail/DetailFallback';
 
@@ -45,7 +45,7 @@ export function ProjectDetailPage() {
       ) : project.type === 'NOTES' ? (
         <ProjectNotesPanel projectId={project.id} />
       ) : project.type === 'APPS' ? (
-        <ProjectAppsPanel projectId={project.id} />
+        <ProjectCustomAppsPanel projectId={project.id} />
       ) : (
         <div className="rounded-xl border border-glass bg-surface px-6 py-16 text-center text-muted">
           {t('projects.comingSoon', { type: typeLabels[project.type] })}

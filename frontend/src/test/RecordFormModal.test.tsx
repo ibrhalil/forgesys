@@ -2,13 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { RecordFormModal } from '../features/apps/components/RecordFormModal';
-import type { AppDetail, AppRecord } from '../features/apps/types';
+import { RecordFormModal } from '../features/custom-apps/components/RecordFormModal';
+import type { CustomAppDetail, CustomAppRecord } from '../features/custom-apps/types';
 import { useLocaleStore } from '../store/localeStore';
 
 const APP_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
-const APP: AppDetail = {
+const APP: CustomAppDetail = {
   id: APP_ID,
   projectId: 'proj-1',
   projectName: 'Genel',
@@ -18,15 +18,15 @@ const APP: AppDetail = {
   createdDate: '2026-08-01T10:00:00Z',
   updatedAt: '2026-08-01T10:00:00Z',
   properties: [
-    { id: 'p-title', appId: APP_ID, name: 'Title', type: 'TEXT', config: null, required: true, position: 0 },
-    { id: 'p-count', appId: APP_ID, name: 'Count', type: 'NUMBER', config: null, required: false, position: 1 },
+    { id: 'p-title', customAppId: APP_ID, name: 'Title', type: 'TEXT', config: null, required: true, position: 0 },
+    { id: 'p-count', customAppId: APP_ID, name: 'Count', type: 'NUMBER', config: null, required: false, position: 1 },
   ],
   views: [],
 };
 
-const RECORD: AppRecord = {
+const RECORD: CustomAppRecord = {
   id: 'r-1',
-  appId: APP_ID,
+  customAppId: APP_ID,
   values: { 'p-title': 'Old title', 'p-count': 5 },
   createdDate: '2026-08-10T09:00:00Z',
   updatedAt: '2026-08-10T09:00:00Z',
@@ -37,12 +37,12 @@ const EMPTY_PAGE = { data: [], meta: { page: 0, pageSize: 100, totalElements: 0,
 
 let calls: { method: string; url: string; body?: string }[] = [];
 
-function renderModal(record?: AppRecord) {
+function renderModal(record?: CustomAppRecord) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const onClose = vi.fn();
   const view = render(
     <QueryClientProvider client={client}>
-      <RecordFormModal app={APP} record={record} onClose={onClose} />
+      <RecordFormModal customApp={APP} record={record} onClose={onClose} />
     </QueryClientProvider>,
   );
   return { ...view, onClose };
@@ -84,7 +84,7 @@ describe('RecordFormModal', () => {
     await waitFor(() => {
       const patch = calls.find((c) => c.method === 'PATCH');
       expect(patch).toBeDefined();
-      expect(patch!.url).toBe(`/api/v1/apps/${APP_ID}/records/r-1`);
+      expect(patch!.url).toBe(`/api/v1/custom-apps/${APP_ID}/records/r-1`);
       expect(JSON.parse(patch!.body!)).toEqual({ values: { 'p-title': 'New title' } });
     });
   });
@@ -141,28 +141,28 @@ describe('RecordFormModal', () => {
   it('shows the picked record title, not the raw UUID, for a RELATION value on create', async () => {
     const user = userEvent.setup();
     const TARGET_ID = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
-    const relApp: AppDetail = {
+    const relApp: CustomAppDetail = {
       ...APP,
       properties: [
         ...APP.properties,
-        { id: 'p-rel', appId: APP_ID, name: 'Customer', type: 'RELATION', config: { targetAppId: TARGET_ID }, required: false, position: 2 },
+        { id: 'p-rel', customAppId: APP_ID, name: 'Customer', type: 'RELATION', config: { targetCustomAppId: TARGET_ID }, required: false, position: 2 },
       ],
     };
     const targetDetail = { ...relApp, id: TARGET_ID, name: 'Customers', properties: relApp.properties.slice(0, 1) };
     const targetRecords = {
-      data: [{ id: 'rec-cust', appId: TARGET_ID, values: { 'p-title': 'Acme Corp' }, createdDate: '2026-08-10T09:00:00Z', updatedAt: '2026-08-10T09:00:00Z', createdBy: 'u1' }],
+      data: [{ id: 'rec-cust', customAppId: TARGET_ID, values: { 'p-title': 'Acme Corp' }, createdDate: '2026-08-10T09:00:00Z', updatedAt: '2026-08-10T09:00:00Z', createdBy: 'u1' }],
       meta: { page: 0, pageSize: 1000, totalElements: 1, totalPages: 1, hasNext: false, hasPrevious: false },
     };
-    const created = { id: 'r-new', appId: APP_ID, values: {}, createdDate: '2026-08-20T09:00:00Z', updatedAt: '2026-08-20T09:00:00Z', createdBy: 'u1' };
+    const created = { id: 'r-new', customAppId: APP_ID, values: {}, createdDate: '2026-08-20T09:00:00Z', updatedAt: '2026-08-20T09:00:00Z', createdBy: 'u1' };
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
         calls.push({ method: init?.method ?? 'GET', url, body: init?.body ? String(init.body) : undefined });
-        const body = url === `/api/v1/apps/${TARGET_ID}` ? targetDetail
-          : url.startsWith(`/api/v1/apps/${TARGET_ID}/records`) ? targetRecords
+        const body = url === `/api/v1/custom-apps/${TARGET_ID}` ? targetDetail
+          : url.startsWith(`/api/v1/custom-apps/${TARGET_ID}/records`) ? targetRecords
           : url.includes('/users') ? EMPTY_PAGE
-          : url === `/api/v1/apps/${APP_ID}/records` && init?.method === 'POST' ? created
+          : url === `/api/v1/custom-apps/${APP_ID}/records` && init?.method === 'POST' ? created
           : null;
         if (body === null) return new Response(JSON.stringify({ code: 'resource_not_found' }), { status: 404 });
         return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -171,7 +171,7 @@ describe('RecordFormModal', () => {
 
     render(
       <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-        <RecordFormModal app={relApp} onClose={vi.fn()} />
+        <RecordFormModal customApp={relApp} onClose={vi.fn()} />
       </QueryClientProvider>,
     );
 

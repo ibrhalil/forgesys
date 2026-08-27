@@ -307,7 +307,7 @@ export function PlatformCompanyDetailPage() {
                 <span className="text-xl font-semibold text-main">{report?.projectCount ?? '—'}</span>
               </DetailField>
               <DetailField label={t('platform.company.reportApps')}>
-                <span className="text-xl font-semibold text-main">{report?.appCount ?? '—'}</span>
+                <span className="text-xl font-semibold text-main">{report?.customAppCount ?? '—'}</span>
               </DetailField>
               <DetailField label={t('platform.company.reportNotes')}>
                 <span className="text-xl font-semibold text-main">{report?.noteCount ?? '—'}</span>

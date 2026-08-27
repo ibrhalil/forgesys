@@ -1,16 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { RecordCalendar } from '../features/apps/components/RecordCalendar';
-import { cellDisplay } from '../features/apps/cellValue';
-import { todayIso } from '../features/apps/calendarUtils';
-import type { AppDetail, AppRecord, AppView } from '../features/apps/types';
+import { RecordCalendar } from '../features/custom-apps/components/RecordCalendar';
+import { cellDisplay } from '../features/custom-apps/cellValue';
+import { todayIso } from '../features/custom-apps/calendarUtils';
+import type { CustomAppDetail, CustomAppRecord, CustomAppView } from '../features/custom-apps/types';
 import { useLocaleStore } from '../store/localeStore';
 import { useAuthStore } from '../store/authStore';
 
 const APP_ID = '33333333-3333-3333-3333-333333333333';
 
-const APP: AppDetail = {
+const APP: CustomAppDetail = {
   id: APP_ID,
   projectId: 'proj-1',
   projectName: 'Genel',
@@ -20,13 +20,13 @@ const APP: AppDetail = {
   createdDate: '2026-08-01T10:00:00Z',
   updatedAt: '2026-08-01T10:00:00Z',
   properties: [
-    { id: 'p-title', appId: APP_ID, name: 'Title', type: 'TEXT', config: null, required: false, position: 0 },
-    { id: 'p-date', appId: APP_ID, name: 'Due', type: 'DATE', config: null, required: false, position: 1 },
+    { id: 'p-title', customAppId: APP_ID, name: 'Title', type: 'TEXT', config: null, required: false, position: 0 },
+    { id: 'p-date', customAppId: APP_ID, name: 'Due', type: 'DATE', config: null, required: false, position: 1 },
   ],
   views: [],
 };
 
-const VIEW: AppView = { id: 'v-cal', appId: APP_ID, name: 'Calendar', type: 'CALENDAR', config: { dateProperty: 'p-date' }, position: 0 };
+const VIEW: CustomAppView = { id: 'v-cal', customAppId: APP_ID, name: 'Calendar', type: 'CALENDAR', config: { dateProperty: 'p-date' }, position: 0 };
 
 function isoPlusDays(iso: string, days: number): string {
   return new Date(new Date(`${iso}T00:00:00Z`).getTime() + days * 86_400_000).toISOString().slice(0, 10);
@@ -34,16 +34,16 @@ function isoPlusDays(iso: string, days: number): string {
 
 const TODAY = todayIso();
 
-const RECORDS: AppRecord[] = [
-  { id: 'r-today', appId: APP_ID, values: { 'p-title': 'Standup', 'p-date': TODAY }, createdDate: '2026-08-01T00:00:00Z', updatedAt: '', createdBy: 'u' },
-  { id: 'r-later', appId: APP_ID, values: { 'p-title': 'Retrospective', 'p-date': isoPlusDays(TODAY, 3) }, createdDate: '2026-08-01T00:00:00Z', updatedAt: '', createdBy: 'u' },
-  { id: 'r-nodate', appId: APP_ID, values: { 'p-title': 'Undated' }, createdDate: '2026-08-01T00:00:00Z', updatedAt: '', createdBy: 'u' },
+const RECORDS: CustomAppRecord[] = [
+  { id: 'r-today', customAppId: APP_ID, values: { 'p-title': 'Standup', 'p-date': TODAY }, createdDate: '2026-08-01T00:00:00Z', updatedAt: '', createdBy: 'u' },
+  { id: 'r-later', customAppId: APP_ID, values: { 'p-title': 'Retrospective', 'p-date': isoPlusDays(TODAY, 3) }, createdDate: '2026-08-01T00:00:00Z', updatedAt: '', createdBy: 'u' },
+  { id: 'r-nodate', customAppId: APP_ID, values: { 'p-title': 'Undated' }, createdDate: '2026-08-01T00:00:00Z', updatedAt: '', createdBy: 'u' },
 ];
 
-function renderCalendar(view: AppView = VIEW, onRequestEdit?: (r: AppRecord) => void) {
+function renderCalendar(view: CustomAppView = VIEW, onRequestEdit?: (r: CustomAppRecord) => void) {
   return render(
     <RecordCalendar
-      app={APP}
+      customApp={APP}
       view={view}
       records={RECORDS}
       isLoading={false}

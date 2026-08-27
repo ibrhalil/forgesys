@@ -39,7 +39,7 @@ forgesys:
     # K-16 modules activated for every tenant at provisioning (and backfilled at
     # startup for pre-module-system tenants). Keys must exist in ModuleDefinition.
     # 'apps' (K-15 custom app builder) is FREE + default so adoption is the point;
-    # plans separate by plan limits (PlanDefinition.maxApps/maxRecordsPerApp).
+    # plans separate by plan limits (PlanDefinition.maxCustomApps/maxRecordsPerCustomApp).
     # NOTE: the built-in fallback in ModuleProperties.DEFAULT_KEYS stays 'pm'-only —
     # the test profile has no ModuleProperties bean and must not run module
     # migrations implicitly; ITs activate modules explicitly.
@@ -103,7 +103,7 @@ forgesys:
       - "/api/v1/permissions/**"
       - "/api/v1/platform/**"
       - "/api/v1/modules/**"
-      - "/api/v1/apps/**"
+      - "/api/v1/custom-apps/**"
     # Case-insensitive key patterns that trigger masking to [REDACTED].
     mask-patterns:
       - "password"

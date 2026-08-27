@@ -28,12 +28,12 @@ public enum ModuleDefinition {
     /**
      * First {@code ownMigrations=true} module: tables under {@code db/migration/module/apps},
      * history {@code flyway_schema_history_mod_apps}. {@code minPlan=FREE} — tiers separate
-     * by plan limits (maxApps/maxRecordsPerApp, soft-block).
+     * by plan limits (maxCustomApps/maxRecordsPerCustomApp, soft-block).
      */
     APPS("apps", "Custom App Builder", PlanDefinition.FREE, true, ProjectType.APPS, List.of(
-            new PermissionCatalog.PermissionDefinition(PermissionCatalog.APPS_APP_READ, "Read tenant custom apps (definitions, properties, views)"),
-            new PermissionCatalog.PermissionDefinition(PermissionCatalog.APPS_APP_WRITE, "Create or update tenant custom apps and their properties/views"),
-            new PermissionCatalog.PermissionDefinition(PermissionCatalog.APPS_APP_DELETE, "Delete tenant custom apps"),
+            new PermissionCatalog.PermissionDefinition(PermissionCatalog.APPS_CUSTOM_APP_READ, "Read tenant custom apps (definitions, properties, views)"),
+            new PermissionCatalog.PermissionDefinition(PermissionCatalog.APPS_CUSTOM_APP_WRITE, "Create or update tenant custom apps and their properties/views"),
+            new PermissionCatalog.PermissionDefinition(PermissionCatalog.APPS_CUSTOM_APP_DELETE, "Delete tenant custom apps"),
             new PermissionCatalog.PermissionDefinition(PermissionCatalog.APPS_RECORD_READ, "Read records of tenant custom apps"),
             new PermissionCatalog.PermissionDefinition(PermissionCatalog.APPS_RECORD_WRITE, "Create or update custom app records"),
             new PermissionCatalog.PermissionDefinition(PermissionCatalog.APPS_RECORD_DELETE, "Delete custom app records")

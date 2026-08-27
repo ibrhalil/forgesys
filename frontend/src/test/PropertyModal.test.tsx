@@ -2,15 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { PropertyModal } from '../features/apps/components/PropertyModal';
-import type { AppProperty } from '../features/apps/types';
+import { PropertyModal } from '../features/custom-apps/components/PropertyModal';
+import type { CustomAppProperty } from '../features/custom-apps/types';
 import { useLocaleStore } from '../store/localeStore';
 
 const APP_ID = '55555555-5555-5555-5555-555555555555';
 
-const TEXT_PROPERTY: AppProperty = {
+const TEXT_PROPERTY: CustomAppProperty = {
   id: 'p-title',
-  appId: APP_ID,
+  customAppId: APP_ID,
   name: 'Title',
   type: 'TEXT',
   config: null,
@@ -18,9 +18,9 @@ const TEXT_PROPERTY: AppProperty = {
   position: 0,
 };
 
-const SELECT_PROPERTY: AppProperty = {
+const SELECT_PROPERTY: CustomAppProperty = {
   id: 'p-status',
-  appId: APP_ID,
+  customAppId: APP_ID,
   name: 'Status',
   type: 'SELECT',
   config: { options: ['Todo', 'Done'] },
@@ -30,11 +30,11 @@ const SELECT_PROPERTY: AppProperty = {
 
 let calls: { method: string; url: string; body?: string }[] = [];
 
-function renderModal(property?: AppProperty) {
+function renderModal(property?: CustomAppProperty) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <PropertyModal appId={APP_ID} property={property} onClose={vi.fn()} />
+      <PropertyModal customAppId={APP_ID} property={property} onClose={vi.fn()} />
     </QueryClientProvider>,
   );
 }
@@ -67,7 +67,7 @@ describe('PropertyModal', () => {
     await user.click(screen.getByRole('button', { name: 'Save' }));
 
     const put = calls.find((c) => c.method === 'PUT');
-    expect(put?.url).toBe(`/api/v1/apps/${APP_ID}/properties/p-title`);
+    expect(put?.url).toBe(`/api/v1/custom-apps/${APP_ID}/properties/p-title`);
     expect(JSON.parse(put!.body!)).toEqual({ name: 'Headline', type: 'TEXT', required: false, position: 0 });
   });
 
@@ -101,20 +101,20 @@ describe('PropertyModal', () => {
     await user.click(screen.getByRole('button', { name: 'Create' }));
 
     const post = calls.find((c) => c.method === 'POST');
-    expect(post?.url).toBe(`/api/v1/apps/${APP_ID}/properties`);
+    expect(post?.url).toBe(`/api/v1/custom-apps/${APP_ID}/properties`);
     expect(JSON.parse(post!.body!)).toEqual({ name: 'Estimate', type: 'TEXT', required: false });
   });
 
-  it('re-targeting a RELATION property shows the newly picked app, not the stale one', async () => {
+  it('re-targeting a RELATION property shows the newly picked customApp, not the stale one', async () => {
     const user = userEvent.setup();
     const OLD_TARGET = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
     const NEW_TARGET = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
-    const relProperty: AppProperty = {
+    const relProperty: CustomAppProperty = {
       id: 'p-rel',
-      appId: APP_ID,
+      customAppId: APP_ID,
       name: 'Customer',
       type: 'RELATION',
-      config: { targetAppId: OLD_TARGET },
+      config: { targetCustomAppId: OLD_TARGET },
       required: false,
       position: 2,
     };
@@ -123,13 +123,13 @@ describe('PropertyModal', () => {
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
         calls.push({ method: init?.method ?? 'GET', url, body: init?.body ? String(init.body) : undefined });
-        // Detail seed for the ORIGINAL target + app-directory typeahead for the picker.
-        const payload = url === `/api/v1/apps/${OLD_TARGET}` ? { id: OLD_TARGET, name: 'Old App' }
-          : url === `/api/v1/apps/${NEW_TARGET}` ? { id: NEW_TARGET, name: 'New App' }
-          : url.includes('/api/v1/apps?') ? {
+        // Detail seed for the ORIGINAL target + customApp-directory typeahead for the picker.
+        const payload = url === `/api/v1/custom-apps/${OLD_TARGET}` ? { id: OLD_TARGET, name: 'Old CustomApp' }
+          : url === `/api/v1/custom-apps/${NEW_TARGET}` ? { id: NEW_TARGET, name: 'New CustomApp' }
+          : url.includes('/api/v1/custom-apps?') ? {
               data: [
-                { id: NEW_TARGET, name: 'New App', description: null, icon: null, projectId: 'proj-1', projectName: 'Genel', createdDate: '2026-08-01T10:00:00Z', updatedAt: '2026-08-01T10:00:00Z' },
-                { id: 'dddddddd-dddd-dddd-dddd-dddddddddddd', name: 'Other App', description: null, icon: null, projectId: 'proj-1', projectName: 'Genel', createdDate: '2026-08-01T10:00:00Z', updatedAt: '2026-08-01T10:00:00Z' },
+                { id: NEW_TARGET, name: 'New CustomApp', description: null, icon: null, projectId: 'proj-1', projectName: 'Genel', createdDate: '2026-08-01T10:00:00Z', updatedAt: '2026-08-01T10:00:00Z' },
+                { id: 'dddddddd-dddd-dddd-dddd-dddddddddddd', name: 'Other CustomApp', description: null, icon: null, projectId: 'proj-1', projectName: 'Genel', createdDate: '2026-08-01T10:00:00Z', updatedAt: '2026-08-01T10:00:00Z' },
               ],
               meta: { page: 0, pageSize: 20, totalElements: 2, totalPages: 1, hasNext: false, hasPrevious: false },
             }
@@ -141,25 +141,25 @@ describe('PropertyModal', () => {
     renderModal(relProperty);
 
     // Edit mode seeds the current target's name.
-    expect(await screen.findByText('Old App')).toBeInTheDocument();
+    expect(await screen.findByText('Old CustomApp')).toBeInTheDocument();
 
-    // Pick a different target app through the typeahead.
+    // Pick a different target customApp through the typeahead.
     const combo = screen.getByRole('combobox', { name: /target app/i });
     await user.click(combo);
     await user.type(combo, 'New');
-    await user.click(await screen.findByRole('option', { name: 'New App' }));
+    await user.click(await screen.findByRole('option', { name: 'New CustomApp' }));
 
     // The control must show the freshly picked label, not the stale seed.
-    expect(screen.getByText('New App')).toBeInTheDocument();
-    expect(screen.queryByText('Old App')).not.toBeInTheDocument();
+    expect(screen.getByText('New CustomApp')).toBeInTheDocument();
+    expect(screen.queryByText('Old CustomApp')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Save' }));
     const put = calls.find((c) => c.method === 'PUT');
-    expect(put?.url).toBe(`/api/v1/apps/${APP_ID}/properties/p-rel`);
+    expect(put?.url).toBe(`/api/v1/custom-apps/${APP_ID}/properties/p-rel`);
     expect(JSON.parse(put!.body!)).toEqual({
       name: 'Customer',
       type: 'RELATION',
-      config: { targetAppId: NEW_TARGET },
+      config: { targetCustomAppId: NEW_TARGET },
       required: false,
       position: 2,
     });

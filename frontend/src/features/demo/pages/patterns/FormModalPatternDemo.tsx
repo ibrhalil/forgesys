@@ -12,7 +12,7 @@ import { LuPlus, LuCheck } from 'react-icons/lu';
 
 const PROJECT_TYPES: SelectOption<string>[] = [
   { value: 'software', label: 'Software Development (Kanban + Tasks)' },
-  { value: 'custom_apps', label: 'Dynamic Database App (App Builder)' },
+  { value: 'custom_apps', label: 'Dynamic Database CustomApp (CustomApp Builder)' },
   { value: 'knowledge', label: 'Team Documentation & Notes' },
 ];
 

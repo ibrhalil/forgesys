@@ -231,9 +231,9 @@ public class GlobalExceptionHandler {
         if (lower.contains("permissions_name")) return ErrorCode.PERMISSION_NAME_TAKEN;
         if (lower.contains("projects_name") || lower.contains("projects_type_name")) return ErrorCode.PROJECT_NAME_TAKEN;
         if (lower.contains("note_categories_name")) return ErrorCode.NOTE_CATEGORY_NAME_TAKEN;
-        if (lower.contains("apps_name")) return ErrorCode.APP_NAME_TAKEN;
-        if (lower.contains("app_properties_name")) return ErrorCode.APP_PROPERTY_NAME_TAKEN;
-        if (lower.contains("app_views_name")) return ErrorCode.APP_VIEW_NAME_TAKEN;
+        if (lower.contains("custom_apps_name")) return ErrorCode.CUSTOM_APP_NAME_TAKEN;
+        if (lower.contains("custom_app_properties_name")) return ErrorCode.CUSTOM_APP_PROPERTY_NAME_TAKEN;
+        if (lower.contains("custom_app_views_name")) return ErrorCode.CUSTOM_APP_VIEW_NAME_TAKEN;
         if (lower.contains("tenant_modules_company_module")) return ErrorCode.MODULE_ALREADY_ACTIVE;
         if (lower.contains("companies_subdomain") || lower.contains("companies_schema_name")) {
             return ErrorCode.COMPANY_SUBDOMAIN_TAKEN;

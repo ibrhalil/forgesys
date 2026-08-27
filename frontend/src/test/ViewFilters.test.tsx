@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ViewFilters } from '../features/apps/components/ViewFilters';
-import type { AppDetail, AppValueFilter, AppValueSort } from '../features/apps/types';
+import { ViewFilters } from '../features/custom-apps/components/ViewFilters';
+import type { CustomAppDetail, CustomAppValueFilter, CustomAppValueSort } from '../features/custom-apps/types';
 import { useLocaleStore } from '../store/localeStore';
 
 const APP_ID = '66666666-6666-6666-6666-666666666666';
 
-const APP: AppDetail = {
+const APP: CustomAppDetail = {
   id: APP_ID,
   projectId: 'proj-1',
   projectName: 'Genel',
@@ -17,9 +17,9 @@ const APP: AppDetail = {
   createdDate: '2026-08-01T10:00:00Z',
   updatedAt: '2026-08-01T10:00:00Z',
   properties: [
-    { id: 'p-title', appId: APP_ID, name: 'Title', type: 'TEXT', config: null, required: false, position: 0 },
-    { id: 'p-count', appId: APP_ID, name: 'Count', type: 'NUMBER', config: null, required: false, position: 1 },
-    { id: 'p-formula', appId: APP_ID, name: 'Magic', type: 'FORMULA', config: null, required: false, position: 2 },
+    { id: 'p-title', customAppId: APP_ID, name: 'Title', type: 'TEXT', config: null, required: false, position: 0 },
+    { id: 'p-count', customAppId: APP_ID, name: 'Count', type: 'NUMBER', config: null, required: false, position: 1 },
+    { id: 'p-formula', customAppId: APP_ID, name: 'Magic', type: 'FORMULA', config: null, required: false, position: 2 },
   ],
   views: [],
 };
@@ -28,10 +28,10 @@ const onApply = vi.fn();
 const onSaveToView = vi.fn();
 const onClear = vi.fn();
 
-function renderFilters(seedFilters: AppValueFilter[] = [], seedSorts: AppValueSort[] = []) {
+function renderFilters(seedFilters: CustomAppValueFilter[] = [], seedSorts: CustomAppValueSort[] = []) {
   return render(
     <ViewFilters
-      app={APP}
+      customApp={APP}
       seedFilters={seedFilters}
       seedSorts={seedSorts}
       canSave

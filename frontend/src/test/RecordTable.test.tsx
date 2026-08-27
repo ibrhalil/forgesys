@@ -2,15 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { RecordTable } from '../features/apps/components/RecordTable';
-import type { AppDetail } from '../features/apps/types';
+import { RecordTable } from '../features/custom-apps/components/RecordTable';
+import type { CustomAppDetail } from '../features/custom-apps/types';
 import { useAuthStore } from '../store/authStore';
 import { useLocaleStore } from '../store/localeStore';
 
 const APP_ID = '22222222-2222-2222-2222-222222222222';
 const USER_ID = '12345678-90ab-cdef-1234-567890abcdef';
 
-const APP: AppDetail = {
+const APP: CustomAppDetail = {
   id: APP_ID,
   projectId: 'proj-1',
   projectName: 'Genel',
@@ -20,15 +20,15 @@ const APP: AppDetail = {
   createdDate: '2026-08-01T10:00:00Z',
   updatedAt: '2026-08-01T10:00:00Z',
   properties: [
-    { id: 'p-text', appId: APP_ID, name: 'Title', type: 'TEXT', config: null, required: false, position: 0 },
-    { id: 'p-user', appId: APP_ID, name: 'Owner', type: 'USER', config: null, required: false, position: 1 },
+    { id: 'p-text', customAppId: APP_ID, name: 'Title', type: 'TEXT', config: null, required: false, position: 0 },
+    { id: 'p-user', customAppId: APP_ID, name: 'Owner', type: 'USER', config: null, required: false, position: 1 },
   ],
   views: [],
 };
 
 const RECORD = {
   id: 'r-1',
-  appId: APP_ID,
+  customAppId: APP_ID,
   values: { 'p-text': 'Old title', 'p-user': USER_ID },
   createdDate: '2026-08-10T09:00:00Z',
   updatedAt: '2026-08-10T09:00:00Z',
@@ -73,7 +73,7 @@ function renderTable() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <RecordTable app={APP} />
+      <RecordTable customApp={APP} />
     </QueryClientProvider>,
   );
 }
@@ -99,7 +99,7 @@ describe('RecordTable inline edit', () => {
     await waitFor(() => {
       const patch = calls.find((c) => c.method === 'PATCH');
       expect(patch).toBeDefined();
-      expect(patch!.url).toBe(`/api/v1/apps/${APP_ID}/records/${RECORD.id}`);
+      expect(patch!.url).toBe(`/api/v1/custom-apps/${APP_ID}/records/${RECORD.id}`);
       expect(JSON.parse(patch!.body!)).toEqual({ values: { 'p-text': 'New title' } });
     });
   });
@@ -163,7 +163,7 @@ describe('RecordTable inline edit', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
-        <RecordTable app={APP} onRequestEdit={onEdit} />
+        <RecordTable customApp={APP} onRequestEdit={onEdit} />
       </QueryClientProvider>,
     );
 

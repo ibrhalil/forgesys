@@ -2,12 +2,12 @@ package com.ibrhalil.forgesys.service;
 
 import com.ibrhalil.forgesys.common.tenant.TenantContext;
 import com.ibrhalil.forgesys.config.SampleDataProperties;
-import com.ibrhalil.forgesys.dto.AppPropertyConfigDto;
-import com.ibrhalil.forgesys.dto.AppPropertyRequest;
-import com.ibrhalil.forgesys.dto.AppRecordRequest;
-import com.ibrhalil.forgesys.dto.AppRequest;
-import com.ibrhalil.forgesys.dto.AppViewConfigDto;
-import com.ibrhalil.forgesys.dto.AppViewRequest;
+import com.ibrhalil.forgesys.dto.CustomAppPropertyConfigDto;
+import com.ibrhalil.forgesys.dto.CustomAppPropertyRequest;
+import com.ibrhalil.forgesys.dto.CustomAppRecordRequest;
+import com.ibrhalil.forgesys.dto.CustomAppRequest;
+import com.ibrhalil.forgesys.dto.CustomAppViewConfigDto;
+import com.ibrhalil.forgesys.dto.CustomAppViewRequest;
 import com.ibrhalil.forgesys.dto.NoteCategoryRequest;
 import com.ibrhalil.forgesys.dto.NoteRequest;
 import com.ibrhalil.forgesys.dto.ProjectRequest;
@@ -36,7 +36,7 @@ import java.util.UUID;
 
 /**
  * Onboarding sample data for newly provisioned tenants (K-47, the Linear pattern):
- * one TASKS project + 4 guided tasks, 2 note categories + 2 markdown notes, 1 app +
+ * one TASKS project + 4 guided tasks, 2 note categories + 2 markdown notes, 1 custom app +
  * properties/views/records (inside FREE plan limits). Fixed EN strings — tenant data,
  * not UI (no i18n). The seed runs REQUIRES_NEW behind a set-and-restore
  * {@link TenantContext} window (RISK-26) from provisioning's afterCommit — it must
@@ -52,8 +52,8 @@ public class TenantSampleDataService {
     private final TaskService taskService;
     private final NoteCategoryService noteCategoryService;
     private final NoteService noteService;
-    private final AppBuilderService appBuilderService;
-    private final AppRecordService appRecordService;
+    private final CustomAppService customAppService;
+    private final CustomAppRecordService customAppRecordService;
     private final SampleDataProperties properties;
     // Self-proxy: the REQUIRES_NEW boundary only takes effect through the Spring proxy.
     private final ObjectProvider<TenantSampleDataService> self;
@@ -78,7 +78,7 @@ public class TenantSampleDataService {
     public void seedInNewTx(UUID adminUserId) {
         seedPm(adminUserId);
         seedNotes();
-        seedApps();
+        seedCustomApps();
     }
 
     // ── pm ───────────────────────────────────────────────────────────────
@@ -149,35 +149,35 @@ public class TenantSampleDataService {
 
     // ── apps ─────────────────────────────────────────────────────────────
 
-    private void seedApps() {
-        UUID appId = appBuilderService.create(new AppRequest(
-                "Team Tracker", "A sample app — shape it into anything you like.", null, null)).id();
+    private void seedCustomApps() {
+        UUID customAppId = customAppService.create(new CustomAppRequest(
+                "Team Tracker", "A sample custom app — shape it into anything you like.", null, null)).id();
 
-        UUID name = appBuilderService.addProperty(appId, new AppPropertyRequest(
+        UUID name = customAppService.addProperty(customAppId, new CustomAppPropertyRequest(
                 "Name", PropertyType.TEXT, null, true, 0)).id();
-        UUID stage = appBuilderService.addProperty(appId, new AppPropertyRequest(
+        UUID stage = customAppService.addProperty(customAppId, new CustomAppPropertyRequest(
                 "Stage", PropertyType.SELECT,
-                new AppPropertyConfigDto(List.of("Discovery", "In Progress", "Launched"), null),
+                new CustomAppPropertyConfigDto(List.of("Discovery", "In Progress", "Launched"), null),
                 false, 1)).id();
-        UUID launchDate = appBuilderService.addProperty(appId, new AppPropertyRequest(
+        UUID launchDate = customAppService.addProperty(customAppId, new CustomAppPropertyRequest(
                 "Launch date", PropertyType.DATE, null, false, 2)).id();
 
-        appBuilderService.addView(appId, new AppViewRequest("Table", ViewType.TABLE, null, 0));
-        appBuilderService.addView(appId, new AppViewRequest("Board", ViewType.BOARD,
-                new AppViewConfigDto(null, null, stage.toString(), null), 1));
+        customAppService.addView(customAppId, new CustomAppViewRequest("Table", ViewType.TABLE, null, 0));
+        customAppService.addView(customAppId, new CustomAppViewRequest("Board", ViewType.BOARD,
+                new CustomAppViewConfigDto(null, null, stage.toString(), null), 1));
 
         // Stage values spread across the options; the fourth record carries none
         // (the Board's empty-bucket example).
-        appRecordService.create(appId, sampleRecord(name, "Aurora", stage, "Discovery",
+        customAppRecordService.create(customAppId, sampleRecord(name, "Aurora", stage, "Discovery",
                 launchDate, LocalDate.of(2026, 9, 30)));
-        appRecordService.create(appId, sampleRecord(name, "Beacon", stage, "In Progress",
+        customAppRecordService.create(customAppId, sampleRecord(name, "Beacon", stage, "In Progress",
                 launchDate, LocalDate.of(2026, 10, 15)));
-        appRecordService.create(appId, sampleRecord(name, "Cobalt", stage, "Launched",
+        customAppRecordService.create(customAppId, sampleRecord(name, "Cobalt", stage, "Launched",
                 launchDate, LocalDate.of(2026, 6, 1)));
-        appRecordService.create(appId, sampleRecord(name, "Dune", null, null, null, null));
+        customAppRecordService.create(customAppId, sampleRecord(name, "Dune", null, null, null, null));
     }
 
-    private AppRecordRequest sampleRecord(UUID namePropertyId, String name,
+    private CustomAppRecordRequest sampleRecord(UUID namePropertyId, String name,
                                           UUID stagePropertyId, String stage,
                                           UUID datePropertyId, LocalDate launchDate) {
         Map<String, JsonNode> values = new LinkedHashMap<>();
@@ -188,6 +188,6 @@ public class TenantSampleDataService {
         if (launchDate != null) {
             values.put(datePropertyId.toString(), StringNode.valueOf(launchDate.toString()));
         }
-        return new AppRecordRequest(values);
+        return new CustomAppRecordRequest(values);
     }
 }

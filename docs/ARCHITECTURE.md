@@ -1,6 +1,6 @@
 # Mimari
 
-ForgeSys — modüler çok-kiracılı (multi-tenant) SaaS platformu. Schema-per-tenant izolasyonu, UUID PK, soft-delete + optimistic locking, Spring Data auditing. Hibrit ürün modeli: built-in modüller (pm: Projects & Tasks, apps: App Builder, notes — üçü aktif; Warehouse/Logistics planlı) + tenant custom app'leri (Notion-style App Builder, `apps` modülü). Bu doküman **mevcut sistemi** belgeler: auth (K-34), RBAC (K-26), audit/login/request log (K-19/K-27), plan/modül sistemi (K-16), app builder (K-15/K-42), metrics expose (K-43) ve platform süperadmin + servis hesapları (K-50) uygulanmış durumdadır; kalan işler [`ROADMAP.md`](ROADMAP.md)'de.
+ForgeSys — modüler çok-kiracılı (multi-tenant) SaaS platformu. Schema-per-tenant izolasyonu, UUID PK, soft-delete + optimistic locking, Spring Data auditing. Hibrit ürün modeli: built-in modüller (pm: Projects & Tasks, apps: Custom App Builder, notes — üçü aktif; Warehouse/Logistics planlı) + tenant custom app'leri (Notion-style Custom App Builder, `apps` modülü). Bu doküman **mevcut sistemi** belgeler: auth (K-34), RBAC (K-26), audit/login/request log (K-19/K-27), plan/modül sistemi (K-16), app builder (K-15/K-42), metrics expose (K-43) ve platform süperadmin + servis hesapları (K-50) uygulanmış durumdadır; kalan işler [`ROADMAP.md`](ROADMAP.md)'de.
 
 ## Sistem Bileşenleri
 
@@ -156,7 +156,7 @@ flowchart TB
             TJoin1[t_user_roles<br/>t_user_groups<br/>t_role_permissions<br/>t_group_roles<br/>t_role_parents]
             TAcc1[t_user_accounts<br/>t_user_profiles]
             TMod1[t_projects<br/>t_tasks<br/>t_audit_logs<br/>t_login_history<br/>t_request_logs]
-            TApps1[t_apps . t_app_properties<br/>t_app_records . t_app_record_values<br/>t_app_views]
+            TApps1[t_custom_apps . t_custom_app_properties<br/>t_custom_app_records . t_custom_app_record_values<br/>t_custom_app_views]
             TNotes1[t_notes<br/>t_note_categories]
         end
         subgraph T2[tenant_stark]
@@ -167,7 +167,7 @@ flowchart TB
             TJoin2[t_user_roles<br/>t_user_groups<br/>t_role_permissions<br/>t_group_roles<br/>t_role_parents]
             TAcc2[t_user_accounts<br/>t_user_profiles]
             TMod2[t_projects<br/>t_tasks<br/>t_audit_logs<br/>t_login_history<br/>t_request_logs]
-            TApps2[t_apps . t_app_properties<br/>t_app_records . t_app_record_values<br/>t_app_views]
+            TApps2[t_custom_apps . t_custom_app_properties<br/>t_custom_app_records . t_custom_app_record_values<br/>t_custom_app_views]
             TNotes2[t_notes<br/>t_note_categories]
         end
     end
@@ -208,7 +208,7 @@ flowchart TB
 | `tenant_<sub>`   | `t_audit_logs`      | Audit trail (append-only, K-19)      | `tenant/V1__baseline.sql` |
 | `tenant_<sub>`   | `t_login_history`   | Login denemeleri (append-only, K-19) | `tenant/V1__baseline.sql` |
 | `tenant_<sub>`   | `t_request_logs`    | Request/trace log + high-risk maskeli body (K-19 katman 3 + K-27) | `tenant/V2__request_logs.sql` |
-| `tenant_<sub>`   | `t_apps` + 4        | App builder ailesi: `t_apps`(`project_id` — APPS koleksiyon konteynerine çapalı, K-45) + `t_app_properties(config jsonb)`, `t_app_records`, `t_app_record_values(value jsonb, GIN)`, `t_app_views(config jsonb)` — `apps` modülü aktivasyonda düşer | `module/apps/V1__app_builder.sql` + `module/apps/V2__apps_project_scoping.sql` (per-module history `flyway_schema_history_mod_apps`, [K-15](DECISIONS.md#k-15)) |
+| `tenant_<sub>`   | `t_custom_apps` + 4        | CustomApp builder ailesi: `t_custom_apps`(`project_id` — APPS koleksiyon konteynerine çapalı, K-45) + `t_custom_app_properties(config jsonb)`, `t_custom_app_records`, `t_custom_app_record_values(value jsonb, GIN)`, `t_custom_app_views(config jsonb)` — `apps` modülü aktivasyonda düşer | `module/apps/V1__app_builder.sql` + `module/apps/V2__apps_project_scoping.sql` (per-module history `flyway_schema_history_mod_apps`, [K-15](DECISIONS.md#k-15)) |
 | `tenant_<sub>`   | `t_notes`, `t_note_categories` | Notes modülü (markdown; ikisi de `project_id` ile NOTES konteynerine çapalı — K-45; kategori FK `ON DELETE SET NULL`) — `notes` modülü aktivasyonda düşer | `module/notes/V1__notes.sql` + `module/notes/V2__notes_project_scoping.sql` (per-module history `flyway_schema_history_mod_notes`, [K-44](DECISIONS.md#k-44)) |
 
 > Refresh token'lar tabloda DEĞİL — Redis-first (K-34, [DECISIONS](DECISIONS.md#k-34)); eski `t_refresh_tokens` ölü tablosu K-36 temizliğinde kaldırıldı. Migration geçmişi K-36 squash'ı + 2026-08-27 consolidation ile location başına tek `V1__baseline.sql`'e indirildi (public `V4`→`V3` yeniden numaralandı) — yeni public migration `V4`'ten, tenant migration `V5`'ten devam eder.
@@ -312,11 +312,11 @@ classDiagram
     class AuditLog
     class LoginHistory
     class RequestLog
-    class App
-    class AppProperty
-    class AppRecord
-    class AppRecordValue
-    class AppView
+    class CustomApp
+    class CustomAppProperty
+    class CustomAppRecord
+    class CustomAppRecordValue
+    class CustomAppView
     class Note
     class NoteCategory
 
@@ -327,10 +327,10 @@ classDiagram
     BaseEntity <|-- Group
     BaseEntity <|-- Project
     BaseEntity <|-- Task
-    BaseEntity <|-- App
-    BaseEntity <|-- AppProperty
-    BaseEntity <|-- AppRecord
-    BaseEntity <|-- AppView
+    BaseEntity <|-- CustomApp
+    BaseEntity <|-- CustomAppProperty
+    BaseEntity <|-- CustomAppRecord
+    BaseEntity <|-- CustomAppView
     BaseEntity <|-- Note
     BaseEntity <|-- NoteCategory
     SoftDeleteAuditEntity <|-- UserAccount
@@ -341,7 +341,7 @@ classDiagram
     GeneratedIdAuditEntity <|-- AuditLog
     GeneratedIdAuditEntity <|-- LoginHistory
     GeneratedIdAuditEntity <|-- RequestLog
-    GeneratedIdAuditEntity <|-- AppRecordValue
+    GeneratedIdAuditEntity <|-- CustomAppRecordValue
     GeneratedIdAuditEntity <|-- PlatformUser
     GeneratedIdAuditEntity <|-- PlatformApiKey
     GeneratedIdAuditEntity <|-- PlatformAuditLog
@@ -352,8 +352,8 @@ classDiagram
 - `@SQLDelete` her concrete entity'de ayrı (table-specific `UPDATE ... SET is_deleted = true, version = version + 1`).
 - `UserAccount`/`UserProfile` `@MapsId` ile `User`'a shared PK (gereksiz FK yok).
 - Tüm ID'ler UUID (`GenerationType.UUID`). Tablo adları `t_` prefix'li. Constraint'ler `idx_*`, `uk_*`, `fk_*`.
-- `Subscription`/`TenantModule` (public şema) `BaseEntity`. Read model'ler hiyerarşi dışındadır ve K-49 ile entity değil kod içi Criteria DTO projection'dır (`web/projection/ProjectionListQuery` — eski `@Immutable @Subselect` `UserDirectoryView` kaldırıldı; view entity yalnızca karmaşık/yoğun tablolar için istisna). `AppRecordValue` ve `RequestLog` soft-delete'siz (`GeneratedIdAuditEntity`) — value clear = satır silinir (K-15); request log append-only (K-27). `PlatformUser`/`PlatformApiKey`/`PlatformAuditLog` (public şema, K-50) da `GeneratedIdAuditEntity` — platform audit append-only.
-- **Tipli proje konteyneri (K-45):** `Project` = typed container (`project_type` NOT NULL: TASKS/NOTES/APPS; katalog aktif modüllerden türer). İçerik çapaları düz UUID kolonlarıdır (`@ManyToOne` yok — Task konvansiyonu): `Task.projectId`, `Note.projectId` + `NoteCategory.projectId` (NOTES), `App.projectId` (APPS koleksiyonu). İlişkisel veri katmanı (t_links) bilinçli erteli — talep-kapılı.
+- `Subscription`/`TenantModule` (public şema) `BaseEntity`. Read model'ler hiyerarşi dışındadır ve K-49 ile entity değil kod içi Criteria DTO projection'dır (`web/projection/ProjectionListQuery` — eski `@Immutable @Subselect` `UserDirectoryView` kaldırıldı; view entity yalnızca karmaşık/yoğun tablolar için istisna). `CustomAppRecordValue` ve `RequestLog` soft-delete'siz (`GeneratedIdAuditEntity`) — value clear = satır silinir (K-15); request log append-only (K-27). `PlatformUser`/`PlatformApiKey`/`PlatformAuditLog` (public şema, K-50) da `GeneratedIdAuditEntity` — platform audit append-only.
+- **Tipli proje konteyneri (K-45):** `Project` = typed container (`project_type` NOT NULL: TASKS/NOTES/APPS; katalog aktif modüllerden türer). İçerik çapaları düz UUID kolonlarıdır (`@ManyToOne` yok — Task konvansiyonu): `Task.projectId`, `Note.projectId` + `NoteCategory.projectId` (NOTES), `CustomApp.projectId` (APPS koleksiyonu). İlişkisel veri katmanı (t_links) bilinçli erteli — talep-kapılı.
 
 > Detaylar: [`persistence/AGENTS.md`](../persistence/AGENTS.md)
 

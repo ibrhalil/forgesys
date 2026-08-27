@@ -33,7 +33,7 @@ export interface NavGroup {
 /** Top-level nav entries (outside any collapsible group). */
 export const NAV_ITEMS: NavItem[] = [
   { labelKey: 'nav.projects', to: '/', icon: LuFolder, authority: PERMISSIONS.PROJECT_READ },
-  { labelKey: 'nav.apps', to: '/apps', icon: LuLayoutGrid, authority: PERMISSIONS.APP_READ },
+  { labelKey: 'nav.customApps', to: '/custom-apps', icon: LuLayoutGrid, authority: PERMISSIONS.CUSTOM_APP_READ },
   { labelKey: 'nav.notes', to: '/notes', icon: LuNotebookPen, authority: PERMISSIONS.NOTE_READ },
 ];
 

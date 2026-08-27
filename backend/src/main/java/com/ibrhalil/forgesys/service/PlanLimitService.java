@@ -22,7 +22,7 @@ import java.util.Optional;
  * Resolves the current tenant's plan limits (K-15): limit <em>values</em> live in the
  * code-side {@link PlanDefinition} registry ({@code t_plans} stores only key/rank —
  * limit changes ship with code). Enforcement is a caller-side soft-block: creating
- * above the limit throws 403 {@link ErrorCode#APP_LIMIT_REACHED}; existing data is
+ * above the limit throws 403 {@link ErrorCode#CUSTOM_APP_LIMIT_REACHED}; existing data is
  * never hidden. Rationale: docs/CODE_NOTES.md (backend/service → PlanLimitService).
  */
 @Service
@@ -34,20 +34,20 @@ public class PlanLimitService {
 
     /** Max custom apps for the current tenant's plan; {@code -1} = unlimited. */
     @Transactional(readOnly = true)
-    public int maxApps() {
-        return activePlan().maxApps();
+    public int maxCustomApps() {
+        return activePlan().maxCustomApps();
     }
 
     /** Max records per custom app for the current tenant's plan; {@code -1} = unlimited. */
     @Transactional(readOnly = true)
-    public long maxRecordsPerApp() {
-        return activePlan().maxRecordsPerApp();
+    public long maxRecordsPerCustomApp() {
+        return activePlan().maxRecordsPerCustomApp();
     }
 
-    /** Throws {@link ErrorCode#APP_LIMIT_REACHED} at the limit; {@code -1} (unlimited) always passes. */
+    /** Throws {@link ErrorCode#CUSTOM_APP_LIMIT_REACHED} at the limit; {@code -1} (unlimited) always passes. */
     public void assertWithin(long current, long limit, String subject) {
         if (limit >= 0 && current >= limit) {
-            throw new BusinessException(ErrorCode.APP_LIMIT_REACHED,
+            throw new BusinessException(ErrorCode.CUSTOM_APP_LIMIT_REACHED,
                     "Plan limit reached for %s (%d/%d). Upgrade your plan to add more.".formatted(subject, current, limit));
         }
     }

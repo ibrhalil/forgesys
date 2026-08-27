@@ -2,14 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { RecordsPanel } from '../features/apps/components/RecordsPanel';
-import type { AppDetail } from '../features/apps/types';
+import { RecordsPanel } from '../features/custom-apps/components/RecordsPanel';
+import type { CustomAppDetail } from '../features/custom-apps/types';
 import { useAuthStore } from '../store/authStore';
 import { useLocaleStore } from '../store/localeStore';
 
 const APP_ID = '77777777-7777-7777-7777-777777777777';
 
-function appFixture(views: AppDetail['views']): AppDetail {
+function appFixture(views: CustomAppDetail['views']): CustomAppDetail {
   return {
     id: APP_ID,
     projectId: 'proj-1',
@@ -20,8 +20,8 @@ function appFixture(views: AppDetail['views']): AppDetail {
     createdDate: '2026-08-01T10:00:00Z',
     updatedAt: '2026-08-01T10:00:00Z',
     properties: [
-      { id: 'p-title', appId: APP_ID, name: 'Title', type: 'TEXT', config: null, required: false, position: 0 },
-      { id: 'p-status', appId: APP_ID, name: 'Status', type: 'SELECT', config: { options: ['Todo', 'Done'] }, required: false, position: 1 },
+      { id: 'p-title', customAppId: APP_ID, name: 'Title', type: 'TEXT', config: null, required: false, position: 0 },
+      { id: 'p-status', customAppId: APP_ID, name: 'Status', type: 'SELECT', config: { options: ['Todo', 'Done'] }, required: false, position: 1 },
     ],
     views,
   };
@@ -29,8 +29,8 @@ function appFixture(views: AppDetail['views']): AppDetail {
 
 const RECORDS_PAYLOAD = {
   data: [
-    { id: 'r-1', appId: APP_ID, values: { 'p-title': 'First order', 'p-status': 'Todo' }, createdDate: '2026-08-10T09:00:00Z', updatedAt: '', createdBy: 'u1' },
-    { id: 'r-2', appId: APP_ID, values: { 'p-title': 'Second order', 'p-status': 'Done' }, createdDate: '2026-08-11T09:00:00Z', updatedAt: '', createdBy: 'u1' },
+    { id: 'r-1', customAppId: APP_ID, values: { 'p-title': 'First order', 'p-status': 'Todo' }, createdDate: '2026-08-10T09:00:00Z', updatedAt: '', createdBy: 'u1' },
+    { id: 'r-2', customAppId: APP_ID, values: { 'p-title': 'Second order', 'p-status': 'Done' }, createdDate: '2026-08-11T09:00:00Z', updatedAt: '', createdBy: 'u1' },
   ],
   meta: { page: 0, pageSize: 10, totalElements: 2, totalPages: 1, hasNext: false, hasPrevious: false },
 };
@@ -39,11 +39,11 @@ const EMPTY_PAGE = { data: [], meta: { page: 0, pageSize: 10, totalElements: 0, 
 
 let urls: { method: string; url: string }[] = [];
 
-function renderPanel(app: AppDetail) {
+function renderPanel(customApp: CustomAppDetail) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <RecordsPanel app={app} />
+      <RecordsPanel customApp={customApp} />
     </QueryClientProvider>,
   );
 }
@@ -65,7 +65,7 @@ describe('RecordsPanel', () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it('renders the plain self-paginated table when the app has no views', async () => {
+  it('renders the plain self-paginated table when the customApp has no views', async () => {
     renderPanel(appFixture([]));
 
     expect(await screen.findByRole('columnheader', { name: 'Title' })).toBeInTheDocument();
@@ -79,8 +79,8 @@ describe('RecordsPanel', () => {
     const user = userEvent.setup();
     renderPanel(
       appFixture([
-        { id: 'v-table', appId: APP_ID, name: 'All', type: 'TABLE', config: null, position: 0 },
-        { id: 'v-board', appId: APP_ID, name: 'By status', type: 'BOARD', config: { groupBy: 'p-status' }, position: 1 },
+        { id: 'v-table', customAppId: APP_ID, name: 'All', type: 'TABLE', config: null, position: 0 },
+        { id: 'v-board', customAppId: APP_ID, name: 'By status', type: 'BOARD', config: { groupBy: 'p-status' }, position: 1 },
       ]),
     );
 
@@ -97,12 +97,12 @@ describe('RecordsPanel', () => {
     expect(screen.getAllByText('Done')).toHaveLength(2);
     expect(screen.queryByRole('columnheader', { name: 'Status' })).not.toBeInTheDocument();
     // Client-mode fetch is a single bounded page.
-    expect(urls.some((u) => u.url.includes(`/api/v1/apps/${APP_ID}/records`) && u.url.includes('size=1000'))).toBe(true);
+    expect(urls.some((u) => u.url.includes(`/api/v1/custom-apps/${APP_ID}/records`) && u.url.includes('size=1000'))).toBe(true);
   });
 
   it('applies a transient filter client-side without saving it to the view', async () => {
     const user = userEvent.setup();
-    renderPanel(appFixture([{ id: 'v-table', appId: APP_ID, name: 'All', type: 'TABLE', config: null, position: 0 }]));
+    renderPanel(appFixture([{ id: 'v-table', customAppId: APP_ID, name: 'All', type: 'TABLE', config: null, position: 0 }]));
 
     expect(await screen.findByText('Second order')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /filters/i }));

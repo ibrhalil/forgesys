@@ -183,7 +183,7 @@ class ModuleActivationIT {
 
     /**
      * K-45 step 5 on real PostgreSQL: activating the apps module runs
-     * {@code module/apps/V1+V2} — t_apps gains its {@code project_id} (NOT NULL) and
+     * {@code module/apps/V1+V2} — t_custom_apps gains its {@code project_id} (NOT NULL) and
      * the tenant's default APPS container ("Genel") exists.
      */
     @Test
@@ -198,7 +198,7 @@ class ModuleActivationIT {
             assertThat(rs.next()).isTrue();
             assertThat(rs.getInt(1)).as("exactly one default APPS container").isEqualTo(1);
         }
-        assertThat(columnNullable("t_apps", "project_id")).as("t_apps.project_id NOT NULL").isEqualTo("NO");
+        assertThat(columnNullable("t_custom_apps", "project_id")).as("t_custom_apps.project_id NOT NULL").isEqualTo("NO");
         assertThat(tenantModuleRepository.findByCompanyIdAndModuleKey(company.getId(), "apps")).isPresent();
     }
 

@@ -63,7 +63,7 @@ const NAV_GROUPS: NavGroup[] = [
 
 /**
  * Standalone layout for the /demo route tree. Lives entirely outside AppShell:
- * no auth, no sidebar, no breadcrumb topbar. DEV-only guard is enforced in App.tsx.
+ * no auth, no sidebar, no breadcrumb topbar. DEV-only guard is enforced in CustomApp.tsx.
  */
 export function DemoLayout() {
   const location = useLocation();
