@@ -18,6 +18,7 @@ public final class PlatformPermissionCatalog {
     public static final String PLATFORM_TENANT_REPORT = "platform:tenant:report";
     public static final String PLATFORM_SERVICE_ACCOUNT_MANAGE = "platform:service-account:manage";
     public static final String PLATFORM_AUDIT_READ = "platform:audit:read";
+    public static final String PLATFORM_MAIL_TEST = "platform:mail:test";
 
     public static final List<String> ALL_NAMES = List.of(
             PLATFORM_COMPANY_READ,
@@ -26,7 +27,8 @@ public final class PlatformPermissionCatalog {
             PLATFORM_TENANT_LIFECYCLE,
             PLATFORM_TENANT_REPORT,
             PLATFORM_SERVICE_ACCOUNT_MANAGE,
-            PLATFORM_AUDIT_READ
+            PLATFORM_AUDIT_READ,
+            PLATFORM_MAIL_TEST
     );
 
     private PlatformPermissionCatalog() {

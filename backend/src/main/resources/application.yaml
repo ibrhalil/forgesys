@@ -57,9 +57,9 @@ forgesys:
     from: ${MAIL_FROM:ForgeSys <no-reply@forgessy.local>}
     # Template language for all recipients until per-user preferences exist (tr|en).
     default-language: ${MAIL_DEFAULT_LANGUAGE:tr}
-    # Optional filesystem override for the classpath mail/*.html templates
-    # (infra/templates/ in prod — copy the template you want to change). Empty =
-    # classpath defaults.
+    # Optional filesystem override for the mail templates. Single git source is
+    # infra/templates/mail (build-injected into the jar's classpath — K-51); this
+    # override wins per file, missing files fall back to the classpath copy.
     templates-dir: ${MAIL_TEMPLATES_DIR:}
   security:
     # Global password pepper (K-23). HMAC-SHA256 pre-hash key combined with BCrypt

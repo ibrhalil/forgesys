@@ -14,6 +14,11 @@ public class InMemoryMailSender implements MailSender {
     private final List<MailMessage> delivered = new CopyOnWriteArrayList<>();
 
     @Override
+    public MailChannel channel() {
+        return MailChannel.IN_MEMORY;
+    }
+
+    @Override
     public void send(MailMessage message) {
         delivered.add(message);
     }

@@ -11,6 +11,11 @@ import org.springframework.stereotype.Component;
 public class LogMailSender implements MailSender {
 
     @Override
+    public MailChannel channel() {
+        return MailChannel.LOG;
+    }
+
+    @Override
     public void send(MailMessage message) {
         log.info("[DEV MAIL] to='{}' template={} actionUrl={}",
                 message.recipient(), message.template(), message.actionUrl());

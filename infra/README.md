@@ -14,7 +14,7 @@ which is **not** source code. Source code lives in `common/`, `persistence/`,
 | `init-sql/`       | Postgres `/docker-entrypoint-initdb.d/` scripts (run once on init).  | Yes                               |
 | `logs/`           | Spring Boot + container log bind-mount.                              | **No** (runtime data)             |
 | `ssl/`            | TLS certificates / private keys for Nginx and app HTTPS.             | **No** — secrets, never committed |
-| `templates/`      | Externalized runtime templates — mail HTML overrides (copy `tenant-verify.<lang>.html` here; `MAIL_TEMPLATES_DIR` points the backend at this dir; missing files fall back to classpath defaults). | Yes (templates can be committed)  |
+| `templates/`      | Externalized runtime templates. `mail/` is the **single git source** for mail HTML templates (K-51) — the backend build injects them into the jar's classpath; `MAIL_TEMPLATES_DIR` (prod: `/templates/mail`) overrides per file, missing files fall back to the jar copy. | Yes (templates are the source)  |
 
 > **Redis data — dev vs prod:**
 > - **dev** (`docker-compose.yml`): Docker-managed **named volume** (`redis-data`), NOT under `infra/data/`. The earlier dev bind-mount to `./infra/data/redis` caused recurring permission errors on the host because the container wrote `appendonlydir/` as UID 999, which host scanners (IDE watchers, `git`, `find`) couldn't traverse — especially on Windows/WSL2. Named volume isolates Redis's AOF data inside Docker's own storage, eliminating the host-level UID mismatch entirely.

@@ -58,6 +58,7 @@ export const PLATFORM_PERMISSIONS = {
   TENANT_REPORT: 'platform:tenant:report',
   SERVICE_ACCOUNT_MANAGE: 'platform:service-account:manage',
   AUDIT_READ: 'platform:audit:read',
+  MAIL_TEST: 'platform:mail:test',
 } as const;
 
 export type PlatformPermission = (typeof PLATFORM_PERMISSIONS)[keyof typeof PLATFORM_PERMISSIONS];

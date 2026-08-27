@@ -1,6 +1,6 @@
 import { Suspense, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { LuBuilding2, LuKeyRound, LuLogOut, LuScrollText } from 'react-icons/lu';
+import { LuBuilding2, LuKeyRound, LuLogOut, LuMail, LuScrollText } from 'react-icons/lu';
 import { usePlatformAuthStore } from '../../store/platformAuthStore';
 import { PLATFORM_PERMISSIONS } from '../../lib/permissions';
 import { BreadcrumbTargetContext } from '../../components/BreadcrumbTargetContext';
@@ -12,7 +12,7 @@ import { cn } from '../../lib/cn';
 
 interface PlatformNavItem {
   to: string;
-  labelKey: 'platform.nav.companies' | 'platform.nav.serviceAccounts' | 'platform.nav.auditLogs';
+  labelKey: 'platform.nav.companies' | 'platform.nav.serviceAccounts' | 'platform.nav.auditLogs' | 'platform.nav.mail';
   icon: typeof LuBuilding2;
   authority?: string;
 }
@@ -21,6 +21,7 @@ const PLATFORM_NAV: PlatformNavItem[] = [
   { to: '/platform/companies', labelKey: 'platform.nav.companies', icon: LuBuilding2, authority: PLATFORM_PERMISSIONS.COMPANY_READ },
   { to: '/platform/service-accounts', labelKey: 'platform.nav.serviceAccounts', icon: LuKeyRound, authority: PLATFORM_PERMISSIONS.SERVICE_ACCOUNT_MANAGE },
   { to: '/platform/audit-logs', labelKey: 'platform.nav.auditLogs', icon: LuScrollText, authority: PLATFORM_PERMISSIONS.AUDIT_READ },
+  { to: '/platform/mail', labelKey: 'platform.nav.mail', icon: LuMail, authority: PLATFORM_PERMISSIONS.MAIL_TEST },
 ];
 
 const navBase = 'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors';

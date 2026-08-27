@@ -13,4 +13,7 @@ public interface MailSender {
      * worse than a retryable error.
      */
     void send(MailMessage message);
+
+    /** Delivery channel of this implementation (K-51 mail-test info surface). */
+    MailChannel channel();
 }

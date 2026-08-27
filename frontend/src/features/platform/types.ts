@@ -138,6 +138,51 @@ export interface PlatformAuditEntry {
   createdAt: string;
 }
 
+// ─── Mail testing (K-51) ───
+
+export type MailChannel = 'SMTP' | 'LOG' | 'IN_MEMORY';
+
+export interface PlatformMailTemplateInfo {
+  name: string;
+  key: string;
+  subjectTr: string;
+  subjectEn: string;
+}
+
+// Backend PlatformMailInfoResponse — what a send actually does in this profile.
+export interface PlatformMailInfo {
+  channel: MailChannel;
+  from: string;
+  defaultLanguage: string;
+  templatesDir: string;
+  templates: PlatformMailTemplateInfo[];
+}
+
+export interface PlatformMailSampleData {
+  template: string;
+  language: 'tr' | 'en';
+  firstName?: string;
+  organizationName?: string;
+  actionUrl?: string;
+  expiresInHours?: number;
+}
+
+export interface PlatformMailPreview {
+  subject: string;
+  bodyHtml: string;
+}
+
+export interface PlatformMailTestSendRequest extends PlatformMailSampleData {
+  recipient: string;
+}
+
+export interface PlatformMailTestSendResponse {
+  channel: MailChannel;
+  recipient: string;
+  template: string;
+  language: string;
+}
+
 // ─── List params ───
 
 export type PlatformCompanyParams = SearchOrListParams & { status?: CompanyStatus };
