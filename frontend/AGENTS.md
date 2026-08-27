@@ -166,20 +166,85 @@ lib/                     # api (fetch + 401 refresh), i18n (t/useT + messages), 
 - `store/localeStore.ts` — locale persisted in localStorage (`sf_locale`), default `tr`; TR/EN segmented switch in the AppShell footer (`components/LanguageToggle.tsx`).
 - **Rules:** never hardcode user-visible strings — add the key to BOTH `tr` and `en` dictionaries (`tr` is the source of truth for the key set; `MessageKey` type keeps keys compile-checked). Backend `ErrorCode` → key maps (e.g. VerifyTenantPage `ERROR_KEYS`) resolve at render time.
 
+## UI design contracts (K-54)
+
+The design language is **deliberately characteristic** (hybrid: engineering precision +
+raspberry brand), NOT the default "AI-generated" look. Contracts below are binding;
+shared class strings live in **`components/ui/styles.ts`** (single source) — consume
+them, never re-inline the recipes.
+
+### Character layer (S)
+
+- **Typography, 3 layers:** display headings in Outfit (`font-display` — `Page` h1,
+  `Modal` h2); body in Inter (`font-sans`); machine meta in mono (`META_MONO` =
+  `font-mono text-xs tabular-nums text-muted`) — UUID snippets, timestamps, counters,
+  page numbers, status codes. Mono is semantic (machine data), never decoration.
+- **Radius scale (Tailwind defaults, no overrides — usage discipline):** sm controls
+  `rounded` · md controls + control tags `rounded-md` · cards/tables/popovers
+  `rounded-lg` · modal `rounded-xl`. Never `rounded-2xl`.
+- **Shadow philosophy — hairline first:** cards `border-glass` + `shadow-sm` (very
+  subtle); popovers/menus `shadow-lg shadow-black/10` (crisp, single purpose); modal
+  `shadow-2xl`. Never combine a hairline border with a wide diffuse shadow.
+- **Badges squared:** `Badge` = `rounded` + tone tint + optional leading `dot`;
+  control tags (SelectInput multi) = `rounded bg-accent/15` — interactive tags and
+  static status badges are different species.
+- **Active nav rail:** active sidebar item = `border-l-[3px] border-accent bg-accent/10`
+  (semantic selection indicator). Decorative colored strips on content cards are BANNED.
+- **Primary button is SOLID raspberry:** `bg-accent` with `hover:bg-accent-deep` tone
+  ramp (no brightness filter).
+- **No gradients ANYWHERE** (user directive, 2026-08-28): the ONLY gradient surfaces are
+  the two shell sidebar logo tiles + sidebar edge rails (`AppShell`, `PlatformShell`).
+  Everything else is flat color — auth hero tiles are solid `bg-accent` / tone tints
+  (`bg-accent-green/10`, `bg-danger/10`), the page background is flat `--color-bg` (no
+  radial washes).
+- **Empty states:** bare muted icon (`text-muted/50`) — no tile, no tint.
+- **Interaction ramp (never invent per-component states):**
+
+  | State | Recipe |
+  |---|---|
+  | hover (neutral list) | `bg-main/5 text-main` |
+  | hover (action menu item) | `bg-accent/5 text-accent` |
+  | selected | `bg-accent/15 font-medium text-accent` |
+  | focus (inputs) | `ring-2 ring-accent/50` — border stays `border-glass` |
+  | focus-visible (actions) | `ring-2 ring-accent/60` — EVERY clickable |
+  | disabled | `opacity-50` (single value app-wide) |
+
+- **Micro-labels, one language:** `MICRO_LABEL` (`Field` labels, table `th`) — do not
+  spray uppercase/tracking beyond labels and column heads; headings stay sentence case.
+
+### Consistency layer (D)
+
+- **Inputs:** `INPUT_BASE` (md: `rounded-md`... control md = `rounded-md`) / `INPUT_BASE_SM`
+  from `components/ui/styles.ts`. Fill `bg-main/5` on white surfaces; toolbar search on
+  tinted bars is the documented exception (`bg-surface`). Error: `border-danger/60`.
+- **Popovers/menus:** `border-glass bg-surface shadow-lg shadow-black/10` + z-60
+  portal when inside overflow containers; menu items per the ramp above.
+- **Checkboxes:** `accent-accent` (single mechanism).
+- **Color discipline:** ZERO hardcoded hex in components — hex lives only in
+  `index.css` `@theme` (the demo `ThemeDemoPage` token editor is the exception).
+
+### Banned (slop tells — do not introduce)
+
+`rounded-2xl` surfaces · decorative colored border strips on cards · gradients of ANY
+kind (sole exemption: the two shell sidebar logo tiles + edge rails) /
+gradient buttons/text/glassmorphism · ghost card (hairline + diffuse shadow) · uppercase spray
+· emoji icons · mono as decoration · identical icon-topped 3-card rows · stat banner
+rows with invented numbers · hover/focus states invented per component.
+
 ## Gotchas
 
 - **z-index scale:** `0` normal content · `20` sticky elements · `50` modal overlay (`Modal`) · `60` fixed portal menus (`RowMenu`, SelectInput menu). New surfaces pick from this scale — don't invent intermediate values.
 - **Size & spacing scale (keep everything on it):** page body `p-6 lg:p-10` (matches topbar `px`); sections `gap-6`; cards/panels `p-5` (DetailPanel — never hand-rolled card sections); action footers `mt-4 flex justify-end gap-3` with default-size (md) buttons; controls (inputs, md buttons) sit on a ~36px height rhythm; empty/loading states `py-16`. Don't invent new paddings for new surfaces — reuse these.
 - **Toggle vs Checkbox:** boolean SETTINGS (account enabled, group active, all-permissions) render as `Toggle` (`role="switch"`). Multi-select LISTS render as pickers/checkboxes by size: large or reference data (roles, groups, users, projects, apps — anything server-side `q`-searchable) uses the async `components/pickers/*` in `isMulti` mode; `CheckboxList` stays for small, bounded lists only (e.g. permission catalogs). A switch communicates a single state, not selection.
 - **Page head actions:** at most TWO visible controls in the `Page` head — the primary action (list pages' create button) or the most frequent action (detail pages' Edit, `sm` ghost + pencil icon) plus a `RowMenu` overflow (`icon={LuEllipsisVertical}`) for everything else. Destructive actions live ONLY inside the overflow (danger tone), never as top-level buttons. Pass permission-filtered items — an empty array renders no trigger.
-- **Save/Cancel placement:** commit actions always sit bottom-right of the editing surface — modal footers (`Modal` renders them `justify-end`) or a `mt-4 flex justify-end gap-3` footer row inside the card/panel, with default-size (md) buttons. Never place Save in a `DetailPanel` header (the `action` prop was removed), left-aligned, or in `sm` size.
+- **Save/Cancel placement:** commit actions always sit bottom-right of the editing surface — modal footers (`Modal` renders them `justify-end`) or a `mt-4 flex justify-end gap-3` footer row inside the card/panel, with default-size (md) buttons — **single-action footers too (e.g. "Change plan"), never `sm`, never `gap-2`/`mt-3` variants**. The most frequent action is `primary` and sits rightmost; Never place Save in a `DetailPanel` header (the `action` prop was removed), left-aligned, or in `sm` size.
 - **Scroll architecture (sticky elements):** on desktop the shell is viewport-locked (`lg:h-screen` + `lg:overflow-hidden`) — the sidebar and the breadcrumb topbar are fixed; ONLY the page body scrolls, inside AppShell's `flex-1 overflow-y-auto` container. Sticky elements inside pages (e.g. future sticky DataTable headers) must use plain `top-0` relative to that scroll container — never offset for the topbar (it is outside the scroller) and never `position: fixed`. Below lg the shell keeps natural page scroll; the mobile nav is an off-canvas drawer (z-50) — sticky-in-page rules only apply inside the desktop scroll container.
 - **Zustand selectors:** subscribe with primitive/action selectors (`useAuthStore((s) => s.isLoading)`), never destructure the whole store — action references are stable, whole-store subscriptions re-render on every write. `AppShell` intentionally subscribes to the `user` object so the authority-filtered nav re-renders on session changes.
 - **Loading spinner bootstrap:** `authStore.isLoading` is bootstrap-only (`/me` check); never reuse it for login submission (router unmounts).
 - **Query key discipline:** list queries key on the params object (`['users', params]`); detail on id. Effective-permissions keys are `['users', id, 'effective-permissions']`.
-- **`SelectInput`** is the single select component (react-select). Behavior is prop-driven: single (default), `isMulti`, `isClearable`, `creatable`, async `loadOptions`, and `size="sm"` for compact inline controls (e.g. TaskCard status mover). Menu renders in a portal (escapes Modal overflow). The old native `SelectField` was removed.
+- **`SelectInput`** is the single select component (react-select, rendered with **`unstyled`** — visual emotion styles are dropped so the Tailwind `classNames` fully own the look; never re-add a `theme` color override or per-component `styles` beyond `minHeight`/`menuPortal`). Behavior is prop-driven: single (default), `isMulti`, `isClearable`, `creatable`, async `loadOptions`, and `size="sm"` for compact inline controls (e.g. TaskCard status mover). Indicators are Lucide (`LuChevronDown`/`LuX` via `components`). Menu renders in a portal (escapes Modal overflow). The old native `SelectField` was removed.
 - **Icons:** `react-icons` (Lucide set, subpath import `react-icons/lu` — Vite tree-shakes). Never add inline SVGs; pick a Lucide icon.
-- **Light corporate theme tokens:** `src/index.css` `@theme` — pale-sky page bg (`--color-bg: #e0f2fe`), white surfaces (`--color-surface/sidebar`), raspberry accent (`--color-accent: #c2185b`); utilities like `bg-surface`/`text-muted`/`border-glass`. CustomApp is light-only (dark theme removed). Never use raw `text-white`/`bg-white/5` outside the gradient logo tiles — use tokens so a future theme stays possible.
+- **Light corporate theme tokens:** `src/index.css` `@theme` — light sky page bg (`--color-bg: #f0f9ff`, flat — rose tint was tried and rejected 2026-08-28), white surfaces (`--color-surface/sidebar`), raspberry accent (`--color-accent: #c2185b`) + `--color-accent-deep` hover tone, `--font-display` (Outfit) + system mono stack (`--font-mono`); utilities like `bg-surface`/`text-muted`/`border-glass`/`font-display`. CustomApp is light-only (dark theme removed). Never use raw `text-white`/`bg-white/5` outside the gradient logo tiles — use tokens so a future theme stays possible.
 - **Tests (K-39):** Vitest + React Testing Library, `npm test` (CI runs it too). Suite lives in `src/test/` (`setup.ts` + `*.test.ts(x)`); config in `vitest.config.ts` (jsdom, `globals: false` — tests import `describe/it/expect/vi` from `'vitest'` explicitly; `setup.ts` registers RTL cleanup + jest-dom matchers). Mocks: `vi.stubGlobal('fetch', ...)` for `lib/api` (no MSW), `useStore.setState({...})` for zustand stores, `useLocaleStore.setState({ locale: 'en' })` for stable query strings. **A new frontend feature does not merge without tests** — at minimum a hook/logic test plus a render test for new UI primitives.
 - **Kanban DnD:** boards use DndContext per board (PointerSensor distance:5 + TouchSensor delay:200), droppable columns + DragOverlay; moves are optimistic (setQueryData + rollback onError); the card select-mover stays as the keyboard/touch alternative.
 

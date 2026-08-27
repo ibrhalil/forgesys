@@ -5,6 +5,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useTenantStore } from '../../store/tenantStore';
 import { Button } from '../../components/ui/Button';
 import { useT } from '../../lib/i18n';
+import { INPUT_BASE } from '../../components/ui/styles';
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
@@ -31,7 +32,7 @@ export function LoginPage() {
       title="ForgeSys"
       subtitle={t('auth.subtitle')}
       icon={(
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-accent to-accent-blue text-2xl font-bold text-white shadow-lg shadow-accent/40">
+        <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-accent text-2xl font-bold text-white shadow-sm shadow-accent/25">
           SF
         </div>
       )}
@@ -48,7 +49,7 @@ export function LoginPage() {
               onChange={(e) => setTenant(e.target.value)}
               placeholder={t('auth.tenantPlaceholder')}
               autoComplete="organization"
-              className="w-full rounded-lg border border-glass bg-main/5 px-3 py-2 text-sm text-main placeholder:text-muted/50 focus:outline-none focus:ring-2 focus:ring-accent/50"
+              className={INPUT_BASE}
             />
           </div>
 
@@ -64,7 +65,7 @@ export function LoginPage() {
               placeholder={t('auth.emailPlaceholder')}
               required
               autoComplete="email"
-              className="w-full rounded-lg border border-glass bg-main/5 px-3 py-2 text-sm text-main placeholder:text-muted/50 focus:outline-none focus:ring-2 focus:ring-accent/50"
+              className={INPUT_BASE}
             />
           </div>
 
@@ -80,7 +81,7 @@ export function LoginPage() {
               placeholder="••••••••"
               required
               autoComplete="current-password"
-              className="w-full rounded-lg border border-glass bg-main/5 px-3 py-2 text-sm text-main placeholder:text-muted/50 focus:outline-none focus:ring-2 focus:ring-accent/50"
+              className={INPUT_BASE}
             />
           </div>
 

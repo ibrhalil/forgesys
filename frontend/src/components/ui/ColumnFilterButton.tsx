@@ -7,6 +7,7 @@ import type { SelectOption } from '../../lib/select';
 import type { FilterCriteria, FilterOperator } from '../../types';
 import { Button } from './Button';
 import { SelectInput } from './SelectInput';
+import { INPUT_BASE_SM } from './styles';
 
 /** Value-control kinds; drives the input rendering and the default operator set. */
 export type ColumnFilterControl = 'text' | 'number' | 'date' | 'boolean' | 'select' | 'multiselect';
@@ -51,9 +52,7 @@ export function defaultOperators(control: ColumnFilterControl): FilterOperator[]
   }
 }
 
-const INPUT_CLASS =
-  'w-full rounded-md border border-glass bg-main/5 px-2 py-1.5 text-sm text-main ' +
-  'placeholder:text-muted/50 focus:outline-none focus:ring-2 focus:ring-accent/50';
+const INPUT_CLASS = INPUT_BASE_SM;
 
 const PANEL_WIDTH = 256; // w-64
 /** Flip decision fallback when layout measurement is unavailable (e.g. jsdom). */
@@ -283,7 +282,7 @@ export function ColumnFilterButton({ spec, header, active, onChange }: ColumnFil
               width: PANEL_WIDTH,
               zIndex: 60,
             }}
-            className="rounded-xl border border-glass bg-surface p-3 text-left shadow-xl shadow-black/15"
+            className="rounded-lg border border-glass bg-surface p-3 text-left shadow-lg shadow-black/10"
           >
             <div className="mb-2 flex items-center justify-between gap-2">
               <span className="truncate text-xs font-semibold text-main">{header}</span>

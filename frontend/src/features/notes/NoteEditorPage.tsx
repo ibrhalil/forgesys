@@ -218,7 +218,7 @@ export function NoteEditorPage() {
           </div>
 
           {preview ? (
-            <div className="markdown-body min-h-64 rounded-xl border border-glass bg-surface p-5">
+            <div className="markdown-body min-h-64 rounded-lg border border-glass bg-surface p-5">
               <Markdown remarkPlugins={[remarkGfm]}>{content || t('notes.previewEmpty')}</Markdown>
             </div>
           ) : (

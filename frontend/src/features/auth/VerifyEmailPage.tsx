@@ -67,7 +67,7 @@ export function VerifyEmailPage() {
 
       {state.kind === 'success' && (
         <div className="flex flex-col items-center gap-4 text-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-accent-green/30 to-accent-blue/30 text-2xl text-accent-green shadow-lg shadow-accent-green/20">
+          <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-accent-green/10 text-2xl text-accent-green">
             <LuCheck className="h-7 w-7" strokeWidth={2.5} />
           </div>
           <div>
@@ -85,7 +85,7 @@ export function VerifyEmailPage() {
 
       {state.kind === 'error' && (
         <div className="flex flex-col items-center gap-4 text-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-danger/30 to-danger/10 text-2xl text-danger shadow-lg shadow-danger/20">
+          <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-danger/10 text-2xl text-danger">
             <LuShieldAlert className="h-7 w-7" strokeWidth={2.5} />
           </div>
           <div>

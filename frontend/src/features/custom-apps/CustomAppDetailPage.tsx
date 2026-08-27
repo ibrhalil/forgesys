@@ -89,7 +89,7 @@ export function CustomAppDetailPage() {
               {customApp.properties.map((p) => (
                 <li
                   key={p.id}
-                  className="flex items-center gap-3 rounded-lg border border-glass px-3 py-2 transition-colors hover:bg-main/5"
+                  className="flex items-center gap-3 rounded-md border border-glass px-3 py-2 transition-colors hover:bg-main/5"
                 >
                   <span className="max-w-56 min-w-0 truncate text-sm font-medium text-main">{p.name}</span>
                   <Badge tone="blue">{t(`customApps.type.${p.type}`)}</Badge>

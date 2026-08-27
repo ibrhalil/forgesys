@@ -22,7 +22,7 @@ export function AuthCard({ size = 'sm', icon, title, subtitle, children }: AuthC
     <div className="flex min-h-screen items-center justify-center p-4">
       <div
         className={cn(
-          'w-full rounded-2xl border border-glass bg-sidebar/90 p-8 shadow-2xl shadow-black/50 backdrop-blur-md',
+          'w-full rounded-lg border border-glass bg-sidebar/90 p-8 shadow-2xl shadow-black/50 backdrop-blur-md',
           size === 'md' ? 'max-w-md' : 'max-w-sm',
         )}
       >

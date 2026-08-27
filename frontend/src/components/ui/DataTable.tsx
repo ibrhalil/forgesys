@@ -23,6 +23,7 @@ import { ColumnFilterButton, type ColumnFilterSpec } from './ColumnFilterButton'
 import { EmptyState } from './EmptyState';
 import { Spinner } from './Spinner';
 import { TablePagination } from './TablePagination';
+import { MICRO_LABEL } from './styles';
 
 export type { TableViewMode };
 
@@ -294,9 +295,9 @@ export function DataTable<T>({
     density === 'compact' ? 'px-3 py-2 text-xs' : density === 'relaxed' ? 'px-5 py-4 text-base' : 'px-4 py-3.5 text-sm';
 
   return (
-    <div className="rounded-xl border border-glass bg-surface shadow-sm shadow-black/[0.03]">
+    <div className="rounded-lg border border-glass bg-surface shadow-sm shadow-black/[0.03]">
       {(toolbar || isCustomizationEnabled || tableTools) && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-t-xl border-b border-glass bg-bg/40 px-4 py-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-t-lg border-b border-glass bg-bg/40 px-4 py-2.5">
           <div className="flex flex-1 flex-wrap items-center gap-3">
             {toolbar}
           </div>
@@ -304,7 +305,7 @@ export function DataTable<T>({
           <div className="flex items-center gap-2">
             {viewModes && viewModes.length > 1 && (
               <div
-                className="flex items-center rounded-lg border border-glass bg-bg/50 p-0.5"
+                className="flex items-center rounded-md border border-glass bg-bg/50 p-0.5"
                 role="group"
                 aria-label={t('table.viewMode')}
               >
@@ -362,7 +363,7 @@ export function DataTable<T>({
                 </button>
 
                 {showSettingsMenu && (
-                  <div className="absolute right-0 top-full z-60 mt-1.5 w-72 overflow-hidden rounded-xl border border-glass bg-surface shadow-2xl shadow-black/15">
+                  <div className="absolute right-0 top-full z-60 mt-1.5 w-72 overflow-hidden rounded-lg border border-glass bg-surface shadow-lg shadow-black/10">
                     <div className="flex border-b border-glass bg-bg/30 p-1">
                       <button
                         type="button"
@@ -455,7 +456,7 @@ export function DataTable<T>({
                                   className={cn(
                                     'flex select-none items-center justify-between gap-2 rounded-md px-2 py-1 text-xs transition-colors',
                                     isHideable
-                                      ? 'cursor-pointer hover:bg-bg/60'
+                                      ? 'cursor-pointer hover:bg-main/5'
                                       : 'cursor-not-allowed opacity-60',
                                   )}
                                 >
@@ -465,7 +466,7 @@ export function DataTable<T>({
                                       checked={isChecked}
                                       disabled={!isHideable}
                                       onChange={() => isHideable && toggleColumnVisibility(col.key)}
-                                      className="rounded border-glass text-accent focus:ring-accent"
+                                      className="accent-accent"
                                     />
                                     <span className="truncate text-main">{col.header}</span>
                                   </div>
@@ -499,10 +500,10 @@ export function DataTable<T>({
                               type="button"
                               onClick={() => handleDensityChange(item.mode)}
                               className={cn(
-                                'flex w-full items-center justify-between rounded-lg border border-glass px-2.5 py-1.5 text-xs transition-colors',
+                                'flex w-full items-center justify-between rounded-md border border-glass px-2.5 py-1.5 text-xs transition-colors',
                                 density === item.mode
                                   ? 'border-accent/40 bg-accent/10 font-semibold text-accent'
-                                  : 'bg-surface text-main hover:bg-bg/60',
+                                  : 'bg-surface text-main hover:bg-main/5',
                               )}
                             >
                               <span>{item.label}</span>
@@ -532,7 +533,7 @@ export function DataTable<T>({
                               disabled={!onExport}
                               onClick={() => onExport?.(item.format)}
                               className={cn(
-                                'flex w-full items-center justify-between rounded-lg border border-glass px-2.5 py-1.5 text-xs transition-colors',
+                                'flex w-full items-center justify-between rounded-md border border-glass px-2.5 py-1.5 text-xs transition-colors',
                                 onExport
                                   ? 'bg-surface text-main hover:border-accent/40 hover:bg-accent/5'
                                   : 'cursor-not-allowed bg-bg/30 text-muted opacity-70',
@@ -563,7 +564,7 @@ export function DataTable<T>({
                               type="button"
                               disabled={!onRefresh}
                               className={cn(
-                                'flex w-full items-center justify-between rounded-lg border border-glass px-2.5 py-1.5 text-xs transition-colors',
+                                'flex w-full items-center justify-between rounded-md border border-glass px-2.5 py-1.5 text-xs transition-colors',
                                 onRefresh
                                   ? 'bg-surface text-main hover:border-accent/40 hover:bg-accent/5'
                                   : 'cursor-not-allowed bg-bg/30 text-muted opacity-70',
@@ -598,7 +599,7 @@ export function DataTable<T>({
               {data.map((row) => (
                 <div
                   key={rowKey(row)}
-                  className="rounded-xl border border-glass bg-surface p-4 shadow-sm hover:border-accent/30 transition-all flex flex-col justify-between"
+                  className="rounded-lg border border-glass bg-surface p-4 shadow-sm hover:border-accent/30 transition-all flex flex-col justify-between"
                 >
                   {cardRender ? (
                     cardRender(row)
@@ -687,7 +688,8 @@ export function DataTable<T>({
                     key={col.key}
                     aria-sort={ariaSort(col)}
                     className={cn(
-                      'text-left font-semibold uppercase tracking-wide text-muted',
+                      MICRO_LABEL,
+                      'text-left',
                       thPadding,
                       col.className,
                     )}
@@ -698,7 +700,8 @@ export function DataTable<T>({
                 {actions && (
                   <th
                     className={cn(
-                      'text-right font-semibold uppercase tracking-wide text-muted',
+                      MICRO_LABEL,
+                      'text-right',
                       thPadding,
                     )}
                   >

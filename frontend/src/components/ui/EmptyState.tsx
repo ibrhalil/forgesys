@@ -13,7 +13,7 @@ export function EmptyState({ message, hint, icon: Icon = LuFolderOpen }: EmptySt
   const { t } = useT();
   return (
     <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
-      <Icon size={40} strokeWidth={1.5} className="text-muted/50" />
+      <Icon size={40} strokeWidth={1.5} className="text-muted/50" aria-hidden />
       <p className="text-sm text-muted">{message ?? t('table.noData')}</p>
       {hint && <p className="text-xs text-muted/60">{hint}</p>}
     </div>

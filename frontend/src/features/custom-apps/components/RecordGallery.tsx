@@ -52,7 +52,7 @@ export function RecordGallery({
         <>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {paged.map((r) => (
-              <article key={r.id} className="flex flex-col gap-2 rounded-xl border border-glass bg-bg/40 p-4">
+              <article key={r.id} className="flex flex-col gap-2 rounded-lg border border-glass bg-bg/40 p-4">
                 <div className="flex items-start justify-between gap-2">
                   <span className="min-w-0 break-words font-medium text-main">{recordTitle(r, titleProp, resolve)}</span>
                   {(canWrite || canDelete) && (

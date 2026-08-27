@@ -1,11 +1,14 @@
 import { useMemo } from 'react';
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
+import { components as RSComponents } from 'react-select';
 import RSelect from 'react-select';
 import AsyncSelect from 'react-select/async';
 import CreatableSelect from 'react-select/creatable';
 import AsyncCreatableSelect from 'react-select/async-creatable';
+import { LuChevronDown, LuX } from 'react-icons/lu';
 import { Field } from './Field';
 import { cn } from '../../lib/cn';
+import { POPOVER_MENU } from './styles';
 import type { SelectOption } from '../../lib/select';
 import { useT } from '../../lib/i18n';
 
@@ -44,12 +47,29 @@ export interface SelectInputProps<V> {
   size?: 'md' | 'sm';
 }
 
+// Lucide indicators (K-54: Lucide-only iconography) — module level so react-select
+// never remounts the indicator subtrees between renders.
+const selectComponents = {
+  DropdownIndicator: (props: ComponentProps<typeof RSComponents.DropdownIndicator>) => (
+    <RSComponents.DropdownIndicator {...props}>
+      <LuChevronDown aria-hidden className="h-4 w-4" />
+    </RSComponents.DropdownIndicator>
+  ),
+  ClearIndicator: (props: ComponentProps<typeof RSComponents.ClearIndicator>) => (
+    <RSComponents.ClearIndicator {...props}>
+      <LuX aria-hidden className="h-3.5 w-3.5" />
+    </RSComponents.ClearIndicator>
+  ),
+};
+
 /**
- * The single select component of the app, styled for the light corporate theme.
- * Behavior is fully prop-driven: single (default), multi (`isMulti`), searchable
- * async (`loadOptions`), creatable tags (`creatable`), clearable — and a compact
- * `size="sm"` for inline controls. Works in terms of {@link SelectOption} objects;
- * callers map to/from primitive ids where needed.
+ * The single select component of the app (K-54 contract). Rendered with react-select
+ * `unstyled` — visual emotion styles are dropped, the Tailwind `classNames` below
+ * own the whole look; the tiny `styles` override only sets control height and the
+ * portal z-index. Behavior is fully prop-driven: single (default), multi (`isMulti`),
+ * searchable async (`loadOptions`), creatable tags (`creatable`), clearable — and a
+ * compact `size="sm"` for inline controls. Works in terms of {@link SelectOption}
+ * objects; callers map to/from primitive ids where needed.
  */
 export function SelectInput<V>({
   id,
@@ -92,35 +112,38 @@ export function SelectInput<V>({
       ? CreatableSelect
       : RSelect;
 
-  // Tailwind theme applied through react-select's `classNames` (v5). Cast keeps the
-  // generic component variants happy without per-variant type plumbing.
   const compact = size === 'sm';
   const classNames = {
     control: (state: { isDisabled?: boolean; isFocused?: boolean }) =>
       cn(
-        compact ? 'min-h-[32px] cursor-pointer rounded-md text-[13px]' : 'min-h-[40px] cursor-text rounded-lg',
-        'border !shadow-none',
-        'bg-main/5',
-        state.isDisabled && 'opacity-60',
-        error ? 'border-danger/60' : state.isFocused ? 'border-accent/60' : 'border-glass',
+        compact ? 'cursor-pointer rounded text-[13px]' : 'cursor-text rounded-md',
+        'border bg-main/5 transition-colors',
+        state.isDisabled && 'opacity-50 cursor-not-allowed',
+        state.isFocused && 'ring-2 ring-accent/50',
+        error ? 'border-danger/60' : 'border-glass',
       ),
     valueContainer: () => (compact ? 'px-2.5 py-1 gap-1' : 'px-3 py-1.5 gap-1.5'),
     input: () => 'text-main',
-    placeholder: () => 'text-muted/60',
+    placeholder: () => 'text-muted/50',
     singleValue: () => 'text-main',
-    multiValue: () => 'flex items-center gap-1 rounded-md bg-accent/15 py-0.5 pl-2',
+    multiValue: () => 'flex items-center gap-1 rounded bg-accent/15 py-0.5 pl-2',
     multiValueLabel: () => 'text-xs font-medium text-accent',
-    multiValueRemove: () => 'flex h-4 w-4 cursor-pointer items-center justify-center rounded text-accent/70 hover:bg-accent/25 hover:text-accent',
+    multiValueRemove: () =>
+      'flex h-4 w-4 cursor-pointer items-center justify-center rounded text-accent/70 hover:bg-accent/25 hover:text-accent',
     indicatorsContainer: () => 'gap-1',
-    indicatorSeparator: () => (compact ? 'my-1.5 bg-glass' : 'my-2 bg-glass'),
-    dropdownIndicator: () => cn('text-muted hover:text-main', compact && 'p-1'),
-    clearIndicator: () => cn('text-muted hover:text-main', compact && 'p-1'),
-    menu: () => 'mt-1 overflow-hidden rounded-lg border border-glass bg-sidebar shadow-xl shadow-black/10',
+    indicatorSeparator: () => (compact ? 'my-1.5 w-px bg-glass' : 'my-2 w-px bg-glass'),
+    dropdownIndicator: () => cn('text-muted hover:text-main', compact ? 'p-1' : 'p-2'),
+    clearIndicator: () => cn('text-muted hover:text-main', compact ? 'p-1' : 'p-2'),
+    menu: () => cn('mt-1', POPOVER_MENU),
     menuList: () => 'py-1',
     option: (state: { isSelected?: boolean; isFocused?: boolean; isDisabled?: boolean }) =>
       cn(
-        compact ? 'cursor-pointer px-3 py-1.5 text-[13px]' : 'cursor-pointer px-3 py-2 text-sm',
-        state.isSelected ? 'bg-accent/15 font-medium text-accent' : state.isFocused ? 'bg-main/5 text-main' : 'text-main',
+        compact ? 'cursor-pointer px-2.5 py-1.5 text-xs' : 'cursor-pointer px-3 py-2 text-sm',
+        state.isSelected
+          ? 'bg-accent/15 font-medium text-accent'
+          : state.isFocused
+            ? 'bg-main/5 text-main'
+            : 'text-main',
         state.isDisabled && 'cursor-not-allowed text-muted/50',
       ),
     noOptionsMessage: () => 'px-3 py-2 text-sm text-muted',
@@ -130,6 +153,7 @@ export function SelectInput<V>({
   const control = (
     <Component
       inputId={inputId}
+      unstyled
       placeholder={placeholder ?? t('common.select')}
       value={value as never}
       onChange={(next) => onChange?.(next as SelectOption<V> | SelectOption<V>[] | null)}
@@ -142,12 +166,15 @@ export function SelectInput<V>({
       isLoading={isLoading}
       defaultOptions={loadOptions ? defaultOptions : undefined}
       menuPortalTarget={portal}
-      styles={{ menuPortal: (base) => ({ ...base, zIndex: 60 }) }}
+      components={selectComponents as never}
+      styles={{
+        menuPortal: (base) => ({ ...base, zIndex: 60 }),
+        control: (base) => ({ ...base, minHeight: compact ? 32 : 38 }),
+      }}
       classNames={classNames as never}
       noOptionsMessage={() => noOptionsMessage ?? t('common.noOptions')}
       loadingMessage={() => loadingMessage ?? t('common.loading')}
       formatCreateLabel={formatCreateLabel}
-      theme={(t) => ({ ...t, colors: { ...t.colors, primary: '#c2185b', primary75: '#d81b60', primary50: '#c2185b2e', primary25: '#c2185b26', danger: '#dc2626', dangerLight: '#dc262622', neutral0: '#ffffff', neutral5: '#f8fafc', neutral10: '#f1f5f9', neutral20: '#e2e8f0', neutral30: '#cbd5e1', neutral40: '#94a3b8', neutral50: '#64748b', neutral60: '#475569', neutral80: '#1e293b' } })}
     />
   );
 

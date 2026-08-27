@@ -47,7 +47,7 @@ export function ProjectDetailPage() {
       ) : project.type === 'APPS' ? (
         <ProjectCustomAppsPanel projectId={project.id} />
       ) : (
-        <div className="rounded-xl border border-glass bg-surface px-6 py-16 text-center text-muted">
+        <div className="rounded-lg border border-glass bg-surface px-6 py-16 text-center text-muted">
           {t('projects.comingSoon', { type: typeLabels[project.type] })}
         </div>
       )}

@@ -236,7 +236,7 @@ function BoardColumn({
       ref={setNodeRef}
       data-droppable-id={dropId}
       className={cn(
-        'flex min-h-[12rem] w-72 shrink-0 flex-col gap-3 rounded-xl border border-glass bg-surface/40 p-3',
+        'flex min-h-[12rem] w-72 shrink-0 flex-col gap-3 rounded-lg border border-glass bg-surface/40 p-3',
         isOver && 'ring-2 ring-accent/40 bg-accent/5',
       )}
     >

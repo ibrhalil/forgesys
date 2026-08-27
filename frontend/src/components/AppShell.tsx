@@ -13,9 +13,10 @@ import { useT } from '../lib/i18n';
 import { cn } from '../lib/cn';
 
 const navBase =
-  'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors';
-const navInactive = 'text-muted hover:bg-accent/5 hover:text-accent';
-const navActive = 'bg-accent/10 text-accent';
+  'flex items-center gap-3 border-l-[3px] px-3 py-2 text-sm font-medium transition-colors';
+const navInactive = 'border-transparent text-muted hover:bg-accent/5 hover:text-accent';
+// K-54 signature: active nav = left accent rail (semantic selection indicator).
+const navActive = 'border-accent bg-accent/10 text-accent';
 
 function navClass({ isActive }: { isActive: boolean }) {
   return cn(navBase, isActive ? navActive : navInactive);
@@ -158,7 +159,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           </NavLink>
           <button
             onClick={() => setConfirmingLogout(true)}
-            className="shrink-0 rounded-lg border border-glass p-2 text-muted transition-colors hover:border-accent/40 hover:text-accent"
+            className="shrink-0 rounded-md border border-glass p-2 text-muted transition-colors hover:border-accent/40 hover:text-accent"
             aria-label={t('nav.logout')}
             title={t('nav.logout')}
           >
@@ -251,7 +252,7 @@ export function AppShell() {
               aria-expanded={drawerOpen}
               aria-controls="mobile-nav-drawer"
               aria-label={t('nav.menu')}
-              className="shrink-0 rounded-lg border border-glass p-2 text-muted transition-colors hover:border-accent/40 hover:text-accent lg:hidden"
+              className="shrink-0 rounded-md border border-glass p-2 text-muted transition-colors hover:border-accent/40 hover:text-accent lg:hidden"
             >
               <LuMenu size={16} />
             </button>

@@ -16,7 +16,7 @@ interface DetailPanelProps {
  */
 export function DetailPanel({ title, children, className }: DetailPanelProps) {
   return (
-    <section className={cn('rounded-xl border border-glass bg-surface p-5', className)}>
+    <section className={cn('rounded-lg border border-glass bg-surface p-5', className)}>
       <header className="mb-4">
         <h2 className="m-0 text-xs font-semibold uppercase tracking-wide text-muted">{title}</h2>
       </header>

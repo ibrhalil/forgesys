@@ -32,7 +32,7 @@ export function CheckboxList({ items, selectedIds, onChange, emptyMessage }: Che
           <li key={item.id}>
             <label
               className={cn(
-                'flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2 transition-colors',
+                'flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2 transition-colors',
                 checked ? 'border-accent/40 bg-accent/10' : 'border-transparent hover:bg-main/5',
               )}
             >
@@ -40,7 +40,7 @@ export function CheckboxList({ items, selectedIds, onChange, emptyMessage }: Che
                 type="checkbox"
                 checked={checked}
                 onChange={() => toggle(item.id)}
-                className="mt-0.5 h-4 w-4 accent-[var(--color-accent)]"
+                className="mt-0.5 h-4 w-4 accent-accent"
               />
               <span className="flex flex-col">
                 <span className="text-sm font-medium text-main">{item.label}</span>

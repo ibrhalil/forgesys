@@ -64,7 +64,7 @@ export function SessionList({ sessions, loading, hideCurrent, showOwner, revokin
         {sessions.map((s) => (
           <li
             key={s.sessionId}
-            className="flex flex-wrap items-center gap-3 rounded-xl border border-glass bg-surface px-5 py-4 backdrop-blur-md"
+            className="flex flex-wrap items-center gap-3 rounded-lg border border-glass bg-surface px-5 py-4 backdrop-blur-md"
           >
             <LuMonitor className="h-5 w-5 shrink-0 text-muted" />
             <div className="min-w-0 flex-1">

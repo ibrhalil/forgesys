@@ -103,7 +103,7 @@ export function ResetPasswordPage() {
 
       {state.kind === 'error' && (
         <div className="flex flex-col items-center gap-4 text-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-danger/30 to-danger/10 text-2xl text-danger shadow-lg shadow-danger/20">
+          <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-danger/10 text-2xl text-danger">
             <LuShieldAlert className="h-7 w-7" strokeWidth={2.5} />
           </div>
           <p className="text-sm text-muted">{t(state.messageKey)}</p>

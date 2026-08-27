@@ -240,7 +240,7 @@ function RolePermissionsSection({
       )}
       {/* Standard action footer: bottom-right of the editing surface, default-size
           buttons (same rule as modal footers) — never in the panel header. */}
-      <div className="mt-4 flex justify-end">
+      <div className="mt-4 flex justify-end gap-3">
         <Button variant="primary" onClick={save} disabled={!dirty} loading={saving}>
           {t('common.save')}
         </Button>
