@@ -115,12 +115,27 @@ Konfigürasyon **profile-based** çalışır. Aktif profil `SPRING_PROFILES_ACTI
 | `FORGESYS_BOOTSTRAP_PLATFORM_ADMIN_EMAIL` | Bootstrap süperadmin e-postası |
 | `FORGESYS_BOOTSTRAP_PLATFORM_ADMIN_PASSWORD` | Bootstrap süperadmin şifresi |
 | `FORGESYS_BOOTSTRAP_PLATFORM_ADMIN_DISPLAY_NAME` | Bootstrap süperadmin görünen adı |
+| `MAIL_HOST` / `MAIL_PORT` / `MAIL_USERNAME` / `MAIL_PASSWORD` | Giden SMTP (K-53). `MAIL_HOST` boş → prod **fail-fast** açılmaz |
+| `MAIL_FROM` | RFC 822 gönderen (`ForgeSys <no-reply@mg.example.com>`) — SPF/DKIM domain'iyle uyumlu olmalı |
+| `MAIL_SMTP_AUTH` / `MAIL_SMTP_STARTTLS` | SMTP auth / STARTTLS (default `true`) |
 
 > Dev profili: `platform-admin@forgesys.dev` / `change-me-platform-admin` (placeholder) — `.env` gerektirmez.
 
 > `PASSWORD_PEPPER` (K-23 — `.env.example`'te tanımlı) compose `environment:` listesinde **iletilmez**; `infra/config/application-prod.yaml` overlay'i üzerinden konteynere ulaşır (`SPRING_CONFIG_ADDITIONAL_LOCATION`). Pepper'ı overlay ile set etmeden prod ayağa kalkmaz (fail-fast).
 >
 > `.env` yalnızca **prod** Docker Compose içindir; `dev` profilinde gerekmez. `.env` `.gitignore`'dadır, asla commit edilmez. Şablon: `.env.example`.
+
+#### Giden mail (K-53)
+
+| Ortam | Sender | Nasıl |
+|-------|--------|-------|
+| `dev` (varsayılan) | `LogMailSender` | Mail konsola loglanır (linkler dahil) — Docker gerekmez |
+| `dev,smtp` (opt-in) | `SmtpMailSender` | Gerçek SMTP: `docker compose up -d` → Mailpit arayüzü **http://localhost:8025** (catch-all, :1025). Kendi relay'inize göndermek için `MAIL_HOST` vb. env ile override |
+| `prod` | `SmtpMailSender` | `.env`'deki `MAIL_*` değerleri; boş `MAIL_HOST` fail-fast |
+
+- `dev,smtp` kombinasyonu dışında hiçbir davranış değişmez; `smtp` profili `test`/`prod` ile stack **edilmez**.
+- Şablonlar `infra/templates/mail/` (TR/EN, tek git kaynağı — K-51); önizleme platform konsolunda `/platform/mail`.
+- Test aşamasında kendi VPS'inizde mail kurulumu (domain, SPF/DKIM/PTR, app-as-subdomain env'leri): [`docs/MAIL_RUNBOOK.md`](docs/MAIL_RUNBOOK.md).
 
 ## Çalıştırma
 

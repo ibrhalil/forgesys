@@ -1,0 +1,24 @@
+# ============================================================
+# Opt-in `smtp` companion profile (K-53): real SMTP sending
+# outside prod. Stack it on a base profile, e.g.
+#   SPRING_PROFILES_ACTIVE=dev,smtp
+# Do NOT stack on prod (application-prod.yaml already maps these
+# env vars with prod defaults — this file would override them) or
+# on test (two active MailSender beans → ambiguity).
+#
+# Defaults target the dev-compose Mailpit container (catch-all
+# mailbox, UI at http://localhost:8025, no auth/TLS). For a real
+# relay (own VPS Postfix — see docs/MAIL_RUNBOOK.md — or a managed
+# provider) override via env: MAIL_HOST, MAIL_PORT, MAIL_USERNAME,
+# MAIL_PASSWORD, MAIL_SMTP_AUTH=true, MAIL_SMTP_STARTTLS=true.
+# MAIL_FROM / MAIL_TEMPLATES_DIR are shared with the base yaml.
+# ============================================================
+spring:
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${MAIL_SMTP_AUTH:false}
+      mail.smtp.starttls.enable: ${MAIL_SMTP_STARTTLS:false}

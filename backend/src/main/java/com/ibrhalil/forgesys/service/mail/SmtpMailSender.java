@@ -12,15 +12,17 @@ import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 
 /**
- * {@code prod}-profile {@link MailSender} — real SMTP via {@code JavaMailSender}
- * (provider-agnostic: anything that speaks {@code spring.mail.*}). Fail-fast at
- * startup when {@code spring.mail.host} is unset, fail-loud on send errors (the
- * caller's tx rolls back — a silently lost signup/reset link is far worse).
- * Recipients are intentionally NOT logged (PII).
+ * {@link MailSender} for the {@code prod} profile and the opt-in {@code smtp}
+ * companion profile ({@code dev,smtp} — K-53) — real SMTP via
+ * {@code JavaMailSender} (provider-agnostic: anything that speaks
+ * {@code spring.mail.*}). Fail-fast at startup when {@code spring.mail.host}
+ * is unset, fail-loud on send errors (the caller's tx rolls back — a silently
+ * lost signup/reset link is far worse). Recipients are intentionally NOT
+ * logged (PII).
  */
 @Slf4j
 @Component
-@Profile("prod")
+@Profile("prod | smtp")
 public class SmtpMailSender implements MailSender {
 
     private final JavaMailSender javaMailSender;
