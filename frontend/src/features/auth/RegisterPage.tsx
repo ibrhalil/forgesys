@@ -8,6 +8,7 @@ import { registrationApi } from './registrationApi';
 import { notify, extractFieldErrors, errorMessage } from '../../lib/notify';
 import { useT } from '../../lib/i18n';
 import { cn } from '../../lib/cn';
+import { INPUT_BASE } from '../../components/ui/styles';
 
 type Status = 'idle' | 'submitting' | 'success';
 
@@ -74,7 +75,7 @@ export function RegisterPage() {
         title={t('auth.register.successTitle')}
         subtitle={t('auth.register.successSubtitle')}
         icon={(
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-accent-green/30 to-accent-blue/30 text-2xl text-accent-green shadow-lg shadow-accent-green/20">
+          <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-accent-green/10 text-2xl text-accent-green">
             <LuCheck className="h-7 w-7" strokeWidth={2.5} />
           </div>
         )}
@@ -105,7 +106,7 @@ export function RegisterPage() {
       title="ForgeSys"
       subtitle={t('auth.register.title')}
       icon={(
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-accent to-accent-blue text-2xl font-bold text-white shadow-lg shadow-accent/40">
+        <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-accent text-2xl font-bold text-white shadow-sm shadow-accent/25">
           SF
         </div>
       )}
@@ -149,7 +150,7 @@ export function RegisterPage() {
                 required
                 autoComplete="off"
                 className={cn(
-                  'w-full rounded-lg border bg-main/5 px-3 py-2 text-sm text-main placeholder:text-muted/50',
+                  INPUT_BASE,
                   'transition-colors focus:outline-none focus:ring-2 focus:ring-accent/50',
                   fieldErrors.subdomain ? 'border-danger/50' : 'border-glass',
                 )}

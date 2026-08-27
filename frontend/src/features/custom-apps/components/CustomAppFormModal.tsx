@@ -91,7 +91,7 @@ export function CustomAppFormModal({
               title={t('customApps.iconNone')}
               onClick={() => setIcon('')}
               className={cn(
-                'flex h-9 w-9 items-center justify-center rounded-lg border text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60',
+                'flex h-9 w-9 items-center justify-center rounded-md border text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60',
                 icon === '' ? 'border-accent bg-accent/10 text-accent' : 'border-glass text-muted hover:bg-main/5',
               )}
             >
@@ -105,7 +105,7 @@ export function CustomAppFormModal({
                 aria-label={emoji}
                 onClick={() => setIcon(emoji)}
                 className={cn(
-                  'flex h-9 w-9 items-center justify-center rounded-lg border text-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60',
+                  'flex h-9 w-9 items-center justify-center rounded-md border text-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60',
                   icon === emoji ? 'border-accent bg-accent/10' : 'border-glass hover:bg-main/5',
                 )}
               >

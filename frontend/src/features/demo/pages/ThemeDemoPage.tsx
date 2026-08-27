@@ -137,14 +137,14 @@ export const THEME_PRESETS: ThemePreset[] = [
     id: 'raspberry-original',
     name: 'Raspberry Ruby (Current Default)',
     category: 'Original Brand Palette',
-    description: 'The baseline ForgeSys corporate light theme with pale-sky backdrop and raspberry accent.',
+    description: 'The baseline ForgeSys corporate light theme (K-54) with a light sky backdrop and raspberry accent.',
     tokens: {
       accent: '#c2185b',
       accentBlue: '#0369a1',
       accentGreen: '#047857',
       danger: '#b91c1c',
       warning: '#b45309',
-      bg: '#e0f2fe',
+      bg: '#f0f9ff',
       surface: '#ffffff',
       sidebar: '#ffffff',
       main: '#1e293b',
@@ -202,6 +202,19 @@ export function ThemeDemoPage() {
   const handleResetToDefault = () => {
     const defaultPreset = THEME_PRESETS.find((p) => p.id === 'raspberry-original') || THEME_PRESETS[5];
     handleSelectPreset(defaultPreset);
+  };
+
+  // K-54: page-background tone candidates (light sky family) applied live.
+  const BG_TONES = [
+    { id: 'sky-light', label: 'Sky Light (K-54 default)', hex: '#f0f9ff' },
+    { id: 'sky-original', label: 'Sky Deep (pre-K-54)', hex: '#e0f2fe' },
+    { id: 'rose-soft', label: 'Rose Soft (rejected)', hex: '#fdf2f6' },
+    { id: 'neutral', label: 'Neutral (rejected)', hex: '#f8fafc' },
+  ];
+  const [bgTone, setBgTone] = useState<string>(BG_TONES[0].hex);
+  const applyBgTone = (hex: string) => {
+    setBgTone(hex);
+    document.documentElement.style.setProperty('--color-bg', hex);
   };
 
   // Generate CSS tokens code block for index.css
@@ -537,6 +550,61 @@ export function ThemeDemoPage() {
               <LuPalette className="h-4 w-4" />
               <span>Apply Custom Colors Live</span>
             </Button>
+          </div>
+        </div>
+      </DemoSection>
+
+      {/* 4. K-54 Character Preview */}
+      <DemoSection
+        title="4. K-54 Character Preview (bg tone / typography / radius)"
+        description="The K-54 design language: engineering precision + raspberry brand. Pick the page-background tone live; the chosen hex is applied instantly and copied below."
+        code={`// K-54 tokens (src/index.css)
+--color-bg: ${bgTone};   // current selection
+--color-accent-deep: #9c124c;   // primary hover tone ramp
+--font-display: "Outfit", ...;  // display headings`}
+      >
+        <div className="rounded-lg border border-glass bg-surface p-5 space-y-6">
+          <div className="space-y-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">Page Background Tone</span>
+            <div className="flex flex-wrap items-center gap-2">
+              {BG_TONES.map((tone) => (
+                <button
+                  key={tone.id}
+                  type="button"
+                  onClick={() => applyBgTone(tone.hex)}
+                  className={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 ${
+                    bgTone === tone.hex
+                      ? 'border-accent/50 bg-accent/10 font-medium text-accent'
+                      : 'border-glass text-main hover:bg-main/5'
+                  }`}
+                >
+                  <span
+                    className="h-4 w-4 rounded border border-black/10"
+                    style={{ backgroundColor: tone.hex }}
+                  />
+                  {tone.label}
+                  <span className="font-mono text-[10px] text-muted">{tone.hex}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 border-t border-glass pt-5 md:grid-cols-2">
+            <div className="space-y-2">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">Typography (3 layers)</span>
+              <p className="font-display text-xl font-semibold tracking-tight text-main">Outfit display heading</p>
+              <p className="text-sm text-main">Inter body text — the working layer of the interface.</p>
+              <p className="font-mono text-xs tabular-nums text-muted">2026-08-28 14:32:07 · 7f3c9a2e · 1,482 / 9,999</p>
+            </div>
+            <div className="space-y-2">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">Radius scale (4 / 6 / 8 / 12)</span>
+              <div className="flex items-end gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded border border-glass bg-main/5 font-mono text-[10px] text-muted">4</div>
+                <div className="flex h-12 w-14 items-center justify-center rounded-md border border-glass bg-main/5 font-mono text-[10px] text-muted">6</div>
+                <div className="flex h-14 w-16 items-center justify-center rounded-lg border border-glass bg-main/5 font-mono text-[10px] text-muted">8</div>
+                <div className="flex h-16 w-20 items-center justify-center rounded-xl border border-glass bg-main/5 font-mono text-[10px] text-muted">12</div>
+              </div>
+            </div>
           </div>
         </div>
       </DemoSection>

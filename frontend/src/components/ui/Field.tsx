@@ -1,5 +1,6 @@
 import type { InputHTMLAttributes, ReactNode } from 'react';
 import { cn } from '../../lib/cn';
+import { INPUT_BASE, MICRO_LABEL } from './styles';
 
 interface FieldProps {
   id?: string;
@@ -14,7 +15,7 @@ interface FieldProps {
 export function Field({ id, label, error, hint, className, children }: FieldProps) {
   return (
     <div className={cn('flex flex-col gap-1.5', className)}>
-      <label htmlFor={id} className="text-xs font-medium uppercase tracking-wide text-muted">
+      <label htmlFor={id} className={MICRO_LABEL}>
         {label}
       </label>
       {children}
@@ -23,10 +24,6 @@ export function Field({ id, label, error, hint, className, children }: FieldProp
     </div>
   );
 }
-
-const INPUT_BASE =
-  'w-full rounded-lg border bg-main/5 px-3 py-2 text-sm text-main placeholder:text-muted/50 ' +
-  'transition-colors focus:outline-none focus:ring-2 focus:ring-accent/50';
 
 interface TextFieldProps extends InputHTMLAttributes<HTMLInputElement> {
   label: string;
@@ -39,7 +36,7 @@ export function TextField({ label, error, hint, id, className, ...rest }: TextFi
     <Field id={id} label={label} error={error} hint={hint}>
       <input
         id={id}
-        className={cn(INPUT_BASE, error ? 'border-danger/50' : 'border-glass', className)}
+        className={cn(INPUT_BASE, error ? 'border-danger/60' : 'border-glass', className)}
         {...rest}
       />
     </Field>

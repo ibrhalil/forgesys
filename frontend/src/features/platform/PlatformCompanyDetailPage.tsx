@@ -214,11 +214,10 @@ export function PlatformCompanyDetailPage() {
             </DetailField>
           </div>
           {ALLOWED_TRANSITIONS[company.status].length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-4 flex flex-wrap gap-3">
               {ALLOWED_TRANSITIONS[company.status].map((target) => (
                 <Button
                   key={target}
-                  size="sm"
                   variant={target === 'TERMINATED' ? 'danger' : 'secondary'}
                   disabled={!canWriteStatus}
                   onClick={() => setStatusTarget(target)}
@@ -243,7 +242,6 @@ export function PlatformCompanyDetailPage() {
           {canLifecycle && (
             <div className="mt-4 flex justify-end gap-3">
               <Button
-                size="sm"
                 variant="secondary"
                 disabled={!isActive}
                 title={isActive ? undefined : t('platform.company.modulesBlocked')}

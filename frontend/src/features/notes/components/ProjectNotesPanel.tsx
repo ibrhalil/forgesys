@@ -26,7 +26,7 @@ export function ProjectNotesPanel({ projectId }: { projectId: string }) {
   const notes = data?.items ?? [];
 
   return (
-    <div className="rounded-xl border border-glass bg-surface">
+    <div className="rounded-lg border border-glass bg-surface">
       <div className="flex items-center justify-between gap-3 border-b border-glass px-5 py-3">
         <span className="text-sm font-medium text-main">{t('notes.inProject')}</span>
         {canWrite && (

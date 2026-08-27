@@ -33,7 +33,7 @@ export function Page({ breadcrumb, title, description, actions, children }: Page
       <header className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 flex-col gap-1">
-            <h1 className="m-0 text-2xl font-semibold tracking-tight text-main">{title}</h1>
+            <h1 className="m-0 font-display text-2xl font-semibold tracking-tight text-main">{title}</h1>
             {description != null && <p className="m-0 text-sm text-muted">{description}</p>}
           </div>
           {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}

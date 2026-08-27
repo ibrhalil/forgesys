@@ -5,28 +5,41 @@ type Tone = 'accent' | 'blue' | 'green' | 'danger' | 'warning' | 'muted';
 
 interface BadgeProps {
   tone?: Tone;
+  /** Leading status dot (semantic state markers, e.g. active/suspended). */
+  dot?: boolean;
   children: ReactNode;
   className?: string;
 }
 
 const TONES: Record<Tone, string> = {
-  accent: 'bg-accent/15 text-accent border border-accent/30',
-  blue: 'bg-accent-blue/15 text-accent-blue border border-accent-blue/30',
-  green: 'bg-accent-green/15 text-accent-green border border-accent-green/30',
-  danger: 'bg-danger/15 text-danger border border-danger/30',
-  warning: 'bg-warning/15 text-warning border border-warning/30',
-  muted: 'bg-main/5 text-muted border border-glass',
+  accent: 'bg-accent/15 text-accent',
+  blue: 'bg-accent-blue/15 text-accent-blue',
+  green: 'bg-accent-green/15 text-accent-green',
+  danger: 'bg-danger/15 text-danger',
+  warning: 'bg-warning/15 text-warning',
+  muted: 'bg-main/5 text-muted',
 };
 
-export function Badge({ tone = 'muted', children, className }: BadgeProps) {
+const DOTS: Record<Tone, string> = {
+  accent: 'bg-accent',
+  blue: 'bg-accent-blue',
+  green: 'bg-accent-green',
+  danger: 'bg-danger',
+  warning: 'bg-warning',
+  muted: 'bg-muted/60',
+};
+
+/** Static status marker (K-54: squared, tint-only). Interactive control tags live in SelectInput. */
+export function Badge({ tone = 'muted', dot = false, children, className }: BadgeProps) {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium',
+        'inline-flex items-center gap-1.5 rounded px-2.5 py-0.5 text-xs font-medium',
         TONES[tone],
         className,
       )}
     >
+      {dot && <span aria-hidden className={cn('h-1.5 w-1.5 rounded-full', DOTS[tone])} />}
       {children}
     </span>
   );

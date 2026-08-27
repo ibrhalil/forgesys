@@ -1,13 +1,14 @@
 @import "tailwindcss";
 
 /*
- * Single light corporate theme: pale-sky page background + white cards, raspberry
- * accent. These tokens generate utilities: bg-surface, text-muted, border-glass,
- * text-accent, font-sans, etc. Keep them in sync with the palette documented in
+ * Light corporate theme (K-54 design language — engineering precision + raspberry
+ * brand): light sky page background + white cards, solid raspberry accent. These
+ * tokens generate utilities: bg-surface, text-muted, border-glass, text-accent,
+ * font-display, font-sans, etc. Keep them in sync with the palette documented in
  * frontend/AGENTS.md.
  */
 @theme {
-  --color-bg: #e0f2fe;
+  --color-bg: #f0f9ff;
   --color-surface: #ffffff;
   --color-sidebar: #ffffff;
   --color-glass: rgb(15 23 42 / 0.1);
@@ -16,12 +17,15 @@
   --color-muted: #64748b;
 
   --color-accent: #c2185b;
+  --color-accent-deep: #9c124c;
   --color-accent-blue: #0369a1;
   --color-accent-green: #047857;
   --color-danger: #b91c1c;
   --color-warning: #b45309;
 
   --font-sans: "Outfit", "Inter", -apple-system, system-ui, sans-serif;
+  --font-display: "Outfit", "Inter", -apple-system, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 }
 
 @layer base {
@@ -30,10 +34,8 @@
     min-height: 100vh;
     color: var(--color-main);
     color-scheme: light;
+    /* K-54: flat page background — no gradient washes anywhere (see AGENTS.md banned list). */
     background-color: var(--color-bg);
-    background-image:
-      radial-gradient(at 10% 20%, rgb(194 24 91 / 0.04) 0px, transparent 50%),
-      radial-gradient(at 90% 80%, rgb(3 105 161 / 0.05) 0px, transparent 50%);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;

@@ -15,7 +15,7 @@ export function LanguageToggle() {
     <div
       role="group"
       aria-label={t('common.language')}
-      className="flex overflow-hidden rounded-lg border border-glass"
+      className="flex overflow-hidden rounded-md border border-glass"
     >
       {LOCALES.map((l) => (
         <button

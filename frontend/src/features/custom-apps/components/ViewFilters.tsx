@@ -8,14 +8,13 @@ import { allowedOperators, operatorNeedsValue, toWireFilter } from '../viewQuery
 import type { CustomAppDetail, CustomAppValueFilter, CustomAppValueOperator, CustomAppValueSort } from '../types';
 import { UserPicker } from '../../../components/pickers/UserPicker';
 import { RelationPicker } from './RelationPicker';
+import { INPUT_BASE_SM } from '../../../components/ui/styles';
 
 /** Hard limits from the backend DTOs (filters ≤10, sorts ≤5). */
 const MAX_FILTERS = 10;
 const MAX_SORTS = 5;
 
-const INPUT_CLASS =
-  'w-full min-w-24 rounded-md border border-glass bg-main/5 px-2 py-1.5 text-sm text-main ' +
-  'placeholder:text-muted/50 focus:outline-none focus:ring-2 focus:ring-accent/50';
+const INPUT_CLASS = `min-w-24 ${INPUT_BASE_SM}`;
 
 /**
  * Row-based editor for the structured view DSL: each filter row is
@@ -97,7 +96,7 @@ export function ViewFilters({
   const wireFilters = () => filters.map(toWireFilter);
 
   return (
-    <div className="flex flex-col gap-4 rounded-xl border border-glass bg-bg/40 p-4">
+    <div className="flex flex-col gap-4 rounded-lg border border-glass bg-bg/40 p-4">
       {/* ── Filter rows ── */}
       {filters.length > 0 && <p className="m-0 text-xs font-semibold uppercase tracking-wide text-muted">{t('customApps.filtersLabel')}</p>}
       <div className="flex flex-col gap-2">
@@ -271,22 +270,13 @@ export function ViewFilters({
           {incomplete ? t('customApps.filterIncomplete') : `${filters.length}/${MAX_FILTERS} · ${sorts.length}/${MAX_SORTS}`}
         </span>
       </div>
-      <div className="flex flex-wrap justify-end gap-2">
-        <Button variant="ghost" size="sm" onClick={onClear} disabled={filters.length === 0 && sorts.length === 0}>
+      <div className="mt-4 flex justify-end gap-3">
+        <Button variant="ghost" onClick={onClear} disabled={filters.length === 0 && sorts.length === 0}>
           {t('customApps.filterClear')}
-        </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={incomplete}
-          onClick={() => onApply(wireFilters(), sorts)}
-        >
-          {t('customApps.filterApply')}
         </Button>
         {canSave && (
           <Button
-            variant="primary"
-            size="sm"
+            variant="secondary"
             disabled={incomplete}
             loading={saving}
             onClick={() => onSaveToView(wireFilters(), sorts)}
@@ -294,6 +284,13 @@ export function ViewFilters({
             {t('customApps.filterSaveToView')}
           </Button>
         )}
+        <Button
+          variant="primary"
+          disabled={incomplete}
+          onClick={() => onApply(wireFilters(), sorts)}
+        >
+          {t('customApps.filterApply')}
+        </Button>
       </div>
     </div>
   );

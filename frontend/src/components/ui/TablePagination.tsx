@@ -1,5 +1,6 @@
 import { cn } from '../../lib/cn';
 import { useT } from '../../lib/i18n';
+import { META_MONO } from './styles';
 
 interface TablePaginationProps {
   page: number;
@@ -88,17 +89,17 @@ export function TablePagination({
           <button
             onClick={() => onPageChange(page - 1)}
             disabled={page === 0}
-            className="rounded-md border border-glass bg-surface px-3 py-1 text-xs text-main transition-colors hover:bg-accent/5 hover:border-accent/30 disabled:opacity-40 disabled:hover:bg-surface disabled:hover:border-glass"
+            className="rounded-md border border-glass bg-surface px-3 py-1 text-xs text-main transition-colors hover:bg-accent/5 hover:border-accent/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:opacity-50 disabled:hover:bg-surface disabled:hover:border-glass"
           >
             {t('table.prev')}
           </button>
-          <span className="text-xs text-muted">
+          <span className={META_MONO}>
             {t('table.page', { current: totalPages === 0 ? 0 : page + 1, total: totalPages })}
           </span>
           <button
             onClick={() => onPageChange(page + 1)}
             disabled={page >= totalPages - 1}
-            className="rounded-md border border-glass bg-surface px-3 py-1 text-xs text-main transition-colors hover:bg-accent/5 hover:border-accent/30 disabled:opacity-40 disabled:hover:bg-surface disabled:hover:border-glass"
+            className="rounded-md border border-glass bg-surface px-3 py-1 text-xs text-main transition-colors hover:bg-accent/5 hover:border-accent/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:opacity-50 disabled:hover:bg-surface disabled:hover:border-glass"
           >
             {t('table.next')}
           </button>

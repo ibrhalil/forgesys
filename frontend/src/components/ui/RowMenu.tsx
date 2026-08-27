@@ -108,7 +108,7 @@ export function RowMenu({ items, ariaLabel, icon: Icon = LuSettings }: RowMenuPr
             role="menu"
             aria-label={ariaLabel}
             style={{ position: 'fixed', top, left, width: MENU_WIDTH, zIndex: 60 }}
-            className="overflow-hidden rounded-lg border border-glass bg-surface py-1 shadow-xl shadow-black/15"
+            className="overflow-hidden rounded-lg border border-glass bg-surface py-1 shadow-lg shadow-black/10"
           >
             {items.map((item) => (
               <button

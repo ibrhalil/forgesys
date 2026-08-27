@@ -101,14 +101,14 @@ export function Modal({ open, title, onClose, children, footer, size = 'md', des
         aria-describedby={describedby}
         tabIndex={-1}
         className={cn(
-          'w-full rounded-2xl border border-glass bg-sidebar shadow-2xl shadow-black/50',
+          'w-full rounded-lg border border-glass bg-sidebar shadow-2xl shadow-black/50',
           'flex max-h-[90vh] flex-col focus:outline-none',
           SIZES[size],
         )}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <header className="flex items-center justify-between border-b border-glass px-6 py-4">
-          <h2 id={titleId} className="text-lg font-semibold text-main">{title}</h2>
+          <h2 id={titleId} className="font-display text-lg font-semibold text-main">{title}</h2>
           <button
             onClick={onClose}
             aria-label={t('common.close')}

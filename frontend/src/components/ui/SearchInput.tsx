@@ -149,7 +149,7 @@ export function SearchInput({
             : undefined)
         }
         className={cn(
-          'h-9 w-64 rounded-lg border border-glass bg-surface pl-9 text-sm text-main placeholder:text-muted focus:border-accent/40 focus:outline-none focus:ring-2 focus:ring-accent/15',
+          'h-9 w-64 rounded-md border border-glass bg-surface pl-9 text-sm text-main placeholder:text-muted/50 focus:outline-none focus:ring-2 focus:ring-accent/50',
           fields && value ? 'pr-16' : fields || value ? 'pr-9' : 'pr-3',
         )}
       />
@@ -174,7 +174,7 @@ export function SearchInput({
             aria-label={t('search.fields')}
             aria-expanded={open}
             className={cn(
-              'relative inline-flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-main/5 hover:text-main focus:outline-none focus-visible:ring-1 focus-visible:ring-accent',
+              'relative inline-flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-main/5 hover:text-main focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60',
               open && 'bg-main/10 text-main',
               hasActiveFilter && 'text-accent',
             )}
@@ -188,7 +188,7 @@ export function SearchInput({
       </div>
 
       {open && fields && fields.length > 0 && (
-        <div className="absolute right-0 top-full z-60 mt-1.5 w-64 overflow-hidden rounded-xl border border-glass bg-surface p-2 shadow-xl shadow-black/15">
+        <div className="absolute right-0 top-full z-60 mt-1.5 w-64 overflow-hidden rounded-lg border border-glass bg-surface p-2 shadow-lg shadow-black/10">
           <div className="mb-2 flex items-center justify-between border-b border-glass px-1 pb-1.5">
             <span className="text-xs font-semibold text-main">{t('search.fields')}</span>
             {hasActiveFilter && (
@@ -204,12 +204,12 @@ export function SearchInput({
 
           <div className="space-y-1">
             {/* All Fields Option */}
-            <label className="flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors hover:bg-bg/60">
+            <label className="flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors hover:bg-main/5">
               <input
                 type="checkbox"
                 checked={isAllSelected}
                 onChange={handleSelectAll}
-                className="rounded border-glass text-accent focus:ring-accent"
+                className="accent-accent"
               />
               <span className="font-medium text-main">{t('search.allFields')}</span>
             </label>
@@ -228,7 +228,7 @@ export function SearchInput({
                     className={cn(
                       'flex select-none items-center justify-between gap-2 rounded-md px-2 py-1 text-xs transition-colors',
                       isSearchable
-                        ? 'cursor-pointer hover:bg-bg/60'
+                        ? 'cursor-pointer hover:bg-main/5'
                         : 'cursor-not-allowed opacity-50',
                     )}
                   >
@@ -238,7 +238,7 @@ export function SearchInput({
                         checked={isChecked}
                         disabled={!isSearchable}
                         onChange={() => isSearchable && toggleField(field.key)}
-                        className="rounded border-glass text-accent focus:ring-accent"
+                className="accent-accent"
                       />
                       <span className="truncate text-main">{field.label}</span>
                     </div>

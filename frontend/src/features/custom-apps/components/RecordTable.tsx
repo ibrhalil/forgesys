@@ -6,6 +6,7 @@ import { Button } from '../../../components/ui/Button';
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog';
 import { EmptyState } from '../../../components/ui/EmptyState';
 import { SelectInput } from '../../../components/ui/SelectInput';
+import { INPUT_BASE_SM } from '../../../components/ui/styles';
 import { PAGE_SIZE_OPTIONS } from '../../../lib/pagination';
 import { formatDateTime } from '../../../lib/format';
 import { useT } from '../../../lib/i18n';
@@ -161,7 +162,7 @@ export function RecordTable({
                 if (e.key === 'Escape') setEdit(null);
               }}
               onBlur={() => commit(record, prop.id, edit.draft)}
-              className="w-full min-w-24 rounded-md border border-accent/60 bg-main/5 px-2 py-1 text-sm text-main focus:outline-none focus:ring-2 focus:ring-accent/50"
+              className={`min-w-24 border-accent/60 ${INPUT_BASE_SM}`}
             />
           );
         }

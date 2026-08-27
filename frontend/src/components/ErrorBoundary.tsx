@@ -31,7 +31,7 @@ export class ErrorBoundary extends Component<Props, State> {
     if (this.state.hasError) {
       return (
         <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-6 text-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-danger/15 text-danger">
+          <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-danger/15 text-danger">
             <LuTriangleAlert className="h-7 w-7" strokeWidth={2} />
           </div>
           <h1 className="m-0 text-2xl font-semibold text-main">{t('error.title')}</h1>
