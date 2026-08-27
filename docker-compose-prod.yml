@@ -175,6 +175,16 @@ services:
       # K-51: mail template override dir (mounted read-only below); missing files
       # fall back to the jar's build-injected classpath copy.
       - MAIL_TEMPLATES_DIR=${MAIL_TEMPLATES_DIR:-/templates/mail}
+      # K-53: outgoing SMTP (SmtpMailSender). Provider-agnostic — managed (Brevo,
+      # SendGrid, SES) or a self-hosted relay (docs/MAIL_RUNBOOK.md). Empty
+      # MAIL_HOST → app fails startup fast (no silent mail loss in prod).
+      - MAIL_HOST=${MAIL_HOST:-}
+      - MAIL_PORT=${MAIL_PORT:-587}
+      - MAIL_USERNAME=${MAIL_USERNAME:-}
+      - MAIL_PASSWORD=${MAIL_PASSWORD:-}
+      - MAIL_FROM=${MAIL_FROM:-}
+      - MAIL_SMTP_AUTH=${MAIL_SMTP_AUTH:-true}
+      - MAIL_SMTP_STARTTLS=${MAIL_SMTP_STARTTLS:-true}
     volumes:
       # Externalized prod overrides (read-only)
       - ./infra/config:/config:ro

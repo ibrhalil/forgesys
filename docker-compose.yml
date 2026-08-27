@@ -129,6 +129,32 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # K-53: local catch-all SMTP + web UI for mail development. Not required by
+  # the backend unless the opt-in `smtp` companion profile is active
+  # (SPRING_PROFILES_ACTIVE=dev,smtp → sends to localhost:1025, UI at :8025).
+  # Default dev profile keeps LogMailSender (console only) — this container is
+  # then simply unused. Ports bound to localhost only: the catch-all mailbox
+  # contains raw verification tokens; never expose it off-host.
+  mailpit:
+    image: axllent/mailpit:v1.31
+    container_name: forgesys-mailpit
+    init: true
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - forgesys-net
+    logging:
+      driver: local
+      options:
+        max-size: "5m"
+        max-file: "3"
+
 networks:
   forgesys-net:
     driver: bridge
