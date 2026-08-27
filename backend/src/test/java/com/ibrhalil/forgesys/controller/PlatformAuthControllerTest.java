@@ -75,6 +75,13 @@ class PlatformAuthControllerTest extends AbstractRbacWebTest {
                     org.hamcrest.Matchers.containsString("sf_platform_refresh_token="));
             org.hamcrest.MatcherAssert.assertThat(setCookies,
                     org.hamcrest.Matchers.containsString("Path=/api/v1/platform"));
+            // The ACCESS cookie must be path-scoped too — a Path=/ platform access cookie
+            // leaks into tenant requests (0.2.1 regression, see PlatformCookiePrecedenceTest).
+            String accessCookie = result.getResponse().getHeaders("Set-Cookie").stream()
+                    .filter(h -> h.startsWith(PLATFORM_COOKIE + "="))
+                    .findFirst().orElse("");
+            org.hamcrest.MatcherAssert.assertThat(accessCookie,
+                    org.hamcrest.Matchers.containsString("Path=/api/v1/platform"));
         }
 
         @Test

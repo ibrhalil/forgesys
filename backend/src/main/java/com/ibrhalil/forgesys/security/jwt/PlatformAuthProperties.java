@@ -55,12 +55,13 @@ public record PlatformAuthProperties(
         return effectiveRefreshTtlDays() * 86_400L;
     }
 
+    /** Path-scoped like the refresh cookie — a path-/ access cookie leaks into tenant requests and the JWT filter's platform branch then rejects them (0.2.1 regression). */
     public String buildAccessTokenCookie(String token, long expiresInSeconds) {
         return ResponseCookie.from(ACCESS_COOKIE_NAME, token)
                 .httpOnly(true)
                 .secure(effectiveCookieSecure())
                 .sameSite(effectiveCookieSameSite())
-                .path("/")
+                .path(effectiveCookiePath())
                 .maxAge(expiresInSeconds)
                 .build()
                 .toString();

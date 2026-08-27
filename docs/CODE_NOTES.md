@@ -290,6 +290,16 @@
   fast re-login after password change).
 - Token extraction order: cookie first (browser sessions), then `Authorization: Bearer`
   (API clients, cURL, jobs).
+- Cookie preference is path-scoped (0.2.1 regression fix): the platform access cookie wins
+  only on `/api/v1/platform/**`, the tenant cookie everywhere else. K-50 originally set the
+  platform access cookie on `Path=/` (only the refresh cookie was path-scoped), so a browser
+  holding both sessions sent both cookies on tenant paths; the filter's then-unconditional
+  platform precedence validated the platform token instead of the tenant one and the
+  scope-vs-tenant-context check hard-rejected → login returned 200 but `/users/me` 401'd
+  forever. `PlatformAuthProperties.buildAccessTokenCookie` now scopes BOTH cookies to
+  `/api/v1/platform`, and the path-aware precedence heals browsers still carrying the legacy
+  `Path=/` cookie. `PlatformAuthController.logout` expires both path variants. Regression
+  lock: `PlatformCookiePrecedenceTest`.
 
 ### CustomUserDetailsService
 - `loadUserByUsername` is the `UserDetailsService` contract; `resolveAuthorities` is shared
