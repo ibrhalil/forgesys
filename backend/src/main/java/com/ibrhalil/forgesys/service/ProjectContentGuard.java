@@ -1,6 +1,6 @@
 package com.ibrhalil.forgesys.service;
 
-import com.ibrhalil.forgesys.persistence.repository.AppRepository;
+import com.ibrhalil.forgesys.persistence.repository.CustomAppRepository;
 import com.ibrhalil.forgesys.persistence.repository.NoteRepository;
 import com.ibrhalil.forgesys.persistence.repository.TaskRepository;
 import lombok.RequiredArgsConstructor;
@@ -19,11 +19,11 @@ public class ProjectContentGuard {
 
     private final TaskRepository taskRepository;
     private final NoteRepository noteRepository;
-    private final AppRepository appRepository;
+    private final CustomAppRepository customAppRepository;
 
     public boolean hasContent(UUID projectId) {
         return taskRepository.existsByProjectId(projectId)
                 || noteRepository.existsByProjectId(projectId)
-                || appRepository.existsByProjectId(projectId);
+                || customAppRepository.existsByProjectId(projectId);
     }
 }

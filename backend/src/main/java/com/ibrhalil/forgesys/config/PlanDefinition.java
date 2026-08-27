@@ -8,7 +8,7 @@ import java.util.Optional;
  * flows arrive in Faz 6. {@link #rank} orders plans (FREE &lt; PRO &lt; ENTERPRISE) and
  * gates module activation (tenant rank &gt;= module minPlan). Limits (K-15) live here —
  * no migration when they change; {@code -1} = unlimited, enforced as a soft-block
- * (403 {@code app_limit_reached}) that never hides existing data.
+ * (403 {@code custom_app_limit_reached}) that never hides existing data.
  */
 public enum PlanDefinition {
 
@@ -19,15 +19,15 @@ public enum PlanDefinition {
     private final String key;
     private final String displayName;
     private final int rank;
-    private final int maxApps;
-    private final long maxRecordsPerApp;
+    private final int maxCustomApps;
+    private final long maxRecordsPerCustomApp;
 
-    PlanDefinition(String key, String displayName, int rank, int maxApps, long maxRecordsPerApp) {
+    PlanDefinition(String key, String displayName, int rank, int maxCustomApps, long maxRecordsPerCustomApp) {
         this.key = key;
         this.displayName = displayName;
         this.rank = rank;
-        this.maxApps = maxApps;
-        this.maxRecordsPerApp = maxRecordsPerApp;
+        this.maxCustomApps = maxCustomApps;
+        this.maxRecordsPerCustomApp = maxRecordsPerCustomApp;
     }
 
     public String key() {
@@ -43,13 +43,13 @@ public enum PlanDefinition {
     }
 
     /** Max custom apps per tenant; {@code -1} = unlimited (soft-block, K-15). */
-    public int maxApps() {
-        return maxApps;
+    public int maxCustomApps() {
+        return maxCustomApps;
     }
 
     /** Max records per custom app; {@code -1} = unlimited (soft-block, K-15). */
-    public long maxRecordsPerApp() {
-        return maxRecordsPerApp;
+    public long maxRecordsPerCustomApp() {
+        return maxRecordsPerCustomApp;
     }
 
     public boolean covers(PlanDefinition other) {

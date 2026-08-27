@@ -5,12 +5,12 @@ import {
   matchFilter,
   operatorNeedsValue,
   toWireFilter,
-} from '../features/apps/viewQuery';
-import type { AppProperty, AppRecord, PropertyType } from '../features/apps/types';
+} from '../features/custom-apps/viewQuery';
+import type { CustomAppProperty, CustomAppRecord, PropertyType } from '../features/custom-apps/types';
 
-const prop = (id: string, type: PropertyType, over: Partial<AppProperty> = {}): AppProperty => ({
+const prop = (id: string, type: PropertyType, over: Partial<CustomAppProperty> = {}): CustomAppProperty => ({
   id,
-  appId: 'a1',
+  customAppId: 'a1',
   name: id,
   type,
   config: null,
@@ -23,9 +23,9 @@ const record = (
   id: string,
   values: Record<string, string | number | null>,
   createdDate = '2026-08-01T00:00:00Z',
-): AppRecord => ({
+): CustomAppRecord => ({
   id,
-  appId: 'a1',
+  customAppId: 'a1',
   values,
   createdDate,
   updatedAt: createdDate,

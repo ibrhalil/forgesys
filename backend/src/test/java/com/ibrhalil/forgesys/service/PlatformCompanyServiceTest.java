@@ -7,7 +7,7 @@ import com.ibrhalil.forgesys.entity.Plan;
 import com.ibrhalil.forgesys.entity.Subscription;
 import com.ibrhalil.forgesys.entity.SubscriptionStatus;
 import com.ibrhalil.forgesys.exception.BusinessException;
-import com.ibrhalil.forgesys.persistence.repository.AppRepository;
+import com.ibrhalil.forgesys.persistence.repository.CustomAppRepository;
 import com.ibrhalil.forgesys.persistence.repository.CompanyRepository;
 import com.ibrhalil.forgesys.persistence.repository.NoteRepository;
 import com.ibrhalil.forgesys.persistence.repository.PlanRepository;
@@ -60,7 +60,7 @@ class PlatformCompanyServiceTest {
     @Mock
     private ProjectRepository projectRepository;
     @Mock
-    private AppRepository appRepository;
+    private CustomAppRepository customAppRepository;
     @Mock
     private NoteRepository noteRepository;
     @Mock
@@ -77,7 +77,7 @@ class PlatformCompanyServiceTest {
         platformCompanyService = new PlatformCompanyService(companyRepository,
                 platformCompanyListQueryExecutor, subscriptionRepository, planRepository,
                 tenantModuleRepository, planLimitService, moduleActivationService,
-                userRepository, projectRepository, appRepository, noteRepository,
+                userRepository, projectRepository, customAppRepository, noteRepository,
                 platformAuditService, platformUserRepository, self);
         // getReport routes the counting tx through the self proxy; in the unit
         // test that just circles back to the same (proxy-less) instance.
@@ -220,7 +220,7 @@ class PlatformCompanyServiceTest {
         when(companyRepository.findById(id)).thenReturn(Optional.of(company));
         when(userRepository.count()).thenReturn(7L);
         when(projectRepository.count()).thenReturn(5L);
-        when(appRepository.count()).thenReturn(3L);
+        when(customAppRepository.count()).thenReturn(3L);
         when(noteRepository.count()).thenReturn(11L);
 
         var report = platformCompanyService.getReport(id);
@@ -228,7 +228,7 @@ class PlatformCompanyServiceTest {
         assertThat(report.companyId()).isEqualTo(id);
         assertThat(report.userCount()).isEqualTo(7L);
         assertThat(report.projectCount()).isEqualTo(5L);
-        assertThat(report.appCount()).isEqualTo(3L);
+        assertThat(report.customAppCount()).isEqualTo(3L);
         assertThat(report.noteCount()).isEqualTo(11L);
     }
 

@@ -16,7 +16,7 @@ const AVAILABLE_ROLES: SelectOption<string>[] = [
   { value: 'iam:admin', label: 'iam:admin — Full Administrator' },
   { value: 'project:lead', label: 'project:lead — Sprint & Task Manager' },
   { value: 'notes:editor', label: 'notes:editor — Markdown Knowledge Base' },
-  { value: 'apps:builder', label: 'apps:builder — Custom App Modeler' },
+  { value: 'apps:builder', label: 'apps:builder — Custom CustomApp Modeler' },
   { value: 'audit:viewer', label: 'audit:viewer — Access Log Auditor' },
 ];
 

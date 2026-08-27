@@ -76,7 +76,7 @@ export interface CompanyReportResponse {
   companyId: string;
   userCount: number;
   projectCount: number;
-  appCount: number;
+  customAppCount: number;
   noteCount: number;
 }
 

@@ -28,12 +28,12 @@ export const PERMISSIONS = {
   TASK_WRITE: 'pm:task:write',
   TASK_DELETE: 'pm:task:delete',
   // apps:* — custom app builder module (K-15 / Faz 3.0.B); seeded on module activation.
-  APP_READ: 'apps:app:read',
-  APP_WRITE: 'apps:app:write',
-  APP_DELETE: 'apps:app:delete',
-  APP_RECORD_READ: 'apps:record:read',
-  APP_RECORD_WRITE: 'apps:record:write',
-  APP_RECORD_DELETE: 'apps:record:delete',
+  CUSTOM_APP_READ: 'apps:customapp:read',
+  CUSTOM_APP_WRITE: 'apps:customapp:write',
+  CUSTOM_APP_DELETE: 'apps:customapp:delete',
+  CUSTOM_APP_RECORD_READ: 'apps:record:read',
+  CUSTOM_APP_RECORD_WRITE: 'apps:record:write',
+  CUSTOM_APP_RECORD_DELETE: 'apps:record:delete',
   // notes:* — standalone notes module (K-44 / Epic 3.2); seeded on module activation.
   NOTE_READ: 'notes:note:read',
   NOTE_WRITE: 'notes:note:write',

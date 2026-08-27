@@ -42,10 +42,10 @@ public final class PermissionCatalog {
     public static final String PM_TASK_DELETE = "pm:task:delete";
 
     // apps:* — definitions in ModuleDefinition.APPS; property/view CRUD rides
-    // apps:app:write (part of the definition, not data).
-    public static final String APPS_APP_READ = "apps:app:read";
-    public static final String APPS_APP_WRITE = "apps:app:write";
-    public static final String APPS_APP_DELETE = "apps:app:delete";
+    // apps:customapp:write (part of the definition, not data).
+    public static final String APPS_CUSTOM_APP_READ = "apps:customapp:read";
+    public static final String APPS_CUSTOM_APP_WRITE = "apps:customapp:write";
+    public static final String APPS_CUSTOM_APP_DELETE = "apps:customapp:delete";
     public static final String APPS_RECORD_READ = "apps:record:read";
     public static final String APPS_RECORD_WRITE = "apps:record:write";
     public static final String APPS_RECORD_DELETE = "apps:record:delete";

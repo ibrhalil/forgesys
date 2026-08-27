@@ -329,7 +329,7 @@ class PlatformCompanyLifecycleControllerTest extends AbstractRbacWebTest {
                 .andExpect(jsonPath("$.companyId").value(company.getId().toString()))
                 .andExpect(jsonPath("$.userCount", greaterThanOrEqualTo(2)))
                 .andExpect(jsonPath("$.projectCount", greaterThanOrEqualTo(1)))
-                .andExpect(jsonPath("$.appCount", greaterThanOrEqualTo(0)))
+                .andExpect(jsonPath("$.customAppCount", greaterThanOrEqualTo(0)))
                 .andExpect(jsonPath("$.noteCount", greaterThanOrEqualTo(0)));
     }
 

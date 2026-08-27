@@ -41,7 +41,7 @@ public class RequestBodyCaptureFilter extends OncePerRequestFilter {
 
     public RequestBodyCaptureFilter(
             @Value("${forgesys.audit.mask-patterns:password,token,secret,credential,authorization,apiKey,accessKey,clientSecret}") List<String> maskPatterns,
-            @Value("${forgesys.audit.high-risk-paths:/api/v1/users/**,/api/v1/roles/**,/api/v1/groups/**,/api/v1/permissions/**,/api/v1/platform/**,/api/v1/modules/**,/api/v1/apps/**}") List<String> highRiskPaths) {
+            @Value("${forgesys.audit.high-risk-paths:/api/v1/users/**,/api/v1/roles/**,/api/v1/groups/**,/api/v1/permissions/**,/api/v1/platform/**,/api/v1/modules/**,/api/v1/custom-apps/**}") List<String> highRiskPaths) {
         this.maskPatterns = maskPatterns.stream()
                 .map(String::toLowerCase)
                 .collect(Collectors.toSet());

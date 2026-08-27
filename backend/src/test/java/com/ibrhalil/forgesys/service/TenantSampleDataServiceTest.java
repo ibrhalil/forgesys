@@ -2,12 +2,12 @@ package com.ibrhalil.forgesys.service;
 
 import com.ibrhalil.forgesys.common.tenant.TenantContext;
 import com.ibrhalil.forgesys.config.SampleDataProperties;
-import com.ibrhalil.forgesys.dto.AppPropertyRequest;
-import com.ibrhalil.forgesys.dto.AppPropertyResponse;
-import com.ibrhalil.forgesys.dto.AppRecordRequest;
-import com.ibrhalil.forgesys.dto.AppRequest;
-import com.ibrhalil.forgesys.dto.AppResponse;
-import com.ibrhalil.forgesys.dto.AppViewRequest;
+import com.ibrhalil.forgesys.dto.CustomAppPropertyRequest;
+import com.ibrhalil.forgesys.dto.CustomAppPropertyResponse;
+import com.ibrhalil.forgesys.dto.CustomAppRecordRequest;
+import com.ibrhalil.forgesys.dto.CustomAppRequest;
+import com.ibrhalil.forgesys.dto.CustomAppResponse;
+import com.ibrhalil.forgesys.dto.CustomAppViewRequest;
 import com.ibrhalil.forgesys.dto.NoteCategoryRequest;
 import com.ibrhalil.forgesys.dto.NoteCategoryResponse;
 import com.ibrhalil.forgesys.dto.NoteRequest;
@@ -68,8 +68,8 @@ class TenantSampleDataServiceTest {
     @Mock private TaskService taskService;
     @Mock private NoteCategoryService noteCategoryService;
     @Mock private NoteService noteService;
-    @Mock private AppBuilderService appBuilderService;
-    @Mock private AppRecordService appRecordService;
+    @Mock private CustomAppService customAppService;
+    @Mock private CustomAppRecordService customAppRecordService;
     @Mock private ObjectProvider<TenantSampleDataService> self;
 
     private TenantSampleDataService service;
@@ -77,7 +77,7 @@ class TenantSampleDataServiceTest {
     @BeforeEach
     void setUp() {
         service = new TenantSampleDataService(projectService, taskService, noteCategoryService,
-                noteService, appBuilderService, appRecordService, new SampleDataProperties(true), self);
+                noteService, customAppService, customAppRecordService, new SampleDataProperties(true), self);
         // Same (proxy-less) instance — seedInNewTx runs inline like in production tests.
         lenient().when(self.getObject()).thenReturn(service);
     }
@@ -90,13 +90,13 @@ class TenantSampleDataServiceTest {
     @Test
     void disabled_neverTouchesAnyService() {
         TenantSampleDataService gated = new TenantSampleDataService(projectService, taskService,
-                noteCategoryService, noteService, appBuilderService, appRecordService,
+                noteCategoryService, noteService, customAppService, customAppRecordService,
                 new SampleDataProperties(false), self);
 
         gated.seedForCompany(company(), ADMIN_ID);
 
         verifyNoInteractions(projectService, taskService, noteCategoryService, noteService,
-                appBuilderService, appRecordService);
+                customAppService, customAppRecordService);
         verify(self, never()).getObject();
     }
 
@@ -145,31 +145,31 @@ class TenantSampleDataServiceTest {
         assertThat(noteCaptor.getAllValues().get(0).pinned()).isTrue();
 
         // apps: one app, three properties (ordered/select/date), two views, four records.
-        verify(appBuilderService).create(any(AppRequest.class));
-        ArgumentCaptor<AppPropertyRequest> propCaptor = ArgumentCaptor.forClass(AppPropertyRequest.class);
-        verify(appBuilderService, times(3)).addProperty(eq(APP_ID), propCaptor.capture());
-        List<AppPropertyRequest> props = propCaptor.getAllValues();
-        assertThat(props).extracting(AppPropertyRequest::name)
+        verify(customAppService).create(any(CustomAppRequest.class));
+        ArgumentCaptor<CustomAppPropertyRequest> propCaptor = ArgumentCaptor.forClass(CustomAppPropertyRequest.class);
+        verify(customAppService, times(3)).addProperty(eq(APP_ID), propCaptor.capture());
+        List<CustomAppPropertyRequest> props = propCaptor.getAllValues();
+        assertThat(props).extracting(CustomAppPropertyRequest::name)
                 .containsExactly("Name", "Stage", "Launch date");
-        assertThat(props).extracting(AppPropertyRequest::type)
+        assertThat(props).extracting(CustomAppPropertyRequest::type)
                 .containsExactly(PropertyType.TEXT, PropertyType.SELECT, PropertyType.DATE);
-        assertThat(props).extracting(AppPropertyRequest::required)
+        assertThat(props).extracting(CustomAppPropertyRequest::required)
                 .containsExactly(true, false, false);
-        assertThat(props).extracting(AppPropertyRequest::position)
+        assertThat(props).extracting(CustomAppPropertyRequest::position)
                 .containsExactly(0, 1, 2);
         assertThat(props.get(1).config().options())
                 .containsExactly("Discovery", "In Progress", "Launched");
 
-        ArgumentCaptor<AppViewRequest> viewCaptor = ArgumentCaptor.forClass(AppViewRequest.class);
-        verify(appBuilderService, times(2)).addView(eq(APP_ID), viewCaptor.capture());
-        assertThat(viewCaptor.getAllValues()).extracting(AppViewRequest::type)
+        ArgumentCaptor<CustomAppViewRequest> viewCaptor = ArgumentCaptor.forClass(CustomAppViewRequest.class);
+        verify(customAppService, times(2)).addView(eq(APP_ID), viewCaptor.capture());
+        assertThat(viewCaptor.getAllValues()).extracting(CustomAppViewRequest::type)
                 .containsExactly(ViewType.TABLE, ViewType.BOARD);
         // The BOARD anchor groups by the Stage SELECT property id (validator contract).
         assertThat(viewCaptor.getAllValues().get(1).config().groupBy())
                 .isEqualTo(STAGE_PROP.toString());
 
-        ArgumentCaptor<AppRecordRequest> recordCaptor = ArgumentCaptor.forClass(AppRecordRequest.class);
-        verify(appRecordService, times(4)).create(eq(APP_ID), recordCaptor.capture());
+        ArgumentCaptor<CustomAppRecordRequest> recordCaptor = ArgumentCaptor.forClass(CustomAppRecordRequest.class);
+        verify(customAppRecordService, times(4)).create(eq(APP_ID), recordCaptor.capture());
         // Every record covers the required Name; Stage is spread across three options
         // with one record deliberately empty (the Board's empty bucket).
         assertThat(recordCaptor.getAllValues())
@@ -201,11 +201,11 @@ class TenantSampleDataServiceTest {
             UUID id = "Guides".equals(request.name()) ? GUIDES_ID : IDEAS_ID;
             return new NoteCategoryResponse(id, request.name(), null, null);
         });
-        when(appBuilderService.create(any(AppRequest.class)))
-                .thenReturn(new AppResponse(APP_ID, "Team Tracker", null, null, null, null, null, null));
-        when(appBuilderService.addProperty(eq(APP_ID), any(AppPropertyRequest.class))).thenAnswer(inv -> {
-            AppPropertyRequest request = inv.getArgument(1);
-            return new AppPropertyResponse(propertyId(request.name()), APP_ID, request.name(),
+        when(customAppService.create(any(CustomAppRequest.class)))
+                .thenReturn(new CustomAppResponse(APP_ID, "Team Tracker", null, null, null, null, null, null));
+        when(customAppService.addProperty(eq(APP_ID), any(CustomAppPropertyRequest.class))).thenAnswer(inv -> {
+            CustomAppPropertyRequest request = inv.getArgument(1);
+            return new CustomAppPropertyResponse(propertyId(request.name()), APP_ID, request.name(),
                     request.type(), request.config(), request.required(), request.position());
         });
     }

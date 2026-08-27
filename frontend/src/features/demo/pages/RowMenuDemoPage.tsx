@@ -100,13 +100,13 @@ import { LuEllipsisVertical, LuDownload, LuShare2, LuTrash2 } from 'react-icons/
   items={[
     { label: 'Export JSON',  onClick: exportJson, icon: LuDownload },
     { label: 'Share Link',   onClick: shareLink,  icon: LuShare2 },
-    { label: 'Delete App',   onClick: deleteApp,  icon: LuTrash2, danger: true },
+    { label: 'Delete CustomApp',   onClick: deleteApp,  icon: LuTrash2, danger: true },
   ]}
 />`}
       >
         <div className="rounded-xl border border-glass bg-surface p-5 flex items-center justify-between">
           <div>
-            <h2 className="text-base font-bold text-main">CRM Contacts Custom App</h2>
+            <h2 className="text-base font-bold text-main">CRM Contacts Custom CustomApp</h2>
             <p className="text-xs text-muted">Created 3 days ago · 142 records</p>
           </div>
 
@@ -120,7 +120,7 @@ import { LuEllipsisVertical, LuDownload, LuShare2, LuTrash2 } from 'react-icons/
               items={[
                 { label: 'Export Data (CSV)', onClick: () => setLastAction('Export Data CSV'), icon: LuDownload },
                 { label: 'Share Schema', onClick: () => setLastAction('Share Schema'), icon: LuShare2 },
-                { label: 'Delete App', onClick: () => setLastAction('Delete App'), icon: LuTrash2, danger: true },
+                { label: 'Delete CustomApp', onClick: () => setLastAction('Delete CustomApp'), icon: LuTrash2, danger: true },
               ]}
             />
           </div>

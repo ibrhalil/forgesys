@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { RolePicker } from '../components/pickers/RolePicker';
-import { AppPicker } from '../components/pickers/AppPicker';
+import { CustomAppPicker } from '../components/pickers/CustomAppPicker';
 import { useLocaleStore } from '../store/localeStore';
 
 const ROLES_PAYLOAD = {
@@ -15,8 +15,8 @@ const ROLES_PAYLOAD = {
 
 const APPS_PAYLOAD = {
   data: [
-    { id: 'app-1', name: 'Order Tracking', createdDate: '2026-08-01T10:00:00Z', updatedAt: '2026-08-01T10:00:00Z' },
-    { id: 'app-2', name: 'Inventory', createdDate: '2026-08-02T10:00:00Z', updatedAt: '2026-08-02T10:00:00Z' },
+    { id: 'customApp-1', name: 'Order Tracking', createdDate: '2026-08-01T10:00:00Z', updatedAt: '2026-08-01T10:00:00Z' },
+    { id: 'customApp-2', name: 'Inventory', createdDate: '2026-08-02T10:00:00Z', updatedAt: '2026-08-02T10:00:00Z' },
   ],
   meta: { page: 0, pageSize: 20, totalElements: 2, totalPages: 1, hasNext: false, hasPrevious: false },
 };
@@ -84,7 +84,7 @@ describe('RolePicker', () => {
   });
 });
 
-describe('AppPicker', () => {
+describe('CustomAppPicker', () => {
   beforeEach(() => {
     useLocaleStore.setState({ locale: 'en' });
     calls = [];
@@ -99,9 +99,9 @@ describe('AppPicker', () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it('excludes the configured ids (self-app) from the results', async () => {
+  it('excludes the configured ids (self-customApp) from the results', async () => {
     const user = userEvent.setup();
-    render(<AppPicker value={null} onChange={vi.fn()} excludeIds={['app-1']} debounceMs={0} />);
+    render(<CustomAppPicker value={null} onChange={vi.fn()} excludeIds={['customApp-1']} debounceMs={0} />);
 
     const combobox = screen.getByRole('combobox');
     await user.click(combobox);

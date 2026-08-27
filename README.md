@@ -26,7 +26,7 @@
 - **Notes modülü (K-44):** markdown notlar + kategoriler (raw HTML render kapalı)
 - **Modül & plan sistemi (K-16):** FREE/PRO/ENTERPRISE planları; plan bazlı modül aktivasyonu (plan gate → modül Flyway → permission seed); modül/plan registry'leri kodda
 - **Custom App Builder (K-15 + K-42):** tenant'ların kendi mini-uygulamalarını yaratması — JSONB EAV modeli (app/property/view/record CRUD, native PG JSONB search, plan limitleri) + tam UI (property/view/record editörleri, TABLE/BOARD/CALENDAR/LIST/GALLERY görünüm renderer'ları, satır bazlı filtre/sort DSL UI'ı, User/Relation picker'ları, plan kullanım göstergeleri)
-- **Admin console (frontend):** login/register/tenant-verify; users/roles/groups/permissions/sessions/audit/login-history/request-logs/projects/modules/notes/apps (App Builder) sayfaları; permission-gated lazy navigation
+- **Admin console (frontend):** login/register/tenant-verify; users/roles/groups/permissions/sessions/audit/login-history/request-logs/projects/modules/notes/apps (Custom App Builder) sayfaları; permission-gated lazy navigation
 - **Self-service:** `/users/me/**` (profil + şifre değiştirme) — her authenticated user kendi hesabını yönetir
 - **Platform süperadmin + servis hesapları (K-50):** ayrı platform auth yüzeyi (`/platform/login` — bare host) + `sf_platform_*` cookie'leri; global kimlikler `public` şemasında (`t_platform_users`/`t_platform_api_keys`/`t_platform_audit_logs`). Süperadmin: tenant yaşam döngüsü (plan/modül/status), cross-tenant rapor, **tenant'a giriş** (impersonation — tek kullanımlık kod + `act` claim'li JWT, API mirroring yok). Servis hesapları: `X-API-Key` stateless auth, scope'lu agent erişimi, raw key yalnız bir kez gösterilir. (K-24 `system` tenant bootstrap kaldırıldı; RISK-18 `platform:*` tenant seed'i kapanış.)
 - **İki fazlı tenant signup (K-21):** `POST /api/v1/auth/company/register` → 202 + PROVISIONING + doğrulama maili → `POST /verify` → şema + Flyway + admin user → ACTIVE
@@ -150,7 +150,7 @@ docker compose -f docker-compose-prod.yml up -d --build
 #   Kod değişikliği sonrası her yeniden deploy'da --build şart.
 ```
 
-- App: http://localhost:8080 · Health: http://localhost:8080/actuator/health
+- CustomApp: http://localhost:8080 · Health: http://localhost:8080/actuator/health
 - Swagger UI (yalnız dev): http://localhost:8080/swagger-ui.html · OpenAPI spec: `/v3/api-docs` — prod profilinde kapalıdır (K-41).
 - DB: `localhost:5432` (credential'lar `.env`'den) · Redis: `localhost:6379`
 
@@ -289,7 +289,7 @@ curl -X POST http://localhost:8080/api/v1/auth/company/verify \
 
 > `/register` ve `/verify` `TenantFilter`'dan muaf (`shouldNotFilter` — `/api/v1/auth/company/**`). Login tenant'a özgü (subdomain çözümleme).
 
-> **Tipli proje konteyneri (K-45):** projeler türsüz var edilemez (`TASKS | NOTES | APPS`); yaratılabilir tür kataloğu tenant'ın AKTİF modüllerinden türer (`GET /api/v1/projects/types`). Notlar ve app'ler kendi türlerinin konteynerine çapalıdır (`/api/v1/projects/{id}/notes`, `/projects/{id}/apps` — TaskController deseni); üst `/notes` `/apps` yüzeyleri `?projectId=` filtreli çapraz-konteyner görünümleri olarak yaşar, hedef verilmeden yazmalar tipin "Genel" default konteynerine düşer.
+> **Tipli proje konteyneri (K-45):** projeler türsüz var edilemez (`TASKS | NOTES | APPS`); yaratılabilir tür kataloğu tenant'ın AKTİF modüllerinden türer (`GET /api/v1/projects/types`). Notlar ve özel uygulamalar kendi türlerinin konteynerine çapalıdır (`/api/v1/projects/{id}/notes`, `/projects/{id}/custom-apps` — TaskController deseni); üst `/notes` `/custom-apps` yüzeyleri `?projectId=` filtreli çapraz-konteyner görünümleri olarak yaşar, hedef verilmeden yazmalar tipin "Genel" default konteynerine düşer.
 
 ## Proje Yapısı
 

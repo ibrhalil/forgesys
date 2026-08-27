@@ -24,7 +24,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isAuthenticated: false,
   // Bootstrap-only: true until the first /me check completes. The whole app gates on
-  // this (App.tsx) — it must NOT be reused for login submission, or the router unmounts
+  // this (CustomApp.tsx) — it must NOT be reused for login submission, or the router unmounts
   // mid-login and breaks the post-login navigate().
   isLoading: true,
   isSubmitting: false,

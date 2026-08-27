@@ -63,7 +63,7 @@
 - `NoResourceFoundException`: Spring 6.1+ static-resource chain throws this instead of a plain 404; mapped to standard `resource_not_found` (e.g. `/v3/api-docs` in a springdoc-disabled profile, K-41 prod gating).
 - `AccessDeniedException`: method-level `@PreAuthorize` denials throw `AuthorizationDeniedException` (subclass) from the controller method, surfacing at the MVC layer — caught here, NOT by the filter-chain `RestAccessDeniedHandler`; 403 matches the wire contract.
 - Client-error mappings (Faz D / RISK-29): malformed JSON body (`HttpMessageNotReadableException`), type-mismatched path/query params, missing `@RequestParam`, unknown sort property (`PropertyReferenceException`), and method-level Bean Validation all → 400 `validation_error` — without the handlers the catch-all turns each into a 500. Known property PATHS stay closed via `SortGuard` at the controller (handler only sees unknown property names). `ConstraintViolationException` handler is defensive/forward-compatible — controllers use `@Valid` → `MethodArgumentNotValidException`; kept so a future `@Validated` controller stays 400.
-- `DataIntegrityViolationException` (RISK-28): TOCTOU uniqueness race — two requests pass the service `existsBy*`, one hits the DB constraint. Mapped to 400 with the precise `*_TAKEN` code via constraint-name substring map (`users_email`→`user_email_taken`, `users_username`, `roles_name`, `groups_name`, `permissions_name`, `projects_name`/`projects_type_name`, `note_categories_name`, `apps_name`, `app_properties_name`, `app_views_name`, `tenant_modules_company_module`→`module_already_active`, `companies_subdomain`/`companies_schema_name`→`company_subdomain_taken`); unknown → `business_error` fallback, never 500. Service checks stay (defense-in-depth).
+- `DataIntegrityViolationException` (RISK-28): TOCTOU uniqueness race — two requests pass the service `existsBy*`, one hits the DB constraint. Mapped to 400 with the precise `*_TAKEN` code via constraint-name substring map (`users_email`→`user_email_taken`, `users_username`, `roles_name`, `groups_name`, `permissions_name`, `projects_name`/`projects_type_name`, `note_categories_name`, `custom_apps_name`, `custom_app_properties_name`, `custom_app_views_name`, `tenant_modules_company_module`→`module_already_active`, `companies_subdomain`/`companies_schema_name`→`company_subdomain_taken`); unknown → `business_error` fallback, never 500. Service checks stay (defense-in-depth).
 - `DataAccessException` → 503 `service_unavailable` (Redis/DB down — e.g. refresh-token `issue` that cannot persist): "retry later" distinguishable from a real bug; `DataIntegrityViolationException` keeps its more specific handler.
 - Sensitive rejected values (`password`/`token`/`secret`/`credential`) masked to `[REDACTED]` for both `@RequestBody` field errors and `ConstraintViolation` invalid values.
 
@@ -118,7 +118,7 @@
 - Project fixed at create (a move would strand notes in the old container; `projectId` change on update rejected 409). Per-project taxonomy, but name uniqueness stays TENANT-wide for now (cross-container same names are legal siblings).
 - `delete`: FK's `ON DELETE SET NULL` never fires (soft-delete is an UPDATE); `@SQLRestriction` hides the row from reads; notes keep their `categoryId` value and `resolveCategoryName` treats a soft-deleted category as absent (name chip simply disappears).
 
-### AppBuilderService
+### CustomAppService
 - K-15 / Faz 3.0.B re-scoped by K-45: apps live in APPS-type containers; flat writes default to "Genel"; PUT moves apps between APPS containers. Plan limits (`PlanLimitService`) are TENANT-level (not per container), soft-blocked on create. TOCTOU posture: `existsBy*` pre-check + `DataIntegrityViolationException` constraint-map fallback (RISK-28).
 - Property definition validation: SELECT needs non-empty, distinct, ≤100 options, each ≤100 chars, non-blank; RELATION needs an existing target app (UUID) and takes no options; TEXT/NUMBER/DATE/USER take no config; FORMULA rejected outright (deferred, ROADMAP 3.0.B).
 - Property type is IMMUTABLE on update (delete + recreate) — existing value rows would not convert.
@@ -126,32 +126,32 @@
 - Position semantics: absent on create → append (max+1, first = 0); null on update → keep current (partial-PUT).
 - `resolveProjectNames`: batched per page (one query), no per-row lookups.
 
-### AppRecordService
-- K-15 EAV path: `t_app_records` + `t_app_record_values(value jsonb)`. Record addressable only through its owning app (nested lookup, 404 on cross-app — same scoping as TaskService).
-- Create: required coverage + per-PropertyType validation (`AppPropertyValueValidator`) + per-app plan soft-block.
+### CustomAppRecordService
+- K-15 EAV path: `t_custom_app_records` + `t_custom_app_record_values(value jsonb)`. Record addressable only through its owning app (nested lookup, 404 on cross-app — same scoping as TaskService).
+- Create: required coverage + per-PropertyType validation (`CustomAppPropertyValueValidator`) + per-custom-app plan soft-block.
 - PATCH semantics: JSON `null` clears (rejected for required properties), absent keys keep.
-- List/get/search responses bulk-fetch value rows (one query per page — no N+1); search delegates to the PG-only `AppRecordSearchExecutor`.
+- List/get/search responses bulk-fetch value rows (one query per page — no N+1); search delegates to the PG-only `CustomAppRecordSearchExecutor`.
 
-### AppQueryValidator
-- Shared by record search (`AppRecordSearchRequest`) and saved view configs (`AppViewConfigDto`) so the two stay in lockstep.
+### CustomAppQueryValidator
+- Shared by record search (`CustomAppRecordSearchRequest`) and saved view configs (`CustomAppViewConfigDto`) so the two stay in lockstep.
 - Eager validation (property existence, operator-vs-type, value shape) → invalid request is 400, never a mid-query 500. Downstream SQL references only validated UUIDs + enum fragments (injection-free).
 - Operator/type matrix: TEXT = EQ/NOT_EQ/CONTAINS/IS_EMPTY/IS_NOT_EMPTY; NUMBER/DATE additionally GT/GTE/LT/LTE; SELECT/USER/RELATION = EQ/NOT_EQ/IS_EMPTY/IS_NOT_EMPTY; FORMULA = nothing (deferred). DATE compare takes ISO-8601 date strings. Reserved sort key `createdAt` addresses record creation time.
 - FORMULA properties cannot be queried at all.
 
-### AppRecordSearchExecutor
+### CustomAppRecordSearchExecutor
 - K-15 / 3.0.B spike outcome: the filter/sort criteria ARE the query DSL — no expression language, no injection surface. SQL assembled exclusively from enum-derived fragments + explicitly numbered `?N` parameters.
-- PG-only operators: `@>` containment (EQ), `#>> '{}'` text access, ILIKE (CONTAINS), `::numeric` casts for NUMBER compare/sort (NULLIF guards empty strings), GIN `jsonb_path_ops`-backed. DATE compares lexicographically as ISO text. Verified by gated `AppBuilderIT` (real PG); plain record CRUD stays portable under H2.
+- PG-only operators: `@>` containment (EQ), `#>> '{}'` text access, ILIKE (CONTAINS), `::numeric` casts for NUMBER compare/sort (NULLIF guards empty strings), GIN `jsonb_path_ops`-backed. DATE compares lexicographically as ISO text. Verified by gated `CustomAppIT` (real PG); plain record CRUD stays portable under H2.
 - Empty-cell semantics: a record with no value row for a property matches only IS_EMPTY/IS_NOT_EMPTY; value operators implicitly require a non-empty cell.
 - Runs on the tenant's `search_path` through the multi-tenant EntityManager. `r.created_at DESC` tiebreaker keeps paging deterministic.
 - Property-value sorts resolve through a correlated scalar subquery per sort clause.
 
-### AppPropertyValueValidator
+### CustomAppPropertyValueValidator
 - USER/RELATION values get an existence check against tenant data — the JSONB column cannot carry an FK; same rationale as `Task.assigneeId` (plain column + service validation).
 - TEXT ≤ 5000 chars (keeps JSONB rows small, rendering cheap); NUMBER must be finite; SELECT must be a configured option; DATE ISO-8601.
 - SELECT config guard: a config-less SELECT was never creatable — a missing options array is a corrupt definition, fails loudly.
-- `targetAppId` re-checked cheaply at value-validation time: definitions can drift (e.g. target app hard-purged) — a dangling relation must fail loudly.
+- `targetCustomAppId` re-checked cheaply at value-validation time: definitions can drift (e.g. target app hard-purged) — a dangling relation must fail loudly.
 
-### AppViewConfigValidator
+### CustomAppViewConfigValidator
 - View-type anchors: BOARD requires `groupBy` (SELECT property), CALENDAR requires `dateProperty` (DATE property); TABLE/GALLERY/LIST carry neither (rejecting them if sent). Required anchors enforced even when the request carries NO config object at all (null config == empty config).
 - Structured JSON only — the deliberate 3.0.B spike outcome: no free-text expression language → no expression-injection surface.
 
@@ -184,7 +184,7 @@
 - `mapToResponse` omits `schemaName` — internal detail, not API contract.
 
 ### PlanLimitService
-- K-15: limit VALUES live in the code-side `PlanDefinition` registry; `t_plans` stores only reference data (key/rank) → limit changes ship with code, no migration. Enforcement = create-side soft-block (403 `app_limit_reached`); existing data never hidden/deleted.
+- K-15: limit VALUES live in the code-side `PlanDefinition` registry; `t_plans` stores only reference data (key/rank) → limit changes ship with code, no migration. Enforcement = create-side soft-block (403 `custom_app_limit_reached`); existing data never hidden/deleted.
 - `tryActivePlan` = the single plan-resolution chain (K-40): Subscription → `t_plans.key` → registry. Empty in degraded states (no ACTIVE subscription / unknown key) — callers decide (ModuleActivationService shows it in the catalog but rejects activation).
 - `activePlan` throws 409 `subscription_not_found` in every degraded state; no tenant context / unknown schema → `TenantNotFoundException`.
 
@@ -218,7 +218,7 @@
 - UserDirectoryQueryExecutor: replaced the former `@Immutable @Subselect` `UserDirectoryView` entity with an in-code projection the filter engine can filter/sort natively (joined columns, count subqueries, membership). Soft-delete semantics ride the joined entities' `@SQLRestriction` (applied to the LEFT JOIN ON) — role/group counts exclude soft-deleted rows.
 - GroupListQueryExecutor: fixed 3-query page replacing per-row `findGroupMembers` + `countMembers` (2N+1). Member count starts from `User` (join table owned by `User.groups`). Former native count saw raw join rows; entity-path resolution now filters soft-deleted.
 - RoleListQueryExecutor: `permissions`/`parents` stay batched lists (they carry descriptions/full summaries) rather than projection columns; the count subquery keeps `permissionCount` filterable/sortable in-DB.
-- NoteListQueryExecutor: `referencedName` — correlated scalar subquery over a plain FK column (K-45 convention: notes/apps hold `categoryId`/`projectId` as UUIDs, not associations); `@SQLRestriction` applies inside the subquery → soft-deleted ref resolves null. `projectNameOf` reused by ProjectService (self-FK) and AppBuilderService.
+- NoteListQueryExecutor: `referencedName` — correlated scalar subquery over a plain FK column (K-45 convention: notes/apps hold `categoryId`/`projectId` as UUIDs, not associations); `@SQLRestriction` applies inside the subquery → soft-deleted ref resolves null. `projectNameOf` reused by ProjectService (self-FK) and CustomAppService.
 - PlatformCompanyListQueryExecutor: replaced the unpaged `findAll()` (last K-37 paging violation); runs INSIDE `executeWithoutTenantContext` — cleared context pins the multi-tenant EM to the public schema.
 
 ### ProjectContainerSupport
@@ -616,7 +616,7 @@
 
 ### PlanDefinition (config/)
 - Until Faz 6 the t_plans rows are reference data gating module activation only.
-- FREE=0 / PRO=1 / ENTERPRISE=2; limits: maxApps 3/25/-1, maxRecordsPerApp 1k/50k/-1.
+- FREE=0 / PRO=1 / ENTERPRISE=2; limits: maxCustomApps 3/25/-1, maxRecordsPerCustomApp 1k/50k/-1.
 
 > **Kayda değer bulunmayıp yalnızca silinenler** (security/config taraması): runner
 > javadoc'larındaki tekrarlı "startup'ta iterates/try-catch" kalıpları; record `@param`
@@ -843,7 +843,7 @@
   TTL. Self-revoke of the current device expires BOTH cookies for an instant
   logout. Tenant-wide view: SessionController (`GET /api/v1/sessions`); revoke
   reuses `DELETE /api/v1/users/{id}/sessions/{sessionId}`.
-- AppController `/plan-limits` is declared before `/{id}` only for readability
+- CustomAppController `/plan-limits` is declared before `/{id}` only for readability
   — Spring MVC gives literal segments precedence over path variables
   regardless of declaration order.
 - AuditController: GET params (action/actorId, userId/success,
@@ -885,27 +885,27 @@
 - ActiveSessionResponse vs AdminSessionResponse: admin view carries owner
   userId+email; `current` always false/absent on the admin view (admin is not
   the session owner).
-- AppPropertyRequest: `type` immutable after creation (existing values would
+- CustomAppPropertyRequest: `type` immutable after creation (existing values would
   be meaningless after a change); `required` keeps its wrapper +
   compact-constructor default because Jackson 3 fails null-into-primitive
   mapping for absent fields.
-- AppViewConfigDto: deliberately a STRUCTURED shape, not a free-text
+- CustomAppViewConfigDto: deliberately a STRUCTURED shape, not a free-text
   expression language — injection surface is structural (3.0.B spike
   outcome); every field resolves to a property id or enum; backend
   re-validates against the app's property set before persisting.
-- AppRecordSearchRequest: JSONB EAV path (PostgreSQL `@>` containment / `#>>`
+- CustomAppRecordSearchRequest: JSONB EAV path (PostgreSQL `@>` containment / `#>>`
   accessors, GIN-backed); limits ≤10 filters / ≤5 sorts / size ≤100 (value
   scans heavier than column reads → tighter page cap than the generic engine).
 - UserDirectoryViewResponse: flat list projection; association lists become
   counts; detail endpoint still returns full role/group sets.
-- NoteRequest/AppRequest: create without `projectId` → default container;
+- NoteRequest/CustomAppRequest: create without `projectId` → default container;
   update `null` = leave unchanged, value = move.
 - NoteCategoryRequest: `color` is a UI token never interpreted server-side; a
   category's project is fixed at create (moves rejected 409).
 - SubdomainRules: `^[a-z0-9](?:[a-z0-9-]{0,98}[a-z0-9])?$` — single source
   shared by CompanyRegisterRequest @Pattern and SubdomainSuggestionService so
   the two cannot drift.
-- AppPlanLimitsResponse: values from the PlanDefinition registry via
+- CustomAppPlanLimitsResponse: values from the PlanDefinition registry via
   PlanLimitService.activePlan() (single plan-resolution chain); -1 =
   unlimited.
 
@@ -970,20 +970,20 @@
   handler at module load, and the handler clears the session → RequireAuth
   redirects to /login.
 
-### features/apps/types.ts
+### features/custom-apps/types.ts
 
 - Wire enums are the uppercase Java enum names; `AppValueFilter.value`
-  semantics per operator follow backend `AppQueryValidator` (kept in code —
+  semantics per operator follow backend `CustomAppQueryValidator` (kept in code —
   contract).
-- `AppRecord.values`: absent key = empty cell; JSON null = cleared value.
+- `CustomAppRecord.values`: absent key = empty cell; JSON null = cleared value.
 - Plan limits (`GET /apps/plan-limits`) come from the backend PlanDefinition
   registry — never hardcoded client-side; -1 = unlimited.
-- `AppRequest` is a full PUT: the backend sets `icon` unconditionally, so
+- `CustomAppRequest` is a full PUT: the backend sets `icon` unconditionally, so
   `null` clears it (omit on create when empty).
   TRIVIA: old ViewType comment ("view CRUD/renderers land in a later part")
   was stale — renderers shipped with Epic 4.2 (K-42).
 
-### features/apps/cellValue.ts
+### features/custom-apps/cellValue.ts
 
 - `parseCellInput` triple-state contract: scalar to send / `null` clears /
   `undefined` = invalid, must not be submitted.
@@ -1082,20 +1082,20 @@
   handler at module load, and the handler clears the session → RequireAuth
   redirects to /login.
 
-### features/apps/types.ts
+### features/custom-apps/types.ts
 
 - Wire enums are the uppercase Java enum names; `AppValueFilter.value`
-  semantics per operator follow backend `AppQueryValidator` (kept in code —
+  semantics per operator follow backend `CustomAppQueryValidator` (kept in code —
   contract).
-- `AppRecord.values`: absent key = empty cell; JSON null = cleared value.
+- `CustomAppRecord.values`: absent key = empty cell; JSON null = cleared value.
 - Plan limits (`GET /apps/plan-limits`) come from the backend PlanDefinition
   registry — never hardcoded client-side; -1 = unlimited.
-- `AppRequest` is a full PUT: the backend sets `icon` unconditionally, so
+- `CustomAppRequest` is a full PUT: the backend sets `icon` unconditionally, so
   `null` clears it (omit on create when empty).
   TRIVIA: old ViewType comment ("view CRUD/renderers land in a later part")
   was stale — renderers shipped with Epic 4.2 (K-42).
 
-### features/apps/cellValue.ts
+### features/custom-apps/cellValue.ts
 
 - `parseCellInput` triple-state contract: scalar to send / `null` clears /
   `undefined` = invalid, must not be submitted.

@@ -8,7 +8,7 @@ import {
   todayIso,
   weekDays,
   weekdayLabels,
-} from '../features/apps/calendarUtils';
+} from '../features/custom-apps/calendarUtils';
 
 describe('daysInMonth', () => {
   it('handles non-leap and leap Februaries', () => {

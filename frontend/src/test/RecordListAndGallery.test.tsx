@@ -2,16 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { RecordList } from '../features/apps/components/RecordList';
-import { RecordGallery } from '../features/apps/components/RecordGallery';
-import { cellDisplay } from '../features/apps/cellValue';
-import type { AppDetail, AppRecord } from '../features/apps/types';
+import { RecordList } from '../features/custom-apps/components/RecordList';
+import { RecordGallery } from '../features/custom-apps/components/RecordGallery';
+import { cellDisplay } from '../features/custom-apps/cellValue';
+import type { CustomAppDetail, CustomAppRecord } from '../features/custom-apps/types';
 import { useAuthStore } from '../store/authStore';
 import { useLocaleStore } from '../store/localeStore';
 
 const APP_ID = '44444444-4444-4444-4444-444444444444';
 
-const APP: AppDetail = {
+const APP: CustomAppDetail = {
   id: APP_ID,
   projectId: 'proj-1',
   projectName: 'Genel',
@@ -21,22 +21,22 @@ const APP: AppDetail = {
   createdDate: '2026-08-01T10:00:00Z',
   updatedAt: '2026-08-01T10:00:00Z',
   properties: [
-    { id: 'p-title', appId: APP_ID, name: 'Title', type: 'TEXT', config: null, required: false, position: 0 },
-    { id: 'p-note', appId: APP_ID, name: 'Note', type: 'TEXT', config: null, required: false, position: 1 },
+    { id: 'p-title', customAppId: APP_ID, name: 'Title', type: 'TEXT', config: null, required: false, position: 0 },
+    { id: 'p-note', customAppId: APP_ID, name: 'Note', type: 'TEXT', config: null, required: false, position: 1 },
   ],
   views: [],
 };
 
-const record = (id: string, title: string, note: string): AppRecord => ({
+const record = (id: string, title: string, note: string): CustomAppRecord => ({
   id,
-  appId: APP_ID,
+  customAppId: APP_ID,
   values: { 'p-title': title, 'p-note': note },
   createdDate: '2026-08-10T09:00:00Z',
   updatedAt: '2026-08-10T09:00:00Z',
   createdBy: 'u1',
 });
 
-const RECORDS: AppRecord[] = [
+const RECORDS: CustomAppRecord[] = [
   record('r-1', 'First order', 'urgent'),
   record('r-2', 'Second order', 'later'),
   record('r-3', 'Third order', ''),
@@ -45,20 +45,20 @@ const RECORDS: AppRecord[] = [
 const onRequestDelete = vi.fn();
 const onRequestEdit = vi.fn();
 
-function renderList(records: AppRecord[] = RECORDS) {
+function renderList(records: CustomAppRecord[] = RECORDS) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <RecordList app={APP} records={records} isLoading={false} resolve={cellDisplay} onRequestDelete={onRequestDelete} onRequestEdit={onRequestEdit} />
+      <RecordList customApp={APP} records={records} isLoading={false} resolve={cellDisplay} onRequestDelete={onRequestDelete} onRequestEdit={onRequestEdit} />
     </QueryClientProvider>,
   );
 }
 
-function renderGallery(records: AppRecord[] = RECORDS) {
+function renderGallery(records: CustomAppRecord[] = RECORDS) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <RecordGallery app={APP} records={records} isLoading={false} resolve={cellDisplay} onRequestDelete={onRequestDelete} onRequestEdit={onRequestEdit} />
+      <RecordGallery customApp={APP} records={records} isLoading={false} resolve={cellDisplay} onRequestDelete={onRequestDelete} onRequestEdit={onRequestEdit} />
     </QueryClientProvider>,
   );
 }

@@ -137,7 +137,7 @@ function LiveDashboard() {
               <div className="space-y-3">
                 {[
                   { label: 'Database Storage (PostgreSQL)', used: '4.2 GB', limit: '20 GB', pct: 21 },
-                  { label: 'Custom App Records', used: '48,120', limit: '100,000', pct: 48 },
+                  { label: 'Custom CustomApp Records', used: '48,120', limit: '100,000', pct: 48 },
                   { label: 'Document Attachments', used: '1.1 GB', limit: '10 GB', pct: 11 },
                 ].map((q, idx) => (
                   <div key={idx} className="space-y-1">

@@ -18,7 +18,7 @@ public @interface AuditLog {
     /** Stable action key, e.g. "user_created", "role_permissions_updated". */
     String action();
 
-    /** Entity class label, e.g. "User", "Role", "App". */
+    /** Entity class label, e.g. "User", "Role", "CustomApp". */
     String entityType();
 
     /** SpEL for the entity id — variables: params by name, {@code #result}. Empty = null. */

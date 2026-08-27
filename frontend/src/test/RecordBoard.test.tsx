@@ -2,15 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { RecordBoard } from '../features/apps/components/RecordBoard';
-import { cellDisplay } from '../features/apps/cellValue';
-import type { AppDetail, AppRecord, AppView } from '../features/apps/types';
+import { RecordBoard } from '../features/custom-apps/components/RecordBoard';
+import { cellDisplay } from '../features/custom-apps/cellValue';
+import type { CustomAppDetail, CustomAppRecord, CustomAppView } from '../features/custom-apps/types';
 import { useAuthStore } from '../store/authStore';
 import { useLocaleStore } from '../store/localeStore';
 
 const APP_ID = '22222222-2222-2222-2222-222222222222';
 
-const APP: AppDetail = {
+const APP: CustomAppDetail = {
   id: APP_ID,
   projectId: 'proj-1',
   projectName: 'Genel',
@@ -20,24 +20,24 @@ const APP: AppDetail = {
   createdDate: '2026-08-01T10:00:00Z',
   updatedAt: '2026-08-01T10:00:00Z',
   properties: [
-    { id: 'p-title', appId: APP_ID, name: 'Title', type: 'TEXT', config: null, required: false, position: 0 },
-    { id: 'p-status', appId: APP_ID, name: 'Status', type: 'SELECT', config: { options: ['Todo', 'Done'] }, required: false, position: 1 },
+    { id: 'p-title', customAppId: APP_ID, name: 'Title', type: 'TEXT', config: null, required: false, position: 0 },
+    { id: 'p-status', customAppId: APP_ID, name: 'Status', type: 'SELECT', config: { options: ['Todo', 'Done'] }, required: false, position: 1 },
   ],
   views: [],
 };
 
-const VIEW: AppView = {
+const VIEW: CustomAppView = {
   id: 'v-board',
-  appId: APP_ID,
+  customAppId: APP_ID,
   name: 'Board',
   type: 'BOARD',
   config: { groupBy: 'p-status' },
   position: 0,
 };
 
-const R1: AppRecord = { id: 'r-1', appId: APP_ID, values: { 'p-title': 'Fix login', 'p-status': 'Todo' }, createdDate: '2026-08-10T09:00:00Z', updatedAt: '2026-08-10T09:00:00Z', createdBy: 'u1' };
-const R2: AppRecord = { id: 'r-2', appId: APP_ID, values: { 'p-title': 'Ship release', 'p-status': 'Done' }, createdDate: '2026-08-11T09:00:00Z', updatedAt: '2026-08-11T09:00:00Z', createdBy: 'u1' };
-const R3: AppRecord = { id: 'r-3', appId: APP_ID, values: { 'p-title': 'No status' }, createdDate: '2026-08-12T09:00:00Z', updatedAt: '2026-08-12T09:00:00Z', createdBy: 'u1' };
+const R1: CustomAppRecord = { id: 'r-1', customAppId: APP_ID, values: { 'p-title': 'Fix login', 'p-status': 'Todo' }, createdDate: '2026-08-10T09:00:00Z', updatedAt: '2026-08-10T09:00:00Z', createdBy: 'u1' };
+const R2: CustomAppRecord = { id: 'r-2', customAppId: APP_ID, values: { 'p-title': 'Ship release', 'p-status': 'Done' }, createdDate: '2026-08-11T09:00:00Z', updatedAt: '2026-08-11T09:00:00Z', createdBy: 'u1' };
+const R3: CustomAppRecord = { id: 'r-3', customAppId: APP_ID, values: { 'p-title': 'No status' }, createdDate: '2026-08-12T09:00:00Z', updatedAt: '2026-08-12T09:00:00Z', createdBy: 'u1' };
 
 const resolve = cellDisplay;
 
@@ -48,7 +48,7 @@ function renderBoard(props: Partial<Parameters<typeof RecordBoard>[0]> = {}) {
   return render(
     <QueryClientProvider client={client}>
       <RecordBoard
-        app={APP}
+        customApp={APP}
         view={VIEW}
         records={[R1, R2, R3]}
         isLoading={false}
@@ -103,7 +103,7 @@ describe('RecordBoard', () => {
     await waitFor(() => {
       const patch = calls.find((c) => c.method === 'PATCH');
       expect(patch).toBeDefined();
-      expect(patch!.url).toBe(`/api/v1/apps/${APP_ID}/records/r-1`);
+      expect(patch!.url).toBe(`/api/v1/custom-apps/${APP_ID}/records/r-1`);
       expect(JSON.parse(patch!.body!)).toEqual({ values: { 'p-status': 'Done' } });
     });
   });
@@ -159,7 +159,7 @@ describe('RecordBoard', () => {
   it('moves optimistically through the records cache and rolls back when the PATCH fails', async () => {
     // The optimistic write targets the underlying records query — verified end
     // to end through RecordsPanel, whose grouping recomputes from the cache.
-    const { RecordsPanel } = await import('../features/apps/components/RecordsPanel');
+    const { RecordsPanel } = await import('../features/custom-apps/components/RecordsPanel');
     const recordsPage = {
       data: [R1, R2, R3],
       meta: { page: 0, pageSize: 1000, totalElements: 3, totalPages: 1, hasNext: false, hasPrevious: false },
@@ -176,12 +176,12 @@ describe('RecordBoard', () => {
         calls.push({ method, url, body: init?.body ? String(init.body) : undefined });
         if (method === 'PATCH') return patchGate;
         if (url.includes('/plan-limits')) {
-          return Promise.resolve(new Response(JSON.stringify({ maxRecordsPerApp: -1 }), { status: 200 }));
+          return Promise.resolve(new Response(JSON.stringify({ maxRecordsPerCustomApp: -1 }), { status: 200 }));
         }
         // 'size=1000'.includes('size=1') is true — compare the parsed param, not substrings.
         const pageSize = new URLSearchParams(url.split('?')[1] ?? '').get('size');
         const body =
-          url.includes(`/api/v1/apps/${APP_ID}/records`) && pageSize === '1'
+          url.includes(`/api/v1/custom-apps/${APP_ID}/records`) && pageSize === '1'
             ? { data: [], meta: { page: 0, pageSize: 1, totalElements: 3, totalPages: 3, hasNext: true, hasPrevious: false } }
             : recordsPage;
         return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }));
@@ -191,7 +191,7 @@ describe('RecordBoard', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
-        <RecordsPanel app={{ ...APP, views: [VIEW] }} />
+        <RecordsPanel customApp={{ ...APP, views: [VIEW] }} />
       </QueryClientProvider>,
     );
 
@@ -209,7 +209,7 @@ describe('RecordBoard', () => {
       screen.getByText('Fix login'),
     );
     const patch = calls.find((c) => c.method === 'PATCH');
-    expect(patch?.url).toBe(`/api/v1/apps/${APP_ID}/records/r-1`);
+    expect(patch?.url).toBe(`/api/v1/custom-apps/${APP_ID}/records/r-1`);
     expect(JSON.parse(patch?.body ?? '{}')).toEqual({ values: { 'p-status': 'Done' } });
 
     resolvePatch(new Response(JSON.stringify({ code: 'internal_error' }), { status: 500 }));

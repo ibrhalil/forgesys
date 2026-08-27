@@ -25,7 +25,7 @@ export interface ReferencePickerProps {
   placeholder?: string;
   /** Debounce window for the typeahead; 0 disables (tests). */
   debounceMs?: number;
-  /** Filtered out of the results (e.g. AppPicker's self-app exclusion). */
+  /** Filtered out of the results (e.g. CustomAppPicker's self-app exclusion). */
   excludeIds?: string[];
   className?: string;
 }
@@ -108,7 +108,7 @@ export function ReferencePicker({
       // Menu-open fetches the first page without typing (react-select otherwise
       // only loads on non-empty input changes).
       defaultOptions
-      noOptionsMessage={t('apps.pickerNoOptions')}
+      noOptionsMessage={t('customApps.pickerNoOptions')}
       value={isMulti ? multiValue : singleValue}
       onChange={(next) => {
         if (isMulti) {
