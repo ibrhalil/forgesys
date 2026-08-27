@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-public interface CompanyRepository extends JpaRepository<Company, UUID> {
+public interface CompanyRepository extends JpaRepository<Company, UUID>, CompanyRepositoryCustom {
 
     Optional<Company> findBySubdomain(String subdomain);
 

@@ -15,7 +15,7 @@ import lombok.ToString;
 @Setter
 @ToString
 @MappedSuperclass
-public abstract class GeneratedIdAuditEntity extends AuditEntity {
+public abstract class GeneratedIdAuditEntity extends AuditEntity implements IdentifiableUuid {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -24,15 +24,11 @@ public abstract class GeneratedIdAuditEntity extends AuditEntity {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-
-        GeneratedIdAuditEntity that = (GeneratedIdAuditEntity) o;
-        return id != null && id.equals(that.id);
+        return EntityEqualityUtil.entityEquals(this, o, getClass());
     }
 
     @Override
     public int hashCode() {
-        return id == null ? System.identityHashCode(this) : id.hashCode();
+        return EntityEqualityUtil.entityHashCode(this);
     }
 }

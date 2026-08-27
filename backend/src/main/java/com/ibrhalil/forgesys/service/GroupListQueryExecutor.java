@@ -32,7 +32,7 @@ import java.util.UUID;
 /**
  * Read side of the group list (K-49): one flat Criteria DTO projection + TWO batch
  * queries for the page's role/member summaries — a fixed 3-query page (formerly 2N+1).
- * Counts exclude soft-deleted roles/users (entity-path {@code @SQLRestriction}).
+ * Counts exclude soft-deleted roles/users (entity-path soft-delete filter).
  * Rationale: docs/CODE_NOTES.md (backend/service → GroupListQueryExecutor).
  */
 @Component

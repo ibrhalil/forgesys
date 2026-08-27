@@ -348,7 +348,7 @@ classDiagram
 ```
 
 - **`@MappedSuperclass`** — DB tablosu karşılığı yok, sadece alanları concrete entity'lere inherits.
-- `@SQLRestriction("is_deleted = false")` `SoftDeleteAuditEntity`'de → tüm subclass'larda soft-deleted satırlar otomatik filtrelenir.
+- Soft-delete filtrelemesi: `SoftDeleteAuditEntity` üzerinde auto-enabled Hibernate `@Filter` (`softDeleteFilter`, `is_deleted = false`, `applyToLoadByKey=true` — EGH item 4) → tüm subclass'larda load/query/JOIN'lerde soft-deleted satırlar otomatik gizlenir (eski `@SQLRestriction` ile birebir aynı varsayılan davranış; `SoftDeleteFilterParityTest` ile kilitli). "Silinmişleri göster" opt-in'i yalnızca Company/User'da: `*IncludingDeleted` repository fragment'ları + `SoftDeleteFilterScope` (filter disable → sorgu → detach → re-enable).
 - `@SQLDelete` her concrete entity'de ayrı (table-specific `UPDATE ... SET is_deleted = true, version = version + 1`).
 - `UserAccount`/`UserProfile` `@MapsId` ile `User`'a shared PK (gereksiz FK yok).
 - Tüm ID'ler UUID (`GenerationType.UUID`). Tablo adları `t_` prefix'li. Constraint'ler `idx_*`, `uk_*`, `fk_*`.
