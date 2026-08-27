@@ -19,7 +19,7 @@ import org.springframework.context.annotation.Configuration;
 @OpenAPIDefinition(
         info = @Info(
                 title = "ForgeSys API",
-                version = "0.1.1",
+                version = "0.2.1",
                 description = "Multi-tenant SaaS platform API. Auth: httpOnly JWT cookies "
                         + "(sf_access_token / sf_refresh_token) issued by POST /api/v1/auth/login. "
                         + "Tenant is resolved per subdomain; in dev an X-Tenant-ID header fallback is active."),

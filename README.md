@@ -5,7 +5,7 @@
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.0-brightgreen.svg)](https://spring.io/projects/spring-boot)
 [![React](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791.svg)](https://www.postgresql.org)
-[![Version](https://img.shields.io/badge/version-0.1.1-lightgrey.svg)]()
+[![Version](https://img.shields.io/badge/version-0.2.1-lightgrey.svg)]()
 
 **Modüler çok-kiracılı (multi-tenant) SaaS platformu.** Şirketler (tenant) kayıt olur, kendi ekiplerini yönetir ve ihtiyaç duydukları **modülleri** açar (Tasks, Notes, Warehouse, Logistics) ya da kendi **custom app'lerini** (Notion-style database builder) yaratır. Hibrit model: built-in modüller (Odoo/ERPNext mantığı) + tenant custom app'leri (Notion/Airtable mantığı). Modül aktivasyonu **plan bazlıdır** (Free/Pro/Enterprise). Kullanıcılar rol-bazlı erişim kontrolü (RBAC) ile giriş yapar.
 
