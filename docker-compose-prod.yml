@@ -172,6 +172,9 @@ services:
       - SPRING_CONFIG_ADDITIONAL_LOCATION=${SPRING_CONFIG_ADDITIONAL_LOCATION:-optional:file:/config/}
       # File-based log destination inside the container (mounted below).
       - LOGGING_FILE_PATH=${LOGGING_FILE_PATH:-/app/logs}
+      # K-51: mail template override dir (mounted read-only below); missing files
+      # fall back to the jar's build-injected classpath copy.
+      - MAIL_TEMPLATES_DIR=${MAIL_TEMPLATES_DIR:-/templates/mail}
     volumes:
       # Externalized prod overrides (read-only)
       - ./infra/config:/config:ro

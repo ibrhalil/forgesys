@@ -16,6 +16,11 @@ import type {
   ServiceAccountCreateRequest,
   SubscriptionResponse,
   SubscriptionUpdateRequest,
+  PlatformMailInfo,
+  PlatformMailPreview,
+  PlatformMailSampleData,
+  PlatformMailTestSendRequest,
+  PlatformMailTestSendResponse,
 } from './types';
 
 /**
@@ -83,4 +88,13 @@ export const platformAuditApi = {
       .get<PageResponse<PlatformAuditEntry>>(`/api/v1/platform/audit-logs${qs ? `?${qs}` : ''}`)
       .then(normalizePage);
   },
+};
+
+/** K-51 mail testing: info / no-send preview / test send (platform cookies, no X-Tenant-ID). */
+export const platformMailApi = {
+  getInfo: () => platformApi.get<PlatformMailInfo>('/api/v1/platform/mail/info'),
+  preview: (data: PlatformMailSampleData) =>
+    platformApi.post<PlatformMailPreview>('/api/v1/platform/mail/preview', data),
+  testSend: (data: PlatformMailTestSendRequest) =>
+    platformApi.post<PlatformMailTestSendResponse>('/api/v1/platform/mail/test-send', data),
 };

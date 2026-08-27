@@ -45,6 +45,11 @@ public class SmtpMailSender implements MailSender {
     }
 
     @Override
+    public MailChannel channel() {
+        return MailChannel.SMTP;
+    }
+
+    @Override
     public void send(MailMessage message) {
         MailTemplateRenderer.RenderedMail rendered = renderer.render(message);
         try {

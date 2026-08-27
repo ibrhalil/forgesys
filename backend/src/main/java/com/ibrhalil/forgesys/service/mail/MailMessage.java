@@ -12,6 +12,7 @@ import java.time.Duration;
  * @param firstName        recipient display name (nullable — template falls back)
  * @param organizationName tenant/company display name (nullable)
  * @param expiresIn        link validity (nullable) — rendered as hours/minutes
+ * @param language         template language override (nullable — configured default)
  */
 public record MailMessage(
         String recipient,
@@ -19,5 +20,12 @@ public record MailMessage(
         String actionUrl,
         String firstName,
         String organizationName,
-        Duration expiresIn) {
+        Duration expiresIn,
+        String language) {
+
+    /** Pre-K-51 shape — default language applies. */
+    public MailMessage(String recipient, MailTemplate template, String actionUrl,
+                       String firstName, String organizationName, Duration expiresIn) {
+        this(recipient, template, actionUrl, firstName, organizationName, expiresIn, null);
+    }
 }

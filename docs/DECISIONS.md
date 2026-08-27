@@ -269,6 +269,12 @@ Standart haline gelmiş kararlar. Yeni gereksinim bunlardan biriyle çelişirse 
 - **Durum:** UYGULANDI (2026-08-27).
 - **Etki:** `JwtAuthenticationFilter`'a `scope=platform` dalı — tenant `tokenInvalidBefore` lookup'ı `public.t_users`'ı hedefler, platform token'ında tablo yok hatası verir; dal lookup'tan ÖNCE ayrılmalı. `TenantFilter.shouldNotFilter` += `/api/v1/platform/**` (platform API tenant-agnostik). `/auth/platform-switch` normal tenant akışında kalır (permitAll, hedef subdomain host'ta koşar). H2'de switch akışı test edilemez (search_path yok) → gated PG IT (`forgesys.pg.it`). Yeni public migration K-50 kapsamında onaylı (ask-first kuralı yerine getirildi).
 
+### K-51
+**Platform Mail Test Yüzeyi + Şablon Tek Kaynağı**
+- **Karar:** (1) Platform konsoluna mail test sayfası (`/platform/mail`, `platform:mail:test` — katalogda 8. isim): `GET /mail/info` (aktif kanal + from + dil + şablon dizini + şablon kataloğu), `POST /mail/preview` (gönderim YOK, örnek veriyle render), `POST /mail/test-send` (aktif sender üzerinden gerçek test maili; `platform_mail_test_sent` platform audit kaydı; yanıt kanalı echo'lar — SMTP dışı profilde "gönderildi"nun ne anlama geldiği görünür). (2) `MailSender` portuna `channel()` tanımlayıcısı; `MailMessage`'a opsiyonel `language` override'ı (eski 6 argümanlı constructor korunur — mevcut çağrı yerleri değişmez; render öncelik message → configured default). (3) **Şablon tek git kaynağı `infra/templates/mail/`** (K-48'in "classpath kopyası resources'ta yaşar" detayını supersede eder): backend `maven-resources-plugin` (mevcut lifecycle plugin'i, yeni bağımlılık yok) dosyaları `process-resources`'ta `target/classes/mail`'e enjekte eder — jar kendi kendine yeterli kalır, test/cwd kırılganlığı yok, renderer/SmtpMailSender/MailTemplateRendererTest sıfır kod değişikliği. Dev: `templates-dir: infra/templates/mail` (repo-kökü-göreli, `logging.file.path` deseni — rebuild'siz canlı düzenleme önizlemeye yansır); prod: compose `MAIL_TEMPLATES_DIR=/templates/mail` (mevcut ro mount'u ilk kez fiilen bağlanır). Runtime override semantiği değişmez: dosya bazında override, eksik dosya jar kopyasına düşer.
+- **Kullanıcı kararları:** tam kapsam (bilgi+önizleme+gönderim); yeni yetki `platform:mail:test`; ön tanımlı+düzenlenebilir örnek veri; şablonlar tek kaynağa taşınır (kullanıcı "fallback korunur" alternatifini reddetti — build-enjeksiyonu riski ortadan kaldırır).
+- **Durum:** UYGULANDI (2026-08-27).
+
 ---
 
 ## Risk Kayıtları (RISK-XX)

@@ -50,6 +50,11 @@ logging:
     path: ${LOGGING_FILE_PATH:infra/logs}
 
 forgesys:
+  mail:
+    # K-51: repo-root-relative (same resolution as logging.file.path) — live template
+    # edits under infra/templates/mail show up in the platform mail-test preview
+    # without a rebuild.
+    templates-dir: ${MAIL_TEMPLATES_DIR:infra/templates/mail}
   security:
     cors:
       allowed-origins: ${FORGESYS_SECURITY_CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}

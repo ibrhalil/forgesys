@@ -43,7 +43,7 @@ Root package `com.ibrhalil.forgesys` (NOT a `.backend` subpackage):
 
 ### Current endpoints
 
-> RBAC enforcement via `@EnableMethodSecurity` (`SecurityConfig`) + `@PreAuthorize` (K-26). Tenant permission namespace `{module}:{resource}:{action}` — see `PermissionCatalog.IAM_PERMISSIONS` for the seeded tenant catalog (iam:*) and `RbacSeeder` for the seeding logic. Platform permissions (`platform:*`, 7 names) live ONLY in `PlatformPermissionCatalog` (K-50) — they are NEVER seeded into tenant schemas; every platform endpoint additionally requires `authentication.principal.scope == 'platform'`.
+> RBAC enforcement via `@EnableMethodSecurity` (`SecurityConfig`) + `@PreAuthorize` (K-26). Tenant permission namespace `{module}:{resource}:{action}` — see `PermissionCatalog.IAM_PERMISSIONS` for the seeded tenant catalog (iam:*) and `RbacSeeder` for the seeding logic. Platform permissions (`platform:*`, 8 names) live ONLY in `PlatformPermissionCatalog` (K-50) — they are NEVER seeded into tenant schemas; every platform endpoint additionally requires `authentication.principal.scope == 'platform'`.
 
 **Public (no auth, `SecurityConfig.permitAll`):**
 
@@ -148,6 +148,9 @@ Platform identities (HUMAN superadmins + SERVICE accounts) live in `public.t_pla
 | `POST` | `/api/v1/platform/companies/{id}/switch` (reason required → one-time code 30s + `targetUrl`) | `platform:tenant:access` |
 | `POST`/`GET`/`DELETE` | `/api/v1/platform/service-accounts` (create → raw key `<prefix8>_<secret43>` EXACTLY once; list never raw; revoke = `revoked_at` + disable) | `platform:service-account:manage` |
 | `GET` | `/api/v1/platform/audit-logs` (page; GET-param filters action/actorId/targetType/fromDate/toDate + `q`) | `platform:audit:read` |
+| `GET` | `/api/v1/platform/mail/info` (K-51 — active channel/from/default language/templatesDir + template catalog) | `platform:mail:test` |
+| `POST` | `/api/v1/platform/mail/preview` (K-51 — render a template with sample data, NO send; per-request `language` tr/en) | `platform:mail:test` |
+| `POST` | `/api/v1/platform/mail/test-send` (K-51 — test mail through the active sender, fail-loud; audited `platform_mail_test_sent`; response echoes the channel) | `platform:mail:test` |
 
 > `PlatformCompanyService` accesses `public.t_companies` via `TenantContextExecutor.withoutTenantContext` (see Tenant Context rules). Subscription/module/report mutations run inside `TenantContextExecutor.inTenantContext` windows (report counts in a REQUIRES_NEW read tx — the request-scoped session is public-pinned). Status update drives `CompanyStatus` lifecycle (`ALLOWED_TRANSITIONS`; lifecycle mutations require an ACTIVE company, 409 `company_not_active`).
 >
@@ -211,7 +214,7 @@ Config profiles (dev/prod/test) are the single source: [ARCHITECTURE.md - Config
 - `forgesys.security.verification-token-ttl-hours` — K-21 token lifetime (default 24).
 - `forgesys.security.verification-token-retention-days` — [RISK-30] stale signup-token retention (default 7): consumed/expired tokens older than this are purged daily at 03:00 UTC by `TokenPurgeJob` (first `@EnableScheduling` consumer, `config/SchedulingConfig`, both `@Profile("!test")`). The job sweeps BOTH token families — public signup tokens and the per-tenant `t_auth_tokens` (set-and-restore TenantContext iteration, per-tenant failure isolation).
 - `forgesys.security.email-verify-ttl-hours` / `forgesys.security.reset-token-ttl-minutes` — user lifecycle token TTLs (`t_auth_tokens`, tenant V4; `UserTokenService` resolves the TTL per purpose — issue supersedes the user's outstanding tokens of that purpose).
-- `forgesys.mail.*` — outgoing mail (user lifecycle + mail epic): `from` (RFC 822), `default-language` (tr default, en supported), `templates-dir` (filesystem override of the classpath `mail/*.html` templates — `infra/templates/` in prod; missing override files fall back to classpath). Senders are profile-split: `SmtpMailSender` (prod, `spring.mail.*` via `MAIL_HOST`/`MAIL_PORT`/`MAIL_USERNAME`/`MAIL_PASSWORD`, fail-fast on missing host + fail-loud on send errors), `LogMailSender` (dev), `InMemoryMailSender` (test).
+- `forgesys.mail.*` — outgoing mail (user lifecycle + mail epic): `from` (RFC 822), `default-language` (tr default, en supported), `templates-dir` (per-file override of the mail templates; single git source is `infra/templates/mail/`, build-injected into the jar's classpath by the backend `maven-resources-plugin` execution — K-51; dev points at the repo dir for rebuild-free live edits, prod at `/templates/mail` via the compose ro mount). Senders are profile-split: `SmtpMailSender` (prod, `spring.mail.*` via `MAIL_HOST`/`MAIL_PORT`/`MAIL_USERNAME`/`MAIL_PASSWORD`, fail-fast on missing host + fail-loud on send errors), `LogMailSender` (dev), `InMemoryMailSender` (test).
 - `forgesys.security.cors.allowed-origins` — comma-separated; cookie-based auth requires `allowCredentials=true`.
 - `forgesys.multi-tenancy.base-domain` — subdomain base for `TenantFilter` host resolution (default `localhost`, i.e. `*.localhost`).
 - `forgesys.platform.auth.*` (K-50, `PlatformAuthProperties`) — platform auth surface: `refresh-ttl-days` (7), `impersonation-ttl-minutes` (30), `cookie-path` (`/api/v1/platform`), `cookie-secure` (prod `true`), `cookie-same-site` (Lax). Cookie names are constants: `sf_platform_access_token` / `sf_platform_refresh_token`. Access TTL shares `jwt.access-token-ttl-minutes` (single knob).

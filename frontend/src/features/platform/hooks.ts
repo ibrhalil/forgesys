@@ -2,12 +2,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { notify } from '../../lib/notify';
 import { useT } from '../../lib/i18n';
 import type { PageParams } from '../../types';
-import { platformAuditApi, platformCompaniesApi, platformServiceAccountsApi } from './api';
+import { platformAuditApi, platformCompaniesApi, platformMailApi, platformServiceAccountsApi } from './api';
 import type {
   CompanyModulesUpdateRequest,
   CompanyStatusUpdateRequest,
   PlatformAuditParams,
   PlatformCompanyParams,
+  PlatformMailSampleData,
+  PlatformMailTestSendRequest,
   PlatformSwitchStartRequest,
   ServiceAccountCreateRequest,
   SubscriptionUpdateRequest,
@@ -141,5 +143,35 @@ export function usePlatformAuditLogs(params: PlatformAuditParams = {}) {
   return useQuery({
     queryKey: ['platform', 'audit-logs', params],
     queryFn: () => platformAuditApi.list(params),
+  });
+}
+
+// ─── Mail testing (K-51) ───
+
+export function usePlatformMailInfo() {
+  return useQuery({
+    queryKey: ['platform', 'mail', 'info'],
+    queryFn: () => platformMailApi.getInfo(),
+  });
+}
+
+/** Preview is explicit, sample-data-driven — a mutation, not a cached query. */
+export function useMailPreview() {
+  return useMutation({
+    mutationFn: (data: PlatformMailSampleData) => platformMailApi.preview(data),
+  });
+}
+
+export function useMailTestSend() {
+  const { t } = useT();
+  return useMutation({
+    mutationFn: (data: PlatformMailTestSendRequest) => platformMailApi.testSend(data),
+    onSuccess: ({ channel }) => {
+      notify.success(
+        channel === 'SMTP'
+          ? t('platform.mail.sentSmtp')
+          : t('platform.mail.sentLocal', { channel }),
+      );
+    },
   });
 }

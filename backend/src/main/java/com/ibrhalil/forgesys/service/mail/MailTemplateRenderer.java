@@ -25,7 +25,9 @@ public class MailTemplateRenderer {
     }
 
     public RenderedMail render(MailMessage message) {
-        String language = properties.effectiveLanguage();
+        String language = message.language() != null && !message.language().isBlank()
+                ? message.language()
+                : properties.effectiveLanguage();
         String subject = message.template().subject(language);
         String expiresInHours = message.expiresIn() == null ? "" : String.valueOf(message.expiresIn().toHours());
         String expiresInMinutes = message.expiresIn() == null ? "" : String.valueOf(message.expiresIn().toMinutes());
