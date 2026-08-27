@@ -33,6 +33,12 @@ export function Modal({ open, title, onClose, children, footer, size = 'md', des
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const openerRef = useRef<Element | null>(null);
+  // Latest-ref: the focus effect must depend on [open] only — a changing onClose
+  // identity (inline closures) would re-run it and steal focus from inputs on each keystroke.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
   const { t } = useT();
 
   useEffect(() => {
@@ -46,7 +52,7 @@ export function Modal({ open, title, onClose, children, footer, size = 'md', des
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key !== 'Tab') return;
@@ -78,7 +84,7 @@ export function Modal({ open, title, onClose, children, footer, size = 'md', des
       document.body.style.overflow = '';
       (openerRef.current as HTMLElement | null)?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
