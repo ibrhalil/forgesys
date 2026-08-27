@@ -34,6 +34,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       await authApi.login({ email, password });
       await get().fetchMe();
+      // fetchMe swallows its own errors — a 200 login with a failing /me must not
+      // surface as success (the user would silently bounce back to /login).
+      if (!get().isAuthenticated) {
+        notify.error(t('auth.loginFailed'));
+        return false;
+      }
       return true;
     } catch (e) {
       // Auth failures (bad credentials, locked account) surface as a toast — they are

@@ -65,6 +65,9 @@ public class PlatformAuthController {
         if (userId != null) {
             platformAuthService.logout(userId, jti, refreshToken);
         }
+        // Also expire the legacy path-/ access cookie left in browsers by the 0.2.1 bug.
+        response.addHeader(HttpHeaders.SET_COOKIE, platformAuthProperties.expireCookie(
+                PlatformAuthProperties.ACCESS_COOKIE_NAME, platformAuthProperties.effectiveCookiePath()));
         response.addHeader(HttpHeaders.SET_COOKIE, platformAuthProperties.expireCookie(
                 PlatformAuthProperties.ACCESS_COOKIE_NAME, "/"));
         response.addHeader(HttpHeaders.SET_COOKIE, platformAuthProperties.expireCookie(

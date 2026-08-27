@@ -228,19 +228,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private String extractToken(HttpServletRequest request) {
         // Cookie takes precedence over the Bearer header (browser sessions first).
-        // K-50: the platform cookie (path-scoped to /api/v1/platform) wins when both
-        // are present — on platform paths the browser may send the tenant cookie too
-        // (path /), but the platform identity is the intended principal there. Tenant
-        // endpoints never receive the platform cookie (path isolation).
+        // K-50: cookie preference is PATH-scoped — the platform cookie wins on
+        // /api/v1/platform, the tenant cookie everywhere else. The access cookies were
+        // not always path-isolated (0.2.1 set the platform one on "/"), so both may
+        // arrive together on tenant paths; preferring the wrong one hard-rejects the
+        // request via the scope/tenant checks below.
         Cookie[] cookies = request.getCookies();
         if (cookies != null) {
+            boolean platformPath = request.getRequestURI().startsWith("/api/v1/platform");
             String platformCookie = readCookie(cookies, PlatformAuthProperties.ACCESS_COOKIE_NAME);
-            if (platformCookie != null) {
-                return platformCookie;
-            }
             String cookieToken = readCookie(cookies, cookieName);
-            if (cookieToken != null) {
-                return cookieToken;
+            if (platformPath) {
+                if (platformCookie != null) return platformCookie;
+                if (cookieToken != null) return cookieToken;
+            } else {
+                if (cookieToken != null) return cookieToken;
+                if (platformCookie != null) return platformCookie;
             }
         }
         String bearerHeader = request.getHeader("Authorization");
