@@ -183,35 +183,35 @@ flowchart TB
 
 | Şema             | Tablo               | Amaç                                 | Migration           |
 |------------------|---------------------|--------------------------------------|---------------------|
-| `public`         | `t_companies`       | Tenant kayıt (subdomain→schema map, status)  | `public/V1__tenant_registry.sql` |
-| `public`         | `t_tenant_verification_tokens` | K-21 signup token'ları (SHA-256 digest; `admin_password_hash` provisioning sonrası null — RISK-30) | `public/V1.1` + `public/V3__token_hash_at_rest.sql` |
+| `public`         | `t_companies`       | Tenant kayıt (subdomain→schema map, status)  | `public/V1__baseline.sql` |
+| `public`         | `t_tenant_verification_tokens` | K-21 signup token'ları (SHA-256 digest; `admin_password_hash` provisioning sonrası null — RISK-30) | `public/V1__baseline.sql` (RISK-30 baked in) |
 | `public`         | `t_plans`           | Plan kataloğu (FREE/PRO/ENTERPRISE; `PlanSyncRunner` upsert — registry kodda, [K-16](DECISIONS.md#k-16)) | `public/V2__plans_subscriptions_modules.sql` |
 | `public`         | `t_subscriptions`   | Tenant→plan aboneliği (FREE default) | `public/V2__plans_subscriptions_modules.sql` |
 | `public`         | `t_tenant_modules`  | Tenant modül aktivasyon kayıtları   | `public/V2__plans_subscriptions_modules.sql` |
-| `public`         | `t_platform_users`  | Platform kimlikleri (K-50): HUMAN süperadmin + SERVICE hesaplar (sentetik e-mail, `enabled`/lockout/`token_invalid_before`) | `public/V4__platform_identity.sql` |
-| `public`         | `t_platform_api_keys` | Servis hesabı API key'leri (K-50: prefix + SHA-256 hash; raw key yalnız oluşturmada bir kez gösterilir) | `public/V4__platform_identity.sql` |
-| `public`         | `t_platform_audit_logs` | Platform audit trail (K-50: append-only trigger; actor/action/target) | `public/V4__platform_identity.sql` |
-| `tenant_<sub>`   | `t_users`           | Kullanıcı hesabı (credential'lar)    | `tenant/V1__iam_users.sql` |
+| `public`         | `t_platform_users`  | Platform kimlikleri (K-50): HUMAN süperadmin + SERVICE hesaplar (sentetik e-mail, `enabled`/lockout/`token_invalid_before`) | `public/V3__platform_identity.sql` |
+| `public`         | `t_platform_api_keys` | Servis hesabı API key'leri (K-50: prefix + SHA-256 hash; raw key yalnız oluşturmada bir kez gösterilir) | `public/V3__platform_identity.sql` |
+| `public`         | `t_platform_audit_logs` | Platform audit trail (K-50: append-only trigger; actor/action/target) | `public/V3__platform_identity.sql` |
+| `tenant_<sub>`   | `t_users`           | Kullanıcı hesabı (credential'lar)    | `tenant/V1__baseline.sql` |
 | `tenant_<sub>`   | `t_auth_tokens`     | Kullanıcı lifecycle token'ları (email verify / password reset — SHA-256 digest, single-use; [K-48](DECISIONS.md#k-48)) | `tenant/V4__user_auth_tokens.sql` |
-| `tenant_<sub>`   | `t_user_accounts`   | Security state (lock, failed login)  | `tenant/V1__iam_users.sql` |
-| `tenant_<sub>`   | `t_user_profiles`   | PII (isim, telefon, adres)           | `tenant/V1__iam_users.sql` |
-| `tenant_<sub>`   | `t_roles`           | RBAC rolleri (+ `all_permissions` flag, parent inheritance) | `tenant/V1.1__iam_rbac.sql` |
-| `tenant_<sub>`   | `t_permissions`     | RBAC yetkileri                       | `tenant/V1.1__iam_rbac.sql` |
-| `tenant_<sub>`   | `t_groups`          | Kullanıcı grupları                   | `tenant/V1.1__iam_rbac.sql` |
-| `tenant_<sub>`   | `t_user_roles`      | User↔Role join                       | `tenant/V1.1__iam_rbac.sql` |
-| `tenant_<sub>`   | `t_user_groups`     | User↔Group join                      | `tenant/V1.1__iam_rbac.sql` |
-| `tenant_<sub>`   | `t_role_permissions`| Role↔Permission join                 | `tenant/V1.1__iam_rbac.sql` |
-| `tenant_<sub>`   | `t_group_roles`     | Group↔Role join                      | `tenant/V1.1__iam_rbac.sql` |
-| `tenant_<sub>`   | `t_role_parents`    | Role→parent-role inheritance join    | `tenant/V1.1__iam_rbac.sql` |
-| `tenant_<sub>`   | `t_projects`        | Tipli proje konteyneri (K-45: `project_type TASKS/NOTES/APPS` + `parent_project_id` + tip-bazlı default; isim benzersizliği tip bazlı) | `tenant/V1.3` + `tenant/V3__project_container.sql` |
-| `tenant_<sub>`   | `t_tasks`           | Task içeriği (project-scoped)        | `tenant/V1.3__pm_projects_tasks.sql` |
-| `tenant_<sub>`   | `t_audit_logs`      | Audit trail (append-only, K-19)      | `tenant/V1.2__audit.sql` |
-| `tenant_<sub>`   | `t_login_history`   | Login denemeleri (append-only, K-19) | `tenant/V1.2__audit.sql` |
+| `tenant_<sub>`   | `t_user_accounts`   | Security state (lock, failed login)  | `tenant/V1__baseline.sql` |
+| `tenant_<sub>`   | `t_user_profiles`   | PII (isim, telefon, adres)           | `tenant/V1__baseline.sql` |
+| `tenant_<sub>`   | `t_roles`           | RBAC rolleri (+ `all_permissions` flag, parent inheritance) | `tenant/V1__baseline.sql` |
+| `tenant_<sub>`   | `t_permissions`     | RBAC yetkileri                       | `tenant/V1__baseline.sql` |
+| `tenant_<sub>`   | `t_groups`          | Kullanıcı grupları                   | `tenant/V1__baseline.sql` |
+| `tenant_<sub>`   | `t_user_roles`      | User↔Role join                       | `tenant/V1__baseline.sql` |
+| `tenant_<sub>`   | `t_user_groups`     | User↔Group join                      | `tenant/V1__baseline.sql` |
+| `tenant_<sub>`   | `t_role_permissions`| Role↔Permission join                 | `tenant/V1__baseline.sql` |
+| `tenant_<sub>`   | `t_group_roles`     | Group↔Role join                      | `tenant/V1__baseline.sql` |
+| `tenant_<sub>`   | `t_role_parents`    | Role→parent-role inheritance join    | `tenant/V1__baseline.sql` |
+| `tenant_<sub>`   | `t_projects`        | Tipli proje konteyneri (K-45: `project_type TASKS/NOTES/APPS` + `parent_project_id` + tip-bazlı default; isim benzersizliği tip bazlı) | `tenant/V1__baseline.sql` + `tenant/V3__project_container.sql` |
+| `tenant_<sub>`   | `t_tasks`           | Task içeriği (project-scoped)        | `tenant/V1__baseline.sql` |
+| `tenant_<sub>`   | `t_audit_logs`      | Audit trail (append-only, K-19)      | `tenant/V1__baseline.sql` |
+| `tenant_<sub>`   | `t_login_history`   | Login denemeleri (append-only, K-19) | `tenant/V1__baseline.sql` |
 | `tenant_<sub>`   | `t_request_logs`    | Request/trace log + high-risk maskeli body (K-19 katman 3 + K-27) | `tenant/V2__request_logs.sql` |
 | `tenant_<sub>`   | `t_apps` + 4        | App builder ailesi: `t_apps`(`project_id` — APPS koleksiyon konteynerine çapalı, K-45) + `t_app_properties(config jsonb)`, `t_app_records`, `t_app_record_values(value jsonb, GIN)`, `t_app_views(config jsonb)` — `apps` modülü aktivasyonda düşer | `module/apps/V1__app_builder.sql` + `module/apps/V2__apps_project_scoping.sql` (per-module history `flyway_schema_history_mod_apps`, [K-15](DECISIONS.md#k-15)) |
 | `tenant_<sub>`   | `t_notes`, `t_note_categories` | Notes modülü (markdown; ikisi de `project_id` ile NOTES konteynerine çapalı — K-45; kategori FK `ON DELETE SET NULL`) — `notes` modülü aktivasyonda düşer | `module/notes/V1__notes.sql` + `module/notes/V2__notes_project_scoping.sql` (per-module history `flyway_schema_history_mod_notes`, [K-44](DECISIONS.md#k-44)) |
 
-> Refresh token'lar tabloda DEĞİL — Redis-first (K-34, [DECISIONS](DECISIONS.md#k-34)); eski `t_refresh_tokens` ölü tablosu K-36 temizliğinde kaldırıldı. Migration'ların tamamı pre-1.0.0 squash'ı ile alan-bazlı `V1.x` baseline ailesine indirildi ([K-36](DECISIONS.md#k-36)) — yeni public migration `V5`'ten, tenant migration `V5`'ten devam eder.
+> Refresh token'lar tabloda DEĞİL — Redis-first (K-34, [DECISIONS](DECISIONS.md#k-34)); eski `t_refresh_tokens` ölü tablosu K-36 temizliğinde kaldırıldı. Migration geçmişi K-36 squash'ı + 2026-08-27 consolidation ile location başına tek `V1__baseline.sql`'e indirildi (public `V4`→`V3` yeniden numaralandı) — yeni public migration `V4`'ten, tenant migration `V5`'ten devam eder.
 
 **Tenant provisioning akışı** (`TenantProvisioningService`, K-21 iki-fazlı):
 
