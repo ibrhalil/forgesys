@@ -1,5 +1,5 @@
-import { api, normalizePage, searchPost, toQuery } from '../../lib/api';
-import type { FilterCriteria, PageParams, PageResponse, SearchRequestBody } from '../../types';
+import { api, normalizePage, searchQueryGet, toQuery } from '../../lib/api';
+import type { FilterCriteria, PageParams, PageResponse } from '../../types';
 import type { Project, ProjectRequest, ProjectType, ProjectTypeInfo, Task, TaskRequest } from './types';
 
 export interface ProjectListParams extends PageParams {
@@ -22,20 +22,8 @@ export const projectsApi = {
       .get<PageResponse<Project>>(`/api/v1/projects${qs ? `?${qs}` : ''}`)
       .then(normalizePage);
   },
-  /** Engine list read: clauses route through `POST /projects/search`, plain reads stay on GET. */
-  searchOrList: ({ filters, parentProjectId, type, ...params }: ProjectListParams = {}) => {
-    if (!filters?.length && !parentProjectId && !type) return projectsApi.list(params);
-    // GET-only scoping params fold into the engine as explicit EQ clauses.
-    const clauses: FilterCriteria[] = [...(filters ?? [])];
-    if (parentProjectId) {
-      clauses.push({ field: 'parentProjectId', operator: 'EQ', values: [parentProjectId] });
-    }
-    if (type) {
-      clauses.push({ field: 'type', operator: 'EQ', values: [type] });
-    }
-    const body: SearchRequestBody = { ...params, filters: clauses };
-    return searchPost<Project>('/api/v1/projects/search', body);
-  },
+  /** K-55 wire-flip: one GET with the encoded `sq` query (scoped params fold as EQ; over-cap → POST fallback). */
+  searchOrList: (params: ProjectListParams = {}) => searchQueryGet<Project>('/api/v1/projects', params),
   /** Creatable type catalog — derived from the tenant's ACTIVE modules (K-45). */
   types: () => api.get<ProjectTypeInfo[]>('/api/v1/projects/types'),
   get: (id: string) => api.get<Project>(`/api/v1/projects/${id}`),

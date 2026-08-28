@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient, useQueries } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useMutation, useQueryClient, useQueries } from '@tanstack/react-query';
 import { usersApi } from './api';
 import { useAuthStore } from '../../store/authStore';
 import type { AssignRolesRequest } from '../roles/types';
@@ -11,7 +11,7 @@ import type {
 // ─── Users ───
 /** Flat directory list items (DB-side join + counts, visibility-scoped). */
 export function useUsers(params: Parameters<typeof usersApi.searchOrList>[0] = {}) {
-  return useQuery({ queryKey: ['users', params], queryFn: () => usersApi.searchOrList(params) });
+  return useQuery({ queryKey: ['users', params], queryFn: () => usersApi.searchOrList(params), placeholderData: keepPreviousData });
 }
 
 export function useUser(id?: string) {

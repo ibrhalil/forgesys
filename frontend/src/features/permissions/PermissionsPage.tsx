@@ -45,9 +45,9 @@ export function PermissionsPage() {
     setFilters,
     q,
     listParams,
-  } = useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'permissions' });
+  } = useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'permissions', syncUrl: true });
 
-  const { data, isLoading, isFetching } = usePermissionSearch(listParams);
+  const { data, isLoading, isFetching, error, refetch } = usePermissionSearch(listParams);
   const hasFilterInput = q.length > 0 || filters.length > 0 || searchFields.length > 0;
 
   const [creating, setCreating] = useState(false);
@@ -91,7 +91,10 @@ export function PermissionsPage() {
         data={data?.items ?? []}
         rowKey={(p) => p.id}
         storageKey="permissions"
-        loading={isLoading || (isFetching && !data)}
+        loading={isLoading}
+        fetching={isFetching && !isLoading}
+        error={error && !data ? error : undefined}
+        onRetry={() => refetch()}
         emptyMessage={hasFilterInput ? t('permissions.emptyFiltered') : t('permissions.empty')}
         page={data?.page ?? page}
         pageSize={data?.size ?? pageSize}

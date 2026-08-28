@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { NotesPage } from '../features/notes/NotesPage';
 import { useAuthStore } from '../store/authStore';
 import { useLocaleStore } from '../store/localeStore';
+import { decodedSq } from './sqUrl';
 
 const NOTES_PAYLOAD = {
   data: [
@@ -40,7 +41,11 @@ const CATEGORIES_PAYLOAD = {
 };
 
 let urls: string[];
-let noteQuery: URLSearchParams | null;
+
+/** Decoded sq states of the recorded /notes calls (K-55 wire-flip). */
+function noteStates() {
+  return urls.filter((u) => u.startsWith('/api/v1/notes?')).map(decodedSq);
+}
 
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -58,7 +63,6 @@ describe('NotesPage', () => {
     useLocaleStore.setState({ locale: 'en' });
     useAuthStore.setState({ hasAuthority: () => true });
     urls = [];
-    noteQuery = null;
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
@@ -69,9 +73,6 @@ describe('NotesPage', () => {
           : url.startsWith('/api/v1/note-categories')
             ? CATEGORIES_PAYLOAD
             : { data: [], meta: { page: 0, pageSize: 0, totalElements: 0, totalPages: 0, hasNext: false, hasPrevious: false } };
-        if (url.startsWith('/api/v1/notes?')) {
-          noteQuery = new URLSearchParams(url.split('?')[1]);
-        }
         return new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }),
     );
@@ -93,8 +94,9 @@ describe('NotesPage', () => {
     await screen.findByText('API design');
 
     await waitFor(() => {
-      expect(urls.some((u) => u.includes('sort=updatedAt%2Cdesc'))).toBe(true);
-      expect(urls.some((u) => u.includes('sort=updatedDate'))).toBe(false);
+      const states = noteStates();
+      expect(states.some((s) => s?.sorts[0]?.field === 'updatedAt' && s.sorts[0].dir === 'desc')).toBe(true);
+      expect(states.some((s) => s?.sorts?.some((x) => x.field === 'updatedDate'))).toBe(false);
     });
   });
 
@@ -107,7 +109,8 @@ describe('NotesPage', () => {
     await user.click(await screen.findByRole('option', { name: 'Work' }));
 
     await waitFor(() => {
-      expect(noteQuery?.get('categoryId')).toBe('cat-1');
+      expect(noteStates().some((s) => s?.filters?.some(
+        (f) => f.field === 'categoryId' && f.operator === 'EQ' && f.values.includes('cat-1')))).toBe(true);
     });
   });
 
@@ -119,7 +122,8 @@ describe('NotesPage', () => {
     await user.click(screen.getByRole('button', { name: /Pinned/ }));
 
     await waitFor(() => {
-      expect(noteQuery?.get('pinned')).toBe('true');
+      expect(noteStates().some((s) => s?.filters?.some(
+        (f) => f.field === 'pinned' && f.operator === 'EQ' && f.values.includes('true')))).toBe(true);
     });
   });
 
@@ -140,9 +144,6 @@ describe('NotesPage', () => {
           : url.startsWith('/api/v1/note-categories')
             ? CATEGORIES_PAYLOAD
             : { data: [], meta: { page: 0, pageSize: 0, totalElements: 0, totalPages: 0, hasNext: false, hasPrevious: false } };
-        if (url.startsWith('/api/v1/notes?')) {
-          noteQuery = new URLSearchParams(url.split('?')[1]);
-        }
         return new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }),
     );
@@ -155,14 +156,14 @@ describe('NotesPage', () => {
     await screen.findByText('API design');
 
     await user.click(screen.getByRole('button', { name: 'Next' }));
-    await waitFor(() => expect(noteQuery?.get('page')).toBe('1'));
+    await waitFor(() => expect(noteStates().some((s) => s?.page === 1)).toBe(true));
 
     await user.click(screen.getByText('All categories'));
     await user.click(await screen.findByRole('option', { name: 'Work' }));
 
     await waitFor(() => {
-      expect(noteQuery?.get('categoryId')).toBe('cat-1');
-      expect(noteQuery?.get('page')).toBe('0');
+      expect(noteStates().some((s) => s?.page === 0 && s?.filters?.some(
+        (f) => f.field === 'categoryId' && f.values.includes('cat-1')))).toBe(true);
     });
   });
 
@@ -173,13 +174,13 @@ describe('NotesPage', () => {
     await screen.findByText('API design');
 
     await user.click(screen.getByRole('button', { name: 'Next' }));
-    await waitFor(() => expect(noteQuery?.get('page')).toBe('1'));
+    await waitFor(() => expect(noteStates().some((s) => s?.page === 1)).toBe(true));
 
     await user.click(screen.getByRole('button', { name: /Pinned/ }));
 
     await waitFor(() => {
-      expect(noteQuery?.get('pinned')).toBe('true');
-      expect(noteQuery?.get('page')).toBe('0');
+      expect(noteStates().some((s) => s?.page === 0 && s?.filters?.some(
+        (f) => f.field === 'pinned' && f.values.includes('true')))).toBe(true);
     });
   });
 

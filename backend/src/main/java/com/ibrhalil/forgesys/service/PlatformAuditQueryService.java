@@ -75,6 +75,15 @@ public class PlatformAuditQueryService {
         return platformAuditLogRepository.findAll(spec, pageable).map(PlatformAuditQueryService::toResponse);
     }
 
+    /** Full filter-engine variant (K-55 {@code sq} path — same engine as the scoped GET). */
+    @Transactional(readOnly = true)
+    public Page<PlatformAuditLogResponse> search(Pageable pageable, String q, List<String> qFields,
+            List<FilterCriteria> filters) {
+        Specification<PlatformAuditLog> spec =
+                FilterSpecifications.from(FILTER_FIELDS, StringUtils.hasText(q) ? q.trim() : null, qFields, filters);
+        return platformAuditLogRepository.findAll(spec, pageable).map(PlatformAuditQueryService::toResponse);
+    }
+
     private static PlatformAuditLogResponse toResponse(PlatformAuditLog entry) {
         return new PlatformAuditLogResponse(
                 entry.getId(),

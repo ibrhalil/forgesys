@@ -3,8 +3,11 @@ package com.ibrhalil.forgesys.controller;
 import com.ibrhalil.forgesys.dto.NoteRequest;
 import com.ibrhalil.forgesys.dto.NoteResponse;
 import com.ibrhalil.forgesys.dto.PageResponse;
+import com.ibrhalil.forgesys.dto.SearchRequest;
 import com.ibrhalil.forgesys.service.NoteService;
 import com.ibrhalil.forgesys.web.SortGuard;
+import com.ibrhalil.forgesys.web.filter.SearchQuery;
+import com.ibrhalil.forgesys.web.filter.SearchRequests;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
@@ -41,10 +44,17 @@ public class ProjectNoteController {
     public ResponseEntity<PageResponse<NoteResponse>> list(
             @PathVariable UUID projectId,
             @PageableDefault(sort = "updatedAt", direction = Sort.Direction.DESC) Pageable pageable,
+            SearchQuery searchQuery,
             @RequestParam(required = false) String q,
             @RequestParam(required = false) List<String> qFields,
             @RequestParam(required = false) UUID categoryId,
             @RequestParam(required = false) Boolean pinned) {
+        if (searchQuery.present()) {
+            SearchRequest request = searchQuery.request();
+            Pageable sqPageable = SearchRequests.toPageable(request, NoteService.FILTER_FIELDS,
+                    Sort.by(Sort.Direction.DESC, "updatedAt"));
+            return ResponseEntity.ok(PageResponse.of(noteService.searchInProject(projectId, request, sqPageable)));
+        }
         SortGuard.require(pageable, NoteService.FILTER_FIELDS);
         return ResponseEntity.ok(PageResponse.of(
                 noteService.searchInProject(projectId, q, qFields, categoryId, pinned, pageable)));

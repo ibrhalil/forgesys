@@ -41,8 +41,8 @@ export function RolesPage() {
     setFilters,
     q,
     listParams,
-  } = useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'roles' });
-  const { data, isLoading, isFetching } = useRoles(listParams);
+  } = useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'roles', syncUrl: true });
+  const { data, isLoading, isFetching, error, refetch } = useRoles(listParams);
   const delRole = useDeleteRole();
   const canWrite = useAuthStore((s) => s.hasAuthority(PERMISSIONS.ROLE_WRITE));
   const canDelete = useAuthStore((s) => s.hasAuthority(PERMISSIONS.ROLE_DELETE));
@@ -117,7 +117,10 @@ export function RolesPage() {
         rowKey={(r) => r.id}
         storageKey="roles"
         emptyIcon={LuShieldCheck}
-        loading={isLoading || (isFetching && !data)}
+        loading={isLoading}
+        fetching={isFetching && !isLoading}
+        error={error && !data ? error : undefined}
+        onRetry={() => refetch()}
         emptyMessage={q ? t('roles.emptyFiltered') : t('roles.empty')}
         page={data?.page ?? page}
         pageSize={data?.size ?? pageSize}

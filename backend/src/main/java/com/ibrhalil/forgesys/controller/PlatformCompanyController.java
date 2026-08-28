@@ -11,10 +11,12 @@ import com.ibrhalil.forgesys.dto.SubscriptionResponse;
 import com.ibrhalil.forgesys.dto.SubscriptionUpdateRequest;
 import com.ibrhalil.forgesys.service.PlatformCompanyService;
 import com.ibrhalil.forgesys.web.SortGuard;
+import com.ibrhalil.forgesys.web.filter.SearchQuery;
 import com.ibrhalil.forgesys.web.filter.SearchRequests;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -55,8 +57,14 @@ public class PlatformCompanyController {
     @PreAuthorize(PLATFORM_READ)
     public ResponseEntity<PageResponse<CompanyResponse>> list(
             @PageableDefault(sort = "name") Pageable pageable,
+            SearchQuery searchQuery,
             @RequestParam(required = false) String q,
             @RequestParam(required = false) List<String> qFields) {
+        if (searchQuery.present()) {
+            SearchRequest request = searchQuery.request();
+            Pageable sqPageable = SearchRequests.toPageable(request, PlatformCompanyService.FILTER_FIELDS, Sort.by("name"));
+            return ResponseEntity.ok(PageResponse.of(platformCompanyService.search(request, sqPageable)));
+        }
         SortGuard.require(pageable, PlatformCompanyService.FILTER_FIELDS);
         return ResponseEntity.ok(PageResponse.of(platformCompanyService.search(q, qFields, pageable)));
     }

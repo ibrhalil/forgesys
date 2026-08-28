@@ -1,5 +1,5 @@
-import { api, normalizePage, searchPost, toQuery } from '../../lib/api';
-import type { FilterCriteria, PageParams, PageResponse, SearchRequestBody } from '../../types';
+import { api, normalizePage, searchQueryGet, toQuery } from '../../lib/api';
+import type { FilterCriteria, PageParams, PageResponse } from '../../types';
 import type { Note, NoteCategory, NoteCategoryRequest, NoteRequest } from './types';
 
 export interface NoteListParams extends PageParams {
@@ -12,42 +12,8 @@ export interface NoteListParams extends PageParams {
 }
 
 export const notesApi = {
-  list: (params: NoteListParams = {}) => {
-    // toQuery only carries page/size/sort(s)/q — thread the note-specific filters
-    // on top of it (the audit buildQuery convention).
-    const { categoryId, pinned, projectId, ...page } = params;
-    const sp = new URLSearchParams(toQuery(page).replace(/^\?/, ''));
-    if (categoryId) sp.set('categoryId', categoryId);
-    if (pinned != null) sp.set('pinned', String(pinned));
-    if (projectId) sp.set('projectId', projectId);
-    const qs = sp.toString();
-    return api
-      .get<PageResponse<Note>>(`/api/v1/notes${qs ? `?${qs}` : ''}`)
-      .then(normalizePage);
-  },
-  /**
-   * Engine list read: structured column-filter clauses route through
-   * `POST /notes/search` (with the scoped toolbar params folded in as EQ clauses);
-   * without clauses everything stays on the plain GET — the legacy toolbar filters
-   * keep their bookmarkable query-param shape.
-   */
-  searchOrList: ({
-    filters,
-    categoryId,
-    pinned,
-    projectId,
-    ...params
-  }: NoteListParams = {}) => {
-    if (!filters?.length) {
-      return notesApi.list({ ...params, categoryId, pinned, projectId });
-    }
-    const clauses: FilterCriteria[] = [...filters];
-    if (categoryId) clauses.push({ field: 'categoryId', operator: 'EQ', values: [categoryId] });
-    if (pinned != null) clauses.push({ field: 'pinned', operator: 'EQ', values: [String(pinned)] });
-    if (projectId) clauses.push({ field: 'projectId', operator: 'EQ', values: [projectId] });
-    const body: SearchRequestBody = { ...params, filters: clauses };
-    return searchPost<Note>('/api/v1/notes/search', body);
-  },
+  /** K-55 wire-flip: one GET with the encoded `sq` query (scoped params fold as EQ; over-cap → POST fallback). */
+  searchOrList: (params: NoteListParams = {}) => searchQueryGet<Note>('/api/v1/notes', params),
   get: (id: string) => api.get<Note>(`/api/v1/notes/${id}`),
   create: (data: NoteRequest) => api.post<Note>('/api/v1/notes', data),
   update: (id: string, data: NoteRequest) => api.put<Note>(`/api/v1/notes/${id}`, data),

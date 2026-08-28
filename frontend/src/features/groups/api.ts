@@ -1,16 +1,13 @@
-import { api, normalizePage, searchPost, toQuery } from '../../lib/api';
-import type { PageParams, PageResponse, SearchOrListParams, SearchRequestBody } from '../../types';
+import { api, normalizePage, searchQueryGet, toQuery } from '../../lib/api';
+import type { PageParams, PageResponse, SearchOrListParams } from '../../types';
 import type { AssignRolesRequest } from '../roles/types';
 import type { Group, CreateGroupRequest, AssignMembersRequest } from './types';
 
 export const groupsApi = {
   list: (params: PageParams = {}) =>
     api.get<PageResponse<Group>>(`/api/v1/groups${toQuery(params)}`).then(normalizePage),
-  /** Engine list read: clauses route through `POST /groups/search`, plain reads stay on GET. */
-  searchOrList: ({ filters, ...params }: SearchOrListParams) =>
-    filters?.length
-      ? searchPost<Group>('/api/v1/groups/search', { ...params } satisfies SearchRequestBody)
-      : groupsApi.list(params),
+  /** K-55 wire-flip: one GET with the encoded `sq` query (over-cap → POST fallback). */
+  searchOrList: (params: SearchOrListParams) => searchQueryGet<Group>('/api/v1/groups', params),
   get: (id: string) => api.get<Group>(`/api/v1/groups/${id}`),
   create: (data: CreateGroupRequest) => api.post<Group>('/api/v1/groups', data),
   update: (id: string, data: CreateGroupRequest) => api.put<Group>(`/api/v1/groups/${id}`, data),

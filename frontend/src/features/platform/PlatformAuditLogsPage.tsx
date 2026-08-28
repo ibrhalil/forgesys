@@ -19,8 +19,8 @@ export function PlatformAuditLogsPage() {
   const {
     page, setPage, pageSize, setPageSize, sort, toggleSort,
     search, setSearch, searchFields, setSearchFields, listParams,
-  } = useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' }, storageKey: 'platform-audit' });
-  const { data, isLoading, isFetching } = usePlatformAuditLogs(listParams);
+  } = useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' }, storageKey: 'platform-audit', syncUrl: true });
+  const { data, isLoading, isFetching, error, refetch } = usePlatformAuditLogs(listParams);
 
   // Aligned with the backend's searchable registrations
   // (PlatformAuditQueryService.FILTER_FIELDS): q matches action/targetType/IP/trace.
@@ -94,7 +94,10 @@ export function PlatformAuditLogsPage() {
         data={data?.items ?? []}
         rowKey={(e) => e.id}
         storageKey="platform-audit"
-        loading={isLoading || (isFetching && !data)}
+        loading={isLoading}
+        fetching={isFetching && !isLoading}
+        error={error && !data ? error : undefined}
+        onRetry={() => refetch()}
         emptyMessage={search ? t('platform.audit.emptyFiltered') : t('platform.audit.empty')}
         page={data?.page ?? page}
         pageSize={data?.size ?? pageSize}

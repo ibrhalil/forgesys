@@ -105,6 +105,15 @@ public class NoteService {
         return search(q, qFields, categoryId, pinned, projectId, pageable);
     }
 
+    /** Full {@link SearchRequest} variant of the nested list (K-55 {@code sq} path). */
+    @Transactional(readOnly = true)
+    public Page<NoteResponse> searchInProject(UUID projectId, SearchRequest request, Pageable pageable) {
+        projectContainerSupport.assertProject(ProjectType.NOTES, projectId);
+        List<FilterCriteria> filters = new ArrayList<>(request.filters() == null ? List.of() : request.filters());
+        filters.add(new FilterCriteria(Note_.PROJECT_ID, FilterOperator.EQ, List.of(projectId.toString())));
+        return doSearch(request.q(), request.qFields(), filters, pageable);
+    }
+
     @Transactional(readOnly = true)
     public NoteResponse findById(UUID id) {
         Note note = getNoteOrThrow(id);

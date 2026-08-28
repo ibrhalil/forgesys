@@ -8,10 +8,12 @@ import com.ibrhalil.forgesys.dto.PageResponse;
 import com.ibrhalil.forgesys.dto.SearchRequest;
 import com.ibrhalil.forgesys.service.GroupService;
 import com.ibrhalil.forgesys.web.SortGuard;
+import com.ibrhalil.forgesys.web.filter.SearchQuery;
 import com.ibrhalil.forgesys.web.filter.SearchRequests;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -40,8 +42,14 @@ public class GroupController {
     @PreAuthorize("hasAuthority('iam:group:read')")
     public ResponseEntity<PageResponse<GroupResponse>> list(
             @PageableDefault(sort = "name") Pageable pageable,
+            SearchQuery searchQuery,
             @RequestParam(required = false) String q,
             @RequestParam(required = false) List<String> qFields) {
+        if (searchQuery.present()) {
+            SearchRequest request = searchQuery.request();
+            Pageable sqPageable = SearchRequests.toPageable(request, GroupService.FILTER_FIELDS, Sort.by("name"));
+            return ResponseEntity.ok(PageResponse.of(groupService.search(request, sqPageable)));
+        }
         SortGuard.require(pageable, GroupService.FILTER_FIELDS);
         return ResponseEntity.ok(PageResponse.of(groupService.search(q, qFields, pageable)));
     }

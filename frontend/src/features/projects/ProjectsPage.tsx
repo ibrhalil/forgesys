@@ -51,8 +51,8 @@ export function ProjectsPage() {
     setFilters,
     q,
     listParams,
-  } = useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'projects' });
-  const { data, isLoading, isFetching } = useProjects(listParams);
+  } = useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'projects', syncUrl: true });
+  const { data, isLoading, isFetching, error, refetch } = useProjects(listParams);
   const delProject = useDeleteProject();
   const canWrite = useAuthStore((s) => s.hasAuthority(PERMISSIONS.PROJECT_WRITE));
   const canDelete = useAuthStore((s) => s.hasAuthority(PERMISSIONS.PROJECT_DELETE));
@@ -115,7 +115,10 @@ export function ProjectsPage() {
         data={data?.items ?? []}
         rowKey={(p) => p.id}
         storageKey="projects"
-        loading={isLoading || (isFetching && !data)}
+        loading={isLoading}
+        fetching={isFetching && !isLoading}
+        error={error && !data ? error : undefined}
+        onRetry={() => refetch()}
         emptyMessage={q ? t('projects.emptyFiltered') : t('projects.empty')}
         page={data?.page ?? page}
         pageSize={data?.size ?? pageSize}

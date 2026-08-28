@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { permissionsApi, type PermissionListParams } from './api';
 import type { CreatePermissionRequest } from './types';
 
@@ -13,6 +13,7 @@ export function usePermissionSearch(params: PermissionListParams = {}) {
   return useQuery({
     queryKey: ['permissions', 'search', params],
     queryFn: () => permissionsApi.searchOrList(params),
+    placeholderData: keepPreviousData,
   });
 }
 

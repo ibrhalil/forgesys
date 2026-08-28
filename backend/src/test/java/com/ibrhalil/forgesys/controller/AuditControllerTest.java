@@ -12,6 +12,7 @@ import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -261,6 +262,147 @@ class AuditControllerTest extends AbstractRbacWebTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.meta.totalElements").value(1))
                 .andExpect(jsonPath("$.data[0].traceId").value(error.getTraceId()));
+    }
+
+    /* ── K-55: GET ?sq= encoded search query ── */
+
+    @Test
+    void requestLogsSqAppliesFilters() throws Exception {
+        com.ibrhalil.forgesys.entity.RequestLog error = seedRequestLogWithStatus("sq_probe", 500);
+        seedRequestLogWithStatus("sq_probe", 200);
+
+        mockMvc.perform(get("/api/v1/request-logs")
+                        .param("sq", sq("""
+                                {"v":1,"page":0,"size":10,"sorts":[{"field":"createdDate","direction":"desc"}],
+                                 "filters":[{"field":"status","operator":"GTE","values":["400"]}]}"""))
+                        .cookie(auth("reader@tenant.test", "iam:audit:read")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.meta.totalElements").value(1))
+                .andExpect(jsonPath("$.data[0].traceId").value(error.getTraceId()));
+    }
+
+    @Test
+    void requestLogsSqTakesPrecedenceOverFlatParams() throws Exception {
+        seedRequestLogWithStatus("sq_precedence", 500);
+        seedRequestLogWithStatus("sq_precedence", 200);
+
+        // Flat q alone would match both probes; sq wins and ignores it.
+        mockMvc.perform(get("/api/v1/request-logs")
+                        .param("sq", sq("""
+                                {"v":1,"page":0,"size":10,"sorts":[{"field":"createdDate","direction":"desc"}],
+                                 "filters":[{"field":"status","operator":"EQ","values":["500"]}]}"""))
+                        .param("q", "sq_precedence")
+                        .cookie(auth("reader@tenant.test", "iam:audit:read")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.meta.totalElements").value(1))
+                .andExpect(jsonPath("$.data[0].status").value(500));
+    }
+
+    @Test
+    void requestLogsSqToleratesUnknownFields() throws Exception {
+        seedRequestLogWithStatus("sq_unknown", 200);
+
+        // q sentinel isolates from REQUIRES_NEW request-log pollution (shared cached H2).
+        mockMvc.perform(get("/api/v1/request-logs")
+                        .param("sq", sq("""
+                                {"v":1,"page":0,"size":10,"q":"sq_unknown",
+                                 "sorts":[{"field":"createdDate","direction":"desc"}],
+                                 "futureField":{"anything":true}}"""))
+                        .cookie(auth("reader@tenant.test", "iam:audit:read")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.meta.totalElements").value(1));
+    }
+
+    @Test
+    void requestLogsSqTurkishQRoundTrips() throws Exception {
+        com.ibrhalil.forgesys.entity.RequestLog turkish = seedRequestLogWithStatus("ğüş_probe_yolu", 200);
+        seedRequestLogWithStatus("ascii_probe_path", 200);
+
+        mockMvc.perform(get("/api/v1/request-logs")
+                        .param("sq", sq("""
+                                {"v":1,"page":0,"size":10,"sorts":[{"field":"createdDate","direction":"desc"}],
+                                 "q":"ğüş"}"""))
+                        .cookie(auth("reader@tenant.test", "iam:audit:read")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.meta.totalElements").value(1))
+                .andExpect(jsonPath("$.data[0].traceId").value(turkish.getTraceId()));
+    }
+
+    @Test
+    void requestLogsSqMalformedRejected() throws Exception {
+        mockMvc.perform(get("/api/v1/request-logs")
+                        .param("sq", "!!not-base64!!")
+                        .cookie(auth("reader@tenant.test", "iam:audit:read")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("validation_error"));
+    }
+
+    @Test
+    void requestLogsSqOversizedRejected() throws Exception {
+        mockMvc.perform(get("/api/v1/request-logs")
+                        .param("sq", "A".repeat(5000))
+                        .cookie(auth("reader@tenant.test", "iam:audit:read")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("validation_error"));
+    }
+
+    /* ── K-55 F5: CSV export ── */
+
+    @Test
+    void exportRequiresAuthentication() throws Exception {
+        mockMvc.perform(get("/api/v1/request-logs/export"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("auth_unauthenticated"));
+    }
+
+    @Test
+    void exportReturnsCsvWithBomAndSqFilters() throws Exception {
+        com.ibrhalil.forgesys.entity.RequestLog error = seedRequestLogWithStatus("export_probe", 500);
+        seedRequestLogWithStatus("export_probe", 200);
+
+        byte[] body = mockMvc.perform(get("/api/v1/request-logs/export")
+                        .param("sq", sq("""
+                                {"v":1,"page":0,"size":10,"q":"export_probe",
+                                 "sorts":[{"field":"createdDate","direction":"desc"}],
+                                 "filters":[{"field":"status","operator":"GTE","values":["400"]}]}"""))
+                        .cookie(auth("reader@tenant.test", "iam:audit:read")))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "text/csv;charset=UTF-8"))
+                .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.startsWith("attachment; filename=\"request-logs-")))
+                .andReturn().getResponse().getContentAsByteArray();
+
+        String csv = new String(body, java.nio.charset.StandardCharsets.UTF_8);
+        org.junit.jupiter.api.Assertions.assertTrue(csv.startsWith(
+                "\uFEFFid,traceId,method,path,status,durationMs,userId,username,ipAddress,userAgent,createdAt"));
+        org.junit.jupiter.api.Assertions.assertTrue(csv.contains(error.getTraceId()));
+        org.junit.jupiter.api.Assertions.assertEquals(2, csv.split("\n").length); // header + the single filtered row
+    }
+
+    @Test
+    void exportEscapesCsvSpecials() throws Exception {
+        com.ibrhalil.forgesys.entity.RequestLog tricky = new com.ibrhalil.forgesys.entity.RequestLog();
+        tricky.setTraceId(java.util.UUID.randomUUID().toString());
+        tricky.setMethod("GET");
+        tricky.setPath("export,quote\"probe");
+        tricky.setStatus(200);
+        entityManager.persist(tricky);
+
+        byte[] body = mockMvc.perform(get("/api/v1/request-logs/export")
+                        .param("sq", sq("""
+                                {"v":1,"page":0,"size":10,"q":"export,quote",
+                                 "sorts":[{"field":"createdDate","direction":"desc"}]}"""))
+                        .cookie(auth("reader@tenant.test", "iam:audit:read")))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray();
+
+        String csv = new String(body, java.nio.charset.StandardCharsets.UTF_8);
+        org.junit.jupiter.api.Assertions.assertTrue(csv.contains("\"export,quote\"\"probe\""));
+    }
+
+    /** URL-safe unpadded base64 of the UTF-8 JSON — the wire form the SPA codec produces. */
+    private static String sq(String json) {
+        return java.util.Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(json.getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
     private com.ibrhalil.forgesys.entity.RequestLog seedRequestLogWithStatus(String pathSentinel, int status) {

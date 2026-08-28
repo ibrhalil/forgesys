@@ -1,5 +1,5 @@
-import { api, normalizePage, searchPost, toQuery } from '../../lib/api';
-import type { FilterCriteria, PageParams, PageResponse, SearchOrListParams } from '../../types';
+import { apiDownload, searchQueryGet, searchQueryGetUrl } from '../../lib/api';
+import type { SearchOrListParams } from '../../types';
 import type { AuditLog, LoginHistory, RequestLog } from './types';
 
 /** Audit GET lists keep their scoped legacy filters alongside the K-49 structured clauses. */
@@ -18,71 +18,31 @@ export type RequestLogParams = SearchOrListParams & {
 /**
  * Audit & login-history endpoints (K-19 read side). Both require the
  * {@code iam:audit:read} permission; the backend enforces it, so the SPA merely
- * forwards any filter the page exposes. GET params stay for the first-match
- * filters; structured column filters (K-49) route through the POST /search
- * endpoints with the GET params folded in as explicit EQ clauses.
+ * forwards any filter the page exposes. K-55 wire-flip: everything travels as the
+ * encoded `sq` query — scoped legacy keys fold into EQ clauses inside
+ * {@link searchQueryGet}; an over-cap state falls back to `POST /search`.
  */
 export const auditLogsApi = {
-  list: (params: AuditLogParams = {}) => {
-    const { action, actorId, ...rest } = params;
-    if (!params.filters?.length) {
-      return api.get<PageResponse<AuditLog>>(`/api/v1/audit-logs${buildQuery({ ...rest, action, actorId })}`).then(normalizePage);
-    }
-    const clauses: FilterCriteria[] = [
-      ...(action ? [{ field: 'action', operator: 'EQ' as const, values: [action] }] : []),
-      ...(actorId ? [{ field: 'actorId', operator: 'EQ' as const, values: [actorId] }] : []),
-    ];
-    return searchPost<AuditLog>('/api/v1/audit-logs/search', { ...rest, filters: [...clauses, ...params.filters] });
-  },
+  list: (params: AuditLogParams = {}) => searchQueryGet<AuditLog>('/api/v1/audit-logs', params),
 };
 
 export const loginHistoryApi = {
-  list: (params: LoginHistoryParams = {}) => {
-    const { userId, success, ...rest } = params;
-    if (!params.filters?.length) {
-      return api.get<PageResponse<LoginHistory>>(`/api/v1/login-history${buildQuery({ ...rest, userId, success })}`).then(normalizePage);
-    }
-    const clauses: FilterCriteria[] = [
-      ...(userId ? [{ field: 'userId', operator: 'EQ' as const, values: [userId] }] : []),
-      ...(success != null ? [{ field: 'success', operator: 'EQ' as const, values: [String(success)] }] : []),
-    ];
-    return searchPost<LoginHistory>('/api/v1/login-history/search', { ...rest, filters: [...clauses, ...params.filters] });
-  },
+  list: (params: LoginHistoryParams = {}) => searchQueryGet<LoginHistory>('/api/v1/login-history', params),
 };
 
 export const requestLogsApi = {
-  list: (params: RequestLogParams = {}) => {
-    const { traceId, method, status, userId, username, ...rest } = params;
-    if (!params.filters?.length) {
-      return api.get<PageResponse<RequestLog>>(`/api/v1/request-logs${buildQuery({ ...rest, traceId, method, status, userId, username })}`).then(normalizePage);
+  /** K-55 wire-flip pilot: one GET with the encoded `sq` query (over-cap → POST fallback). */
+  list: (params: RequestLogParams = {}) => searchQueryGet<RequestLog>('/api/v1/request-logs', params),
+  /**
+   * CSV export of the CURRENT filters (K-55 F5) — same `sq` query, binary download.
+   * Rejects when the query exceeds the wire cap (an export must never silently
+   * drop filters).
+   */
+  exportCsv: (params: RequestLogParams = {}) => {
+    const url = searchQueryGetUrl('/api/v1/request-logs/export', params);
+    if (url === null) {
+      return Promise.reject(new Error('search query exceeds the export limit'));
     }
-    const clauses: FilterCriteria[] = [
-      ...(traceId ? [{ field: 'traceId', operator: 'EQ' as const, values: [traceId] }] : []),
-      ...(method ? [{ field: 'method', operator: 'EQ' as const, values: [method] }] : []),
-      ...(status != null ? [{ field: 'status', operator: 'EQ' as const, values: [String(status)] }] : []),
-      ...(userId ? [{ field: 'userId', operator: 'EQ' as const, values: [userId] }] : []),
-      ...(username ? [{ field: 'username', operator: 'EQ' as const, values: [username] }] : []),
-    ];
-    return searchPost<RequestLog>('/api/v1/request-logs/search', { ...rest, filters: [...clauses, ...(params.filters ?? [])] });
+    return apiDownload(url);
   },
 };
-
-/**
- * Query string for the audit GET lists: the shared page/sort/q serialization
- * (`toQuery`) plus the audit-specific first-match filters (action/actorId/
- * userId/success/...), skipping empties.
- */
-function buildQuery(params: PageParams & Record<string, unknown>): string {
-  const { page, size, sort, sorts, q, qFields, ...rest } = params;
-  const sp = new URLSearchParams(toQuery({ page, size, sort, sorts, q, qFields }).replace(/^\?/, ''));
-  for (const [key, value] of Object.entries(rest)) {
-    if (value === undefined || value === null || value === '') continue;
-    if (Array.isArray(value)) {
-      value.forEach((v) => sp.append(key, String(v)));
-    } else {
-      sp.set(key, String(value));
-    }
-  }
-  const out = sp.toString();
-  return out ? `?${out}` : '';
-}

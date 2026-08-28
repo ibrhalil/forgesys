@@ -1,5 +1,5 @@
-import { platformApi, platformSearchPost } from '../../lib/platformApi';
-import { normalizePage, toQuery } from '../../lib/api';
+import { platformApi } from '../../lib/platformApi';
+import { normalizePage, searchQueryGet, toQuery } from '../../lib/api';
 import type { PageResponse, SearchRequestBody } from '../../types';
 import type { PlatformCompany, PlatformCompanyParams } from './types';
 import type {
@@ -41,11 +41,9 @@ export const platformCompaniesApi = {
       .get<PageResponse<PlatformCompany>>(`/api/v1/platform/companies${suffix}`)
       .then(normalizePage);
   },
-  /** Engine list read: clauses route through `POST /companies/search`, plain reads stay on GET. */
-  searchOrList: ({ filters, ...params }: PlatformCompanyParams) =>
-    filters?.length
-      ? platformSearchPost<PlatformCompany>('/api/v1/platform/companies/search', params)
-      : platformCompaniesApi.list(params),
+  /** K-55 wire-flip: one GET with the encoded `sq` query over the platform client (over-cap → POST fallback). */
+  searchOrList: (params: PlatformCompanyParams) =>
+    searchQueryGet<PlatformCompany>('/api/v1/platform/companies', params, platformApi),
   get: (id: string) => platformApi.get<PlatformCompany>(`/api/v1/platform/companies/${id}`),
   updateStatus: (id: string, data: CompanyStatusUpdateRequest) =>
     platformApi.patch<PlatformCompany>(`/api/v1/platform/companies/${id}/status`, data),
@@ -73,21 +71,10 @@ export const platformServiceAccountsApi = {
   revoke: (id: string) => platformApi.delete<void>(`/api/v1/platform/service-accounts/${id}`),
 };
 
-/** v1 audit read stays on GET with first-match params (no POST search endpoint). */
+/** K-55 wire-flip: the encoded `sq` query over the platform client (scoped params fold as EQ). */
 export const platformAuditApi = {
-  list: (params: PlatformAuditParams = {}) => {
-    const { action, actorId, targetType, fromDate, toDate, ...rest } = params;
-    const sp = new URLSearchParams(toQuery(rest).replace(/^\?/, ''));
-    if (action) sp.set('action', action);
-    if (actorId) sp.set('actorId', actorId);
-    if (targetType) sp.set('targetType', targetType);
-    if (fromDate) sp.set('fromDate', fromDate);
-    if (toDate) sp.set('toDate', toDate);
-    const qs = sp.toString();
-    return platformApi
-      .get<PageResponse<PlatformAuditEntry>>(`/api/v1/platform/audit-logs${qs ? `?${qs}` : ''}`)
-      .then(normalizePage);
-  },
+  list: (params: PlatformAuditParams = {}) =>
+    searchQueryGet<PlatformAuditEntry>('/api/v1/platform/audit-logs', params, platformApi),
 };
 
 /** K-51 mail testing: info / no-send preview / test send (platform cookies, no X-Tenant-ID). */

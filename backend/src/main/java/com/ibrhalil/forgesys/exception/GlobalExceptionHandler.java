@@ -88,6 +88,13 @@ public class GlobalExceptionHandler {
         return build(ErrorCode.VALIDATION_ERROR, "Malformed request body", request.getRequestURI());
     }
 
+    /** Malformed/oversized {@code ?sq=} search query → 400 {@code validation_error} (K-55). */
+    @ExceptionHandler(SearchQueryDecodingException.class)
+    public ResponseEntity<ApiErrorResponse> handleSearchQuery(SearchQueryDecodingException ex, HttpServletRequest request) {
+        log.warn("Malformed sq param at {}: {}", request.getRequestURI(), ex.getMessage());
+        return build(ErrorCode.VALIDATION_ERROR, ex.getMessage(), request.getRequestURI());
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiErrorResponse> handleValidationErrors(MethodArgumentNotValidException ex, HttpServletRequest request) {
         List<ApiFieldError> fields = ex.getBindingResult().getFieldErrors().stream()

@@ -1,5 +1,5 @@
-import { api, normalizePage, searchPost, toQuery } from '../../lib/api';
-import type { FilterCriteria, PageParams, PageResponse, SearchRequestBody } from '../../types';
+import { api, normalizePage, searchQueryGet, toQuery } from '../../lib/api';
+import type { FilterCriteria, PageParams, PageResponse } from '../../types';
 import type {
   CustomApp,
   CustomAppDetail,
@@ -31,22 +31,8 @@ export const customAppsApi = {
       .get<PageResponse<CustomApp>>(`/api/v1/custom-apps${qs ? `?${qs}` : ''}`)
       .then(normalizePage);
   },
-  /**
-   * Engine list read: structured column-filter clauses route through
-   * `POST /customApps/search` (with the container narrowing folded in as an EQ clause);
-   * without clauses everything stays on the plain GET.
-   */
-  searchOrList: ({ filters, projectId, ...params }: CustomAppListParams = {}) => {
-    if (!filters?.length) {
-      return customAppsApi.list({ ...params, projectId });
-    }
-    const clauses: FilterCriteria[] = [...filters];
-    if (projectId) {
-      clauses.push({ field: 'projectId', operator: 'EQ', values: [projectId] });
-    }
-    const body: SearchRequestBody = { ...params, filters: clauses };
-    return searchPost<CustomApp>('/api/v1/custom-apps/search', body);
-  },
+  /** K-55 wire-flip: one GET with the encoded `sq` query (scoped params fold as EQ; over-cap → POST fallback). */
+  searchOrList: (params: CustomAppListParams = {}) => searchQueryGet<CustomApp>('/api/v1/custom-apps', params),
   get: (id: string) => api.get<CustomAppDetail>(`/api/v1/custom-apps/${id}`),
   create: (data: CustomAppRequest) => api.post<CustomApp>('/api/v1/custom-apps', data),
   update: (id: string, data: CustomAppRequest) => api.put<CustomApp>(`/api/v1/custom-apps/${id}`, data),

@@ -25,6 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -76,6 +77,15 @@ public class NoteCategoryService {
             Pageable pageable) {
         projectContainerSupport.assertProject(ProjectType.NOTES, projectId);
         return search(q, qFields, projectId, pageable);
+    }
+
+    /** Full {@link SearchRequest} variant of the nested list (K-55 {@code sq} path). */
+    @Transactional(readOnly = true)
+    public Page<NoteCategoryResponse> searchInProject(UUID projectId, SearchRequest request, Pageable pageable) {
+        projectContainerSupport.assertProject(ProjectType.NOTES, projectId);
+        List<FilterCriteria> filters = new ArrayList<>(request.filters() == null ? List.of() : request.filters());
+        filters.add(new FilterCriteria(NoteCategory_.PROJECT_ID, FilterOperator.EQ, List.of(projectId.toString())));
+        return doSearch(request.q(), request.qFields(), filters, pageable);
     }
 
     @Transactional(readOnly = true)

@@ -4,6 +4,8 @@ import com.ibrhalil.forgesys.dto.PageResponse;
 import com.ibrhalil.forgesys.dto.PlatformAuditLogResponse;
 import com.ibrhalil.forgesys.service.PlatformAuditQueryService;
 import com.ibrhalil.forgesys.web.SortGuard;
+import com.ibrhalil.forgesys.web.filter.SearchQuery;
+import com.ibrhalil.forgesys.web.filter.SearchRequests;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -34,6 +36,7 @@ public class PlatformAuditController {
     @PreAuthorize(PLATFORM_AUDIT_READ)
     public ResponseEntity<PageResponse<PlatformAuditLogResponse>> list(
             @PageableDefault(sort = "createdDate", direction = Sort.Direction.DESC) Pageable pageable,
+            SearchQuery searchQuery,
             @RequestParam(required = false) String q,
             @RequestParam(required = false) List<String> qFields,
             @RequestParam(required = false) String action,
@@ -41,6 +44,13 @@ public class PlatformAuditController {
             @RequestParam(required = false) String targetType,
             @RequestParam(required = false) OffsetDateTime fromDate,
             @RequestParam(required = false) OffsetDateTime toDate) {
+        if (searchQuery.present()) {
+            com.ibrhalil.forgesys.dto.SearchRequest request = searchQuery.request();
+            Pageable sqPageable = SearchRequests.toPageable(request, PlatformAuditQueryService.FILTER_FIELDS,
+                    Sort.by(Sort.Direction.DESC, "createdDate"));
+            return ResponseEntity.ok(PageResponse.of(
+                    platformAuditQueryService.search(sqPageable, request.q(), request.qFields(), request.filters())));
+        }
         SortGuard.require(pageable, PlatformAuditQueryService.FILTER_FIELDS);
         return ResponseEntity.ok(PageResponse.of(platformAuditQueryService.findAll(
                 pageable, q, qFields, action, actorId, targetType, fromDate, toDate)));

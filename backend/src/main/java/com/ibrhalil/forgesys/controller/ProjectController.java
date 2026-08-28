@@ -8,10 +8,12 @@ import com.ibrhalil.forgesys.dto.SearchRequest;
 import com.ibrhalil.forgesys.entity.ProjectType;
 import com.ibrhalil.forgesys.service.ProjectService;
 import com.ibrhalil.forgesys.web.SortGuard;
+import com.ibrhalil.forgesys.web.filter.SearchQuery;
 import com.ibrhalil.forgesys.web.filter.SearchRequests;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -40,10 +42,16 @@ public class ProjectController {
     @PreAuthorize("hasAuthority('pm:project:read')")
     public ResponseEntity<PageResponse<ProjectResponse>> list(
             @PageableDefault(sort = "name") Pageable pageable,
+            SearchQuery searchQuery,
             @RequestParam(required = false) String q,
             @RequestParam(required = false) List<String> qFields,
             @RequestParam(required = false) UUID parentProjectId,
             @RequestParam(required = false) ProjectType type) {
+        if (searchQuery.present()) {
+            SearchRequest request = searchQuery.request();
+            Pageable sqPageable = SearchRequests.toPageable(request, ProjectService.FILTER_FIELDS, Sort.by("name"));
+            return ResponseEntity.ok(PageResponse.of(projectService.search(request, sqPageable)));
+        }
         SortGuard.require(pageable, ProjectService.FILTER_FIELDS);
         return ResponseEntity.ok(PageResponse.of(
                 projectService.search(q, qFields, parentProjectId, type, pageable)));

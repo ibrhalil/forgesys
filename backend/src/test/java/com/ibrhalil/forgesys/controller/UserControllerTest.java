@@ -87,6 +87,28 @@ class UserControllerTest extends AbstractRbacWebTest {
                 .andExpect(jsonPath("$.meta.hasPrevious").value(false));
     }
 
+    /** K-55: the projection list reads the same engine through the GET {@code ?sq=} blob. */
+    @Test
+    void listReadsSearchQueryParam() throws Exception {
+        seedRbacUser("sq_alice@tenant.test", "sq_alice");
+        seedRbacUser("sq_bob@tenant.test", "sq_bob");
+
+        mockMvc.perform(get("/api/v1/users")
+                        .param("sq", sq("""
+                                {"v":1,"page":0,"size":10,"sorts":[{"field":"email","direction":"asc"}],
+                                 "q":"sq_alice"}"""))
+                        .cookie(auth("reader@tenant.test", "iam:user:read")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.meta.totalElements").value(1))
+                .andExpect(jsonPath("$.data[0].email").value("sq_alice@tenant.test"));
+    }
+
+    /** URL-safe unpadded base64 of the UTF-8 JSON — the wire form the SPA codec produces. */
+    private static String sq(String json) {
+        return java.util.Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(json.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
     /* ── visibility scope (iam:group-member:read) ── */
 
     @Test

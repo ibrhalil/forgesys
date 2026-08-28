@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LuUsers } from 'react-icons/lu';
-import { DataTable, type Column } from '../components/ui/DataTable';
+import { DataTable, type BulkAction, type Column } from '../components/ui/DataTable';
 import type { SortState } from '../types';
 import { useLocaleStore } from '../store/localeStore';
 
@@ -72,7 +72,7 @@ describe('DataTable', () => {
 
     await user.click(screen.getByRole('button', { name: /name/i }));
 
-    expect(props.onSortChange).toHaveBeenCalledWith('name');
+    expect(props.onSortChange).toHaveBeenCalledWith('name', false);
   });
 
   it('does not offer sorting for a column without sortKey', () => {
@@ -316,5 +316,181 @@ describe('DataTable', () => {
 
     const panel = screen.getByRole('dialog', { name: /filter note/i });
     expect(parseFloat(panel.style.top)).toBeLessThan(740); // opened upward
+  });
+
+  /* ── K-55 step 1: list states (skeleton / error / fetching) ── */
+
+  it('renders skeleton rows on first load instead of a spinner', () => {
+    const { container } = renderTable({ loading: true, data: [] });
+
+    expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Ada')).not.toBeInTheDocument();
+  });
+
+  it('renders the error panel with a working retry when the load failed with no data', async () => {
+    const user = userEvent.setup();
+    const onRetry = vi.fn();
+    renderTable({ data: [], totalElements: 0, totalPages: 0, error: new Error('boom'), onRetry });
+
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    expect(screen.getByText('Failed to load results')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /try again/i }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it('error takes precedence over the empty state', () => {
+    renderTable({ data: [], totalElements: 0, totalPages: 0, error: new Error('boom') });
+
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    expect(screen.queryByText('No records')).not.toBeInTheDocument();
+  });
+
+  it('keeps rows and shows the fetching bar during a background refetch', () => {
+    const { container } = renderTable({ fetching: true });
+
+    expect(screen.getByText('Ada')).toBeInTheDocument();
+    expect(screen.getByText('Linus')).toBeInTheDocument();
+    expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0);
+  });
+
+  /* ── K-55 F3: row activation (onRowClick) ── */
+
+  it('reports row activation on click and on Enter (table mode)', async () => {
+    const user = userEvent.setup();
+    const onRowClick = vi.fn();
+    renderTable({ onRowClick });
+
+    await user.click(screen.getByText('Ada'));
+    expect(onRowClick).toHaveBeenCalledWith(rows[0]);
+
+    onRowClick.mockClear();
+    screen.getByText('Linus').closest('tr')!.focus();
+    await user.keyboard('{Enter}');
+    expect(onRowClick).toHaveBeenCalledWith(rows[1]);
+  });
+
+  it('rows are not focusable without onRowClick, and action clicks do not activate the row', async () => {
+    const user = userEvent.setup();
+    const onRowClick = vi.fn();
+    const onAction = vi.fn();
+    renderTable({
+      onRowClick,
+      actions: (r) => <button type="button" onClick={() => onAction(r)}>act</button>,
+    });
+
+    // The action cell stops propagation — clicking it fires only the action.
+    await user.click(screen.getAllByRole('button', { name: 'act' })[0]);
+    expect(onAction).toHaveBeenCalledTimes(1);
+    expect(onRowClick).not.toHaveBeenCalled();
+  });
+
+  /* ── K-55 F4: row selection + bulk actions (table mode) ── */
+
+  const bulk = (run: (rows: Row[]) => void): BulkAction<Row>[] => [
+    { key: 'activate', label: 'Activate', run: () => undefined },
+    { key: 'remove', label: 'Remove', danger: true, run },
+  ];
+
+  it('renders no selection column without bulkActions', () => {
+    renderTable();
+    expect(screen.queryByRole('checkbox', { name: /select all/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: /select row/i })).not.toBeInTheDocument();
+  });
+
+  it('selects rows, shows the bulk bar and runs the action with the selected rows', async () => {
+    const user = userEvent.setup();
+    const run = vi.fn();
+    renderTable({ bulkActions: bulk(run) });
+
+    await user.click(screen.getAllByRole('checkbox', { name: 'Select row' })[0]);
+    expect(screen.getByRole('toolbar', { name: /bulk actions/i })).toBeInTheDocument();
+    expect(screen.getByText('1 selected')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Remove' }));
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(run.mock.calls[0][0]).toEqual([rows[0]]);
+  });
+
+  it('header checkbox selects all and toggles back to none', async () => {
+    const user = userEvent.setup();
+    renderTable({ bulkActions: bulk(vi.fn()) });
+
+    const header = screen.getByRole('checkbox', { name: 'Select all' }) as HTMLInputElement;
+    await user.click(header);
+    expect(screen.getByText('2 selected')).toBeInTheDocument();
+    expect(header.checked).toBe(true);
+
+    await user.click(header);
+    expect(screen.queryByRole('toolbar')).not.toBeInTheDocument();
+  });
+
+  it('shift+click selects the inclusive range', async () => {
+    const user = userEvent.setup();
+    renderTable({ data: [...rows, { id: '3', name: 'Grace' }], totalElements: 3, totalPages: 1, bulkActions: bulk(vi.fn()) });
+
+    const boxes = screen.getAllByRole('checkbox', { name: 'Select row' });
+    await user.click(boxes[0]);
+    // user-event does not carry shift on checkbox clicks — dispatch it explicitly.
+    fireEvent.click(boxes[2], { shiftKey: true });
+
+    expect(screen.getByText('3 selected')).toBeInTheDocument();
+  });
+
+  it('clearing the selection hides the bar', async () => {
+    const user = userEvent.setup();
+    renderTable({ bulkActions: bulk(vi.fn()) });
+
+    await user.click(screen.getAllByRole('checkbox', { name: 'Select row' })[0]);
+    await user.click(screen.getByRole('button', { name: 'Clear selection' }));
+
+    expect(screen.queryByRole('toolbar')).not.toBeInTheDocument();
+  });
+
+  /* ── K-55 F6: multi-sort header contract + auto-refresh wiring ── */
+
+  it('passes the additive flag on shift+click sortable headers', async () => {
+    const user = userEvent.setup();
+    const onSortChange = vi.fn();
+    renderTable({ onSortChange });
+
+    fireEvent.click(screen.getByRole('button', { name: /name/i }), { shiftKey: true });
+    expect(onSortChange).toHaveBeenCalledWith('name', true);
+
+    await user.click(screen.getByRole('button', { name: /name/i }));
+    expect(onSortChange).toHaveBeenLastCalledWith('name', false);
+  });
+
+  it('shows multi-sort order badges from the sorts chain', () => {
+    renderTable({
+      sort: { field: 'name', dir: 'asc' },
+      sorts: [{ field: 'name', dir: 'asc' }, { field: 'note', dir: 'desc' }],
+      columns: [
+        { key: 'name', header: 'Name', sortKey: 'name' },
+        { key: 'note', header: 'Note', sortKey: 'note' },
+      ],
+    });
+
+    expect(screen.getByText('1')).toBeInTheDocument(); // Name = first
+    expect(screen.getByText('2')).toBeInTheDocument(); // Note = second
+  });
+
+  it('refresh-now and interval selection drive onRefresh', () => {
+    vi.useFakeTimers();
+    try {
+      const onRefresh = vi.fn();
+      renderTable({ storageKey: 'users', onRefresh });
+
+      fireEvent.click(screen.getByRole('button', { name: /table settings/i }));
+      fireEvent.click(screen.getByRole('button', { name: /refresh/i }));
+      fireEvent.click(screen.getByRole('button', { name: /refresh now/i }));
+      expect(onRefresh).toHaveBeenCalledTimes(1);
+
+      fireEvent.click(screen.getByRole('button', { name: '30s' }));
+      expect(onRefresh).toHaveBeenCalledTimes(2); // selection triggers an immediate refresh
+      act(() => vi.advanceTimersByTime(30_000));
+      expect(onRefresh).toHaveBeenCalledTimes(3); // interval tick
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

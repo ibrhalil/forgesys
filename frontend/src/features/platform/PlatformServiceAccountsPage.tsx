@@ -139,7 +139,7 @@ export function PlatformServiceAccountsPage() {
     page, setPage, pageSize, setPageSize, sort, toggleSort,
     search, setSearch, listParams,
   } = useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' }, storageKey: 'platform-svc' });
-  const { data, isLoading, isFetching } = useServiceAccounts(listParams);
+  const { data, isLoading, isFetching, error, refetch } = useServiceAccounts(listParams);
   const revoke = useRevokeServiceAccount();
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -207,7 +207,10 @@ export function PlatformServiceAccountsPage() {
         data={data?.items ?? []}
         rowKey={(a) => a.id}
         storageKey="platform-svc"
-        loading={isLoading || (isFetching && !data)}
+        loading={isLoading}
+        fetching={isFetching && !isLoading}
+        error={error && !data ? error : undefined}
+        onRetry={() => refetch()}
         emptyMessage={search ? t('platform.companies.emptyFiltered') : t('platform.svc.empty')}
         page={data?.page ?? page}
         pageSize={data?.size ?? pageSize}

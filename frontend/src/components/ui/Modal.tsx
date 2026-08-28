@@ -1,7 +1,8 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { LuX } from 'react-icons/lu';
 import { cn } from '../../lib/cn';
 import { useT } from '../../lib/i18n';
+import { useDialogPanel } from '../../lib/useDialogPanel';
 
 interface ModalProps {
   open: boolean;
@@ -21,70 +22,14 @@ const SIZES = {
   lg: 'max-w-2xl',
 };
 
-const FOCUSABLE =
-  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
 /**
- * Accessible dialog: `role="dialog"` + `aria-modal`, labelled by the title. On open
- * the focus moves into the panel and is trapped (Tab/Shift+Tab cycle inside); on
- * close it is restored to the opener. Escape and backdrop mousedown close as before.
+ * Accessible dialog: `role="dialog"` + `aria-modal`, labelled by the title. Focus
+ * trap, Escape/backdrop close and opener-restore live in {@link useDialogPanel}
+ * (shared with Drawer).
  */
 export function Modal({ open, title, onClose, children, footer, size = 'md', describedby }: ModalProps) {
-  const titleId = useId();
-  const panelRef = useRef<HTMLDivElement>(null);
-  const openerRef = useRef<Element | null>(null);
-  // Latest-ref: the focus effect must depend on [open] only — a changing onClose
-  // identity (inline closures) would re-run it and steal focus from inputs on each keystroke.
-  const onCloseRef = useRef(onClose);
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  });
+  const { titleId, panelRef } = useDialogPanel(open, onClose);
   const { t } = useT();
-
-  useEffect(() => {
-    if (!open) return;
-    // Remember the opener so focus can return when the dialog closes.
-    openerRef.current = document.activeElement;
-    const panel = panelRef.current;
-    // Focus the dialog surface itself (not the first control) so opening never
-    // lands on the close button; the focus trap then walks the controls.
-    panel?.focus({ preventScroll: true });
-
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onCloseRef.current();
-        return;
-      }
-      if (e.key !== 'Tab') return;
-      // Focus trap: cycle Tab/Shift+Tab within the dialog panel.
-      const focusables = Array.from(panel?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []);
-      if (focusables.length === 0) {
-        e.preventDefault();
-        panel?.focus();
-        return;
-      }
-      const firstEl = focusables[0];
-      const lastEl = focusables[focusables.length - 1];
-      const active = document.activeElement;
-      if (e.shiftKey && (active === firstEl || active === panel)) {
-        e.preventDefault();
-        lastEl.focus();
-      } else if (!e.shiftKey && active === lastEl) {
-        e.preventDefault();
-        firstEl.focus();
-      } else if (!panel?.contains(active)) {
-        e.preventDefault();
-        firstEl.focus();
-      }
-    };
-    document.addEventListener('keydown', onKey);
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = '';
-      (openerRef.current as HTMLElement | null)?.focus?.();
-    };
-  }, [open]);
 
   if (!open) return null;
 

@@ -20,8 +20,8 @@ export function AuditLogsPage() {
   const {
     page, setPage, pageSize, setPageSize, sort, toggleSort,
     search, setSearch, searchFields, setSearchFields, filters, setFilters, listParams,
-  } = useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' }, storageKey: 'audit-logs' });
-  const { data, isLoading, isFetching } = useAuditLogs(listParams);
+  } = useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' }, storageKey: 'audit-logs', syncUrl: true });
+  const { data, isLoading, isFetching, error, refetch } = useAuditLogs(listParams);
 
   // Aligned with the backend's searchable registrations (AuditQueryService.AUDIT_LOG_FIELDS).
   const auditSearchFields = [
@@ -90,7 +90,10 @@ export function AuditLogsPage() {
         data={data?.items ?? []}
         rowKey={(l) => l.id}
         storageKey="audit-logs"
-        loading={isLoading || (isFetching && !data)}
+        loading={isLoading}
+        fetching={isFetching && !isLoading}
+        error={error && !data ? error : undefined}
+        onRetry={() => refetch()}
         emptyMessage={search ? t('audit.emptyFiltered') : t('audit.empty')}
         page={data?.page ?? page}
         pageSize={data?.size ?? pageSize}
