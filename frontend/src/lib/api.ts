@@ -6,6 +6,8 @@ import type {
 } from '../types';
 import { useTenantStore } from '../store/tenantStore';
 import { ApiError, createApiClient } from './apiClient';
+import { encodeSearchQuery, SEARCH_QUERY_PARAM, type SearchQueryState } from './searchQuery';
+import type { FilterCriteria, SortState } from '../types';
 
 export { ApiError };
 
@@ -46,6 +48,23 @@ export async function apiFetch<T>(
   options: RequestInit = {},
 ): Promise<T> {
   return client.fetchJson<T>(path, options);
+}
+
+/** Binary GET through the tenant client (file downloads, K-55 F5). */
+export function apiDownload(path: string): Promise<Blob> {
+  return client.fetchBlob(path);
+}
+
+/** Triggers the browser's save-as flow for a downloaded blob. */
+export function saveBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 /**
@@ -93,4 +112,64 @@ export const api = {
 /** `POST /{resource}/search` helper (K-49 filter engine) — sends the body, normalizes the page. */
 export function searchPost<T>(path: string, body: SearchRequestBody): Promise<PageResult<T>> {
   return api.post<PageResponse<T>>(path, body).then(normalizePage);
+}
+
+/** K-55 wire-flip params: the K-49 list params plus feature-scoped legacy keys. */
+export type SearchQueryGetParams = PageParams & Pick<SearchRequestBody, 'filters'> & Record<string, unknown>;
+
+/** Minimal client surface `searchQueryGet` needs — the platform client satisfies it too. */
+interface SqClient {
+  get: <R>(path: string) => Promise<R>;
+}
+
+/** Prepared form of a list query: the encoded `sq` blob (null over cap) + the fallback body. */
+function prepareSearchQuery(params: object): { blob: string | null; body: SearchRequestBody } {
+  // Callers keep their precisely-typed params (scoped legacy keys included); the
+  // loose cast only feeds the generic fold below.
+  const { page, size, sort, sorts, q, qFields, filters, ...scoped } = params as SearchQueryGetParams;
+  const clauses: FilterCriteria[] = [
+    ...(filters ?? []),
+    ...Object.entries(scoped).flatMap(([field, value]) =>
+      value === undefined || value === null || value === '' ? [] : [{ field, operator: 'EQ' as const, values: [String(value)] }],
+    ),
+  ];
+  const state: SearchQueryState = {
+    v: 1,
+    page: page ?? 0,
+    size: size ?? 20,
+    sorts: sorts ?? (sort ? parseRawSort(sort) : []),
+    q: q || undefined,
+    qFields: qFields?.length ? qFields : undefined,
+    filters: clauses.length ? clauses : undefined,
+  };
+  return {
+    blob: encodeSearchQuery(state),
+    body: { page, size, sorts, q, qFields, filters: clauses.length ? clauses : undefined },
+  };
+}
+
+/**
+ * Single GET entry for server-side lists (K-55): the whole query state (paging +
+ * multi-sort + `q` + filters) travels as one base64url `sq` param the backend decodes
+ * into the same engine `POST /search` uses. Scoped legacy keys fold into EQ clauses
+ * first. Over-cap state gracefully falls back to `POST /{resource}/search` — the
+ * backend's param length cap would reject it.
+ */
+export function searchQueryGet<T>(path: string, params: object = {}, client: SqClient = api): Promise<PageResult<T>> {
+  const { blob, body } = prepareSearchQuery(params);
+  if (blob === null) {
+    return searchPost<T>(`${path}/search`, body);
+  }
+  return client.get<PageResponse<T>>(`${path}?${SEARCH_QUERY_PARAM}=${blob}`).then(normalizePage);
+}
+
+/** The `?sq=` URL for an export-style GET over the same query (null when over cap). */
+export function searchQueryGetUrl(path: string, params: object): string | null {
+  const { blob } = prepareSearchQuery(params);
+  return blob === null ? null : `${path}?${SEARCH_QUERY_PARAM}=${blob}`;
+}
+
+function parseRawSort(raw: string): SortState[] {
+  const [field, dir] = raw.split(',');
+  return [{ field, dir: dir === 'desc' ? 'desc' : 'asc' }];
 }

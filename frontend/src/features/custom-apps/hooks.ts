@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { customAppsApi, type CustomAppListParams } from './api';
 import type { PageParams } from '../../types';
 import type { CustomAppPropertyRequest, CustomAppRecordRequest, CustomAppRequest, CustomAppViewRequest } from './types';
@@ -21,7 +21,7 @@ function toastMutationError(err: unknown): void {
 
 // ─── Apps ───
 export function useCustomApps(params: CustomAppListParams = {}) {
-  return useQuery({ queryKey: ['customApps', params], queryFn: () => customAppsApi.searchOrList(params) });
+  return useQuery({ queryKey: ['customApps', params], queryFn: () => customAppsApi.searchOrList(params), placeholderData: keepPreviousData });
 }
 
 export function useCustomApp(id?: string) {
@@ -112,6 +112,7 @@ export function useRecords(customAppId: string | undefined, params: PageParams =
     queryKey: ['customApps', customAppId, 'records', params],
     queryFn: () => customAppsApi.listRecords(customAppId!, params),
     enabled: !!customAppId,
+    placeholderData: keepPreviousData,
   });
 }
 

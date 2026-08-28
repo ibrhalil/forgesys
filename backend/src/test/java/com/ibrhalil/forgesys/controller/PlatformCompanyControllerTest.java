@@ -96,6 +96,28 @@ class PlatformCompanyControllerTest extends AbstractRbacWebTest {
                 .andExpect(jsonPath("$.data[0].name").value("suspendedco"));
     }
 
+    /** K-55: the platform list reads the engine through the GET {@code ?sq=} blob. */
+    @Test
+    void listReadsSearchQueryParam() throws Exception {
+        seedCompany("sq_activeco", CompanyStatus.ACTIVE);
+        seedCompany("sq_suspendedco", CompanyStatus.SUSPENDED);
+
+        mockMvc.perform(get("/api/v1/platform/companies")
+                        .param("sq", sq("""
+                                {"v":1,"page":0,"size":10,"sorts":[{"field":"name","direction":"asc"}],
+                                 "filters":[{"field":"status","operator":"EQ","values":["SUSPENDED"]}]}"""))
+                        .cookie(authPlatform(UUID.randomUUID(), "platform_reader@platform.test")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.meta.totalElements").value(1))
+                .andExpect(jsonPath("$.data[0].name").value("sq_suspendedco"));
+    }
+
+    /** URL-safe unpadded base64 of the UTF-8 JSON — the wire form the SPA codec produces. */
+    private static String sq(String json) {
+        return java.util.Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(json.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
     @Test
     void getUnknownReturns404() throws Exception {
         mockMvc.perform(get("/api/v1/platform/companies/" + UUID.randomUUID())

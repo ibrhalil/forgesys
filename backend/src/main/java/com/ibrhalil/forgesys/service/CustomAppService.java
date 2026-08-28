@@ -40,6 +40,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -113,6 +114,15 @@ public class CustomAppService {
     public Page<CustomAppResponse> searchInProject(UUID projectId, String q, List<String> qFields, Pageable pageable) {
         projectContainerSupport.assertProject(ProjectType.APPS, projectId);
         return search(q, qFields, projectId, pageable);
+    }
+
+    /** Full {@link SearchRequest} variant of the nested list (K-55 {@code sq} path). */
+    @Transactional(readOnly = true)
+    public Page<CustomAppResponse> searchInProject(UUID projectId, SearchRequest request, Pageable pageable) {
+        projectContainerSupport.assertProject(ProjectType.APPS, projectId);
+        List<FilterCriteria> filters = new ArrayList<>(request.filters() == null ? List.of() : request.filters());
+        filters.add(new FilterCriteria(CustomApp_.PROJECT_ID, FilterOperator.EQ, List.of(projectId.toString())));
+        return doSearch(request.q(), request.qFields(), filters, pageable);
     }
 
     @Transactional(readOnly = true)

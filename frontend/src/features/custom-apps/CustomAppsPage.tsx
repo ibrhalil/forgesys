@@ -21,8 +21,8 @@ import { CustomAppFormModal } from './components/CustomAppFormModal';
 export function CustomAppsPage() {
   const { t } = useT();
   const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, searchFields, setSearchFields, filters, setFilters, q, listParams } =
-    useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'customApps' });
-  const { data, isLoading, isFetching } = useCustomApps(listParams);
+    useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'customApps', syncUrl: true });
+  const { data, isLoading, isFetching, error, refetch } = useCustomApps(listParams);
   // Usage indicator: unfiltered total via a one-row probe (the list above is q-filtered).
   const { data: usage } = useCustomApps({ page: 0, size: 1 });
   const { data: planLimits } = usePlanLimits();
@@ -120,7 +120,10 @@ export function CustomAppsPage() {
         data={data?.items ?? []}
         rowKey={(a) => a.id}
         storageKey="customApps"
-        loading={isLoading || (isFetching && !data)}
+        loading={isLoading}
+        fetching={isFetching && !isLoading}
+        error={error && !data ? error : undefined}
+        onRetry={() => refetch()}
         emptyMessage={q ? t('customApps.emptyFiltered') : t('customApps.empty')}
         page={data?.page ?? page}
         pageSize={data?.size ?? pageSize}

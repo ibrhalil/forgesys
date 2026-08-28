@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ProjectDetailPage } from '../features/projects/ProjectDetailPage';
 import { useAuthStore } from '../store/authStore';
 import { useLocaleStore } from '../store/localeStore';
+import { decodedSq } from './sqUrl';
 
 const EMPTY_PAGE = {
   data: [],
@@ -109,7 +110,8 @@ describe('ProjectDetailPage (typed container bodies)', () => {
 
     await waitFor(() => {
       const list = calls.find((c) => c.url.includes('/api/v1/notes?'));
-      expect(list?.url).toContain('projectId=p-notes');
+      expect(decodedSq(list?.url ?? '')?.filters?.some(
+        (f) => f.field === 'projectId' && f.values.includes('p-notes'))).toBe(true);
     });
   });
 

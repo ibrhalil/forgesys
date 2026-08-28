@@ -31,6 +31,7 @@ export interface ApiClientOptions {
 
 export interface ApiClient {
   fetchJson: <T>(path: string, options?: RequestInit) => Promise<T>;
+  fetchBlob: (path: string) => Promise<Blob>;
   setSessionExpiredHandler: (handler: (() => void) | null) => void;
 }
 
@@ -78,7 +79,8 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
     return refreshPromise;
   }
 
-  async function fetchJson<T>(path: string, requestOptions: RequestInit = {}): Promise<T> {
+  /** Shared send + refresh-on-401 + non-OK → ApiError (JSON error bodies). */
+  async function request(path: string, requestOptions: RequestInit): Promise<Response> {
     let response = await sendRequest(path, requestOptions);
 
     // Expired access token: refresh once (shared), then retry.
@@ -110,16 +112,26 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
       }
       throw new ApiError(response.status, body.code, body);
     }
+    return response;
+  }
 
+  async function fetchJson<T>(path: string, requestOptions: RequestInit = {}): Promise<T> {
+    const response = await request(path, requestOptions);
     if (response.status === 204) {
       return undefined as T;
     }
-
     return response.json();
+  }
+
+  /** Binary GET (file downloads) over the same refresh/error contract. */
+  async function fetchBlob(path: string): Promise<Blob> {
+    const response = await request(path, { method: 'GET' });
+    return response.blob();
   }
 
   return {
     fetchJson,
+    fetchBlob,
     setSessionExpiredHandler: (handler) => {
       sessionExpiredHandler = handler;
     },

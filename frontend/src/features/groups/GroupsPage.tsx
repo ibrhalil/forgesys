@@ -41,8 +41,8 @@ export function GroupsPage() {
     setFilters,
     q,
     listParams,
-  } = useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'groups' });
-  const { data, isLoading, isFetching } = useGroups(listParams);
+  } = useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'groups', syncUrl: true });
+  const { data, isLoading, isFetching, error, refetch } = useGroups(listParams);
   const delGroup = useDeleteGroup();
   const canWrite = useAuthStore((s) => s.hasAuthority(PERMISSIONS.GROUP_WRITE));
   const canDelete = useAuthStore((s) => s.hasAuthority(PERMISSIONS.GROUP_DELETE));
@@ -135,7 +135,10 @@ export function GroupsPage() {
         rowKey={(g) => g.id}
         storageKey="groups"
         emptyIcon={LuUsersRound}
-        loading={isLoading || (isFetching && !data)}
+        loading={isLoading}
+        fetching={isFetching && !isLoading}
+        error={error && !data ? error : undefined}
+        onRetry={() => refetch()}
         emptyMessage={q ? t('groups.emptyFiltered') : t('groups.empty')}
         page={data?.page ?? page}
         pageSize={data?.size ?? pageSize}

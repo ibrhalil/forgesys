@@ -27,8 +27,8 @@ export function PlatformCompaniesPage() {
   const {
     page, setPage, pageSize, setPageSize, sort, toggleSort,
     search, setSearch, searchFields, setSearchFields, filters, setFilters, listParams,
-  } = useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'platform-companies' });
-  const { data, isLoading, isFetching } = usePlatformCompanies(listParams);
+  } = useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'platform-companies', syncUrl: true });
+  const { data, isLoading, isFetching, error, refetch } = usePlatformCompanies(listParams);
   const hasAuthority = usePlatformAuthStore((s) => s.hasAuthority);
   const canFilterStatus = hasAuthority(PLATFORM_PERMISSIONS.COMPANY_READ);
 
@@ -83,7 +83,10 @@ export function PlatformCompaniesPage() {
         data={data?.items ?? []}
         rowKey={(c) => c.id}
         storageKey="platform-companies"
-        loading={isLoading || (isFetching && !data)}
+        loading={isLoading}
+        fetching={isFetching && !isLoading}
+        error={error && !data ? error : undefined}
+        onRetry={() => refetch()}
         emptyMessage={search ? t('platform.companies.emptyFiltered') : t('platform.companies.empty')}
         page={data?.page ?? page}
         pageSize={data?.size ?? pageSize}

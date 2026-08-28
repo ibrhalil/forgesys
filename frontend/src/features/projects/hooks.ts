@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsApi, tasksApi, type ProjectListParams } from './api';
 import type { ProjectRequest, ProjectType, TaskRequest } from './types';
 import { useT } from '../../lib/i18n';
@@ -15,7 +15,7 @@ export function useProjectTypeLabels(): Record<ProjectType, string> {
 
 // ─── Projects ───
 export function useProjects(params: ProjectListParams = {}, enabled = true) {
-  return useQuery({ queryKey: ['projects', params], queryFn: () => projectsApi.searchOrList(params), enabled });
+  return useQuery({ queryKey: ['projects', params], queryFn: () => projectsApi.searchOrList(params), enabled, placeholderData: keepPreviousData });
 }
 
 /** Creatable type catalog (ACTIVE modules only) — backs create modals + selectors (K-45). */

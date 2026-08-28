@@ -1,5 +1,5 @@
-import { api, normalizePage, searchPost, toQuery } from '../../lib/api';
-import type { PageParams, PageResponse, SearchOrListParams, SearchRequestBody } from '../../types';
+import { api, normalizePage, searchQueryGet, toQuery } from '../../lib/api';
+import type { PageParams, PageResponse, SearchOrListParams } from '../../types';
 import type { AssignRolesRequest } from '../roles/types';
 import type {
   User, UserDirectoryView, UserActivity,
@@ -11,14 +11,8 @@ export const usersApi = {
   /** Flat directory projection (DB-side join + counts), visibility-scoped by the backend. */
   list: (params: PageParams = {}) =>
     api.get<PageResponse<UserDirectoryView>>(`/api/v1/users${toQuery(params)}`).then(normalizePage),
-  /**
-   * Engine list read: structured filter clauses route through `POST /users/search`,
-   * plain reads stay on GET. One entry point keeps the page's query key stable.
-   */
-  searchOrList: ({ filters, ...params }: SearchOrListParams) =>
-    filters?.length
-      ? searchPost<UserDirectoryView>('/api/v1/users/search', { ...params } satisfies SearchRequestBody)
-      : usersApi.list(params),
+  /** K-55 wire-flip: one GET with the encoded `sq` query (over-cap → POST fallback). */
+  searchOrList: (params: SearchOrListParams) => searchQueryGet<UserDirectoryView>('/api/v1/users', params),
   get: (id: string) => api.get<User>(`/api/v1/users/${id}`),
   create: (data: CreateUserRequest) => api.post<User>('/api/v1/users', data),
   update: (id: string, data: UpdateUserRequest) =>

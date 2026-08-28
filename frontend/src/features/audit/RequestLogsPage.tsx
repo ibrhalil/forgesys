@@ -1,11 +1,20 @@
+import { useState } from 'react';
 import type { RequestLog } from './types';
 import { useRequestLogs } from './hooks';
+import { requestLogsApi } from './api';
 import { DataTable, type Column } from '../../components/ui/DataTable';
 import { Page } from '../../components/Page';
 import { SearchInput } from '../../components/ui/SearchInput';
 import { PAGE_SIZE_OPTIONS } from '../../lib/pagination';
 import { Badge } from '../../components/ui/Badge';
+import { Drawer } from '../../components/ui/Drawer';
+import { CopyableValue } from '../../components/ui/CopyableValue';
+import { JsonBlock } from '../../components/ui/JsonBlock';
+import { SavedViewsMenu } from '../../components/ui/SavedViewsMenu';
+import { DetailField } from '../../components/detail/DetailPanel';
 import { formatDateTime } from '../../lib/format';
+import { notify } from '../../lib/notify';
+import { saveBlob } from '../../lib/api';
 import { useT } from '../../lib/i18n';
 import { useListPageState } from '../../lib/useListPageState';
 
@@ -18,10 +27,11 @@ import { useListPageState } from '../../lib/useListPageState';
 export function RequestLogsPage() {
   const { t } = useT();
   const {
-    page, setPage, pageSize, setPageSize, sort, toggleSort,
+    page, setPage, pageSize, setPageSize, sort, sorts, toggleSort, applySearchQuery, currentQuery,
     search, setSearch, searchFields, setSearchFields, filters, setFilters, listParams,
-  } = useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' }, storageKey: 'request-logs' });
-  const { data, isLoading, isFetching } = useRequestLogs(listParams);
+  } = useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' }, storageKey: 'request-logs', syncUrl: true });
+  const { data, isLoading, isFetching, error, refetch } = useRequestLogs(listParams);
+  const [detail, setDetail] = useState<RequestLog | null>(null);
 
   // Aligned with the backend's searchable registrations (RequestLogQueryService.REQUEST_LOG_FIELDS).
   const requestSearchFields = [
@@ -124,6 +134,17 @@ export function RequestLogsPage() {
     },
   ];
 
+  const onExport = (format: 'csv' | 'excel' | 'pdf') => {
+    if (format !== 'csv') {
+      notify.info(t('table.comingSoon'));
+      return;
+    }
+    requestLogsApi
+      .exportCsv(listParams)
+      .then((blob) => saveBlob(blob, `request-logs-${new Date().toISOString().slice(0, 19)}.csv`))
+      .catch(() => notify.error(t('requestLog.exportFailed')));
+  };
+
   return (
     <Page
       breadcrumb={[{ label: t('nav.security') }, { label: t('nav.requestLogs') }]}
@@ -135,7 +156,12 @@ export function RequestLogsPage() {
         data={data?.items ?? []}
         rowKey={(l) => l.id}
         storageKey="request-logs"
-        loading={isLoading || (isFetching && !data)}
+        onRowClick={setDetail}
+        onExport={onExport}
+        loading={isLoading}
+        fetching={isFetching && !isLoading}
+        error={error && !data ? error : undefined}
+        onRetry={() => refetch()}
         emptyMessage={search ? t('requestLog.emptyFiltered') : t('requestLog.empty')}
         page={data?.page ?? page}
         pageSize={data?.size ?? pageSize}
@@ -145,20 +171,70 @@ export function RequestLogsPage() {
         totalPages={data?.totalPages ?? 0}
         onPageChange={setPage}
         sort={sort}
+        sorts={sorts}
         onSortChange={toggleSort}
+        onRefresh={() => refetch()}
         filters={filters}
         onFiltersChange={setFilters}
         toolbar={
-          <SearchInput
-            value={search}
-            onChange={setSearch}
-            placeholder={t('requestLog.searchPh')}
-            fields={requestSearchFields}
-            selectedFields={searchFields}
-            onSelectedFieldsChange={setSearchFields}
-          />
+          <>
+            <SavedViewsMenu storageKey="request-logs" state={currentQuery} onApply={applySearchQuery} />
+            <SearchInput
+              value={search}
+              onChange={setSearch}
+              placeholder={t('requestLog.searchPh')}
+              fields={requestSearchFields}
+              selectedFields={searchFields}
+              onSelectedFieldsChange={setSearchFields}
+            />
+          </>
         }
       />
+
+      <Drawer open={!!detail} title={t('requestLog.detail')} onClose={() => setDetail(null)} size="lg">
+        {detail && (
+          <div className="space-y-5">
+            <div className="flex flex-wrap items-center gap-2">
+              {detail.method && <Badge tone={methodTone(detail.method)}>{detail.method}</Badge>}
+              {detail.status != null && <Badge tone={statusTone(detail.status)}>{detail.status}</Badge>}
+              {detail.durationMs != null && (
+                <span className="text-sm text-muted">{detail.durationMs} ms</span>
+              )}
+              <span className="text-xs text-muted">{formatDateTime(detail.createdAt)}</span>
+            </div>
+
+            <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <DetailField label={t('requestLog.trace')}>
+                {detail.traceId ? <CopyableValue value={detail.traceId} label={t('requestLog.trace')} /> : null}
+              </DetailField>
+              <DetailField label={t('requestLog.path')}>
+                <span className="break-all font-mono text-xs text-main">{detail.path ?? '—'}</span>
+              </DetailField>
+              <DetailField label={t('requestLog.user')}>
+                <div className="flex flex-col gap-0.5">
+                  <span>{detail.username ?? '—'}</span>
+                  {detail.userId && (
+                    <CopyableValue value={detail.userId} label={t('requestLog.user')} className="text-xs" />
+                  )}
+                </div>
+              </DetailField>
+              <DetailField label={t('requestLog.ip')}>
+                <span className="font-mono text-xs">{detail.ipAddress ?? '—'}</span>
+              </DetailField>
+              <div className="sm:col-span-2">
+                <DetailField label={t('requestLog.userAgent')}>
+                  <span className="break-all text-xs text-muted">{detail.userAgent ?? '—'}</span>
+                </DetailField>
+              </div>
+              <div className="sm:col-span-2">
+                <DetailField label={t('requestLog.requestBody')}>
+                  {detail.requestBody ? <JsonBlock value={detail.requestBody} /> : null}
+                </DetailField>
+              </div>
+            </dl>
+          </div>
+        )}
+      </Drawer>
     </Page>
   );
 }

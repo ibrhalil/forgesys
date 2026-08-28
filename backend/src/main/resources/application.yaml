@@ -114,3 +114,7 @@ forgesys:
       - "apiKey"
       - "accessKey"
       - "clientSecret"
+  web:
+    search-query:
+      # K-55 GET ?sq= encoded search query — hard cap on the param length.
+      max-length: ${SEARCH_QUERY_MAX_LENGTH:4096}

@@ -12,7 +12,7 @@ import { useClientPagination } from '../../lib/useClientPagination';
 
 export function ModulesPage() {
   const { t } = useT();
-  const { data: modules, isLoading, isFetching } = useModules();
+  const { data: modules, isLoading, isFetching, error, refetch } = useModules();
   const activate = useActivateModule();
   const canWrite = useAuthStore((s) => s.hasAuthority(PERMISSIONS.MODULE_WRITE));
 
@@ -50,7 +50,10 @@ export function ModulesPage() {
         data={pagination.paged}
         rowKey={(m) => m.key}
         storageKey="modules"
-        loading={isLoading || (isFetching && !modules)}
+        loading={isLoading}
+        fetching={isFetching && !isLoading}
+        error={error && !modules ? error : undefined}
+        onRetry={() => refetch()}
         emptyMessage={t('modules.empty')}
         page={pagination.page}
         pageSize={pagination.pageSize}

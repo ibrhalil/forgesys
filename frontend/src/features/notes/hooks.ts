@@ -1,10 +1,10 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { noteCategoriesApi, notesApi, type NoteListParams } from './api';
 import type { NoteCategoryRequest, NoteRequest } from './types';
 
 // ─── Notes ───
 export function useNotes(params: NoteListParams = {}) {
-  return useQuery({ queryKey: ['notes', params], queryFn: () => notesApi.searchOrList(params) });
+  return useQuery({ queryKey: ['notes', params], queryFn: () => notesApi.searchOrList(params), placeholderData: keepPreviousData });
 }
 
 export function useNote(id: string | undefined) {

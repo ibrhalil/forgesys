@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { notify } from '../../lib/notify';
 import { useT } from '../../lib/i18n';
 import type { PageParams } from '../../types';
@@ -21,6 +21,7 @@ export function usePlatformCompanies(params: PlatformCompanyParams = {}) {
   return useQuery({
     queryKey: ['platform', 'companies', params],
     queryFn: () => platformCompaniesApi.searchOrList(params),
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -112,6 +113,7 @@ export function useServiceAccounts(params: PageParams = {}) {
   return useQuery({
     queryKey: ['platform', 'service-accounts', params],
     queryFn: () => platformServiceAccountsApi.list(params),
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -142,6 +144,7 @@ export function useRevokeServiceAccount() {
 export function usePlatformAuditLogs(params: PlatformAuditParams = {}) {
   return useQuery({
     queryKey: ['platform', 'audit-logs', params],
+    placeholderData: keepPreviousData,
     queryFn: () => platformAuditApi.list(params),
   });
 }

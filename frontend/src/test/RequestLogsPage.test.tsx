@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RequestLogsPage } from '../features/audit/RequestLogsPage';
 import { useAuthStore } from '../store/authStore';
 import { useLocaleStore } from '../store/localeStore';
+import { encodeSearchQuery } from '../lib/searchQuery';
+import { decodedSq } from './sqUrl';
 
 /** GET /api/v1/request-logs PageResponse payload. */
 const REQUEST_LOGS_PAYLOAD = {
@@ -60,6 +62,8 @@ describe('RequestLogsPage', () => {
     useLocaleStore.setState({ locale: 'en' });
     useAuthStore.setState({ hasAuthority: () => true });
     urls = [];
+    window.localStorage.clear();
+    window.history.replaceState(null, '', '/request-logs');
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
@@ -69,7 +73,10 @@ describe('RequestLogsPage', () => {
       }),
     );
   });
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, '', '/');
+  });
 
   it('renders the request log rows from the API, defaulting to the createdDate sort', async () => {
     renderPage();
@@ -79,11 +86,12 @@ describe('RequestLogsPage', () => {
     expect(screen.getByText('admin@tenant.test')).toBeInTheDocument();
     expect(screen.getByText('340 ms')).toBeInTheDocument();
 
-    // Regression lock: the sort param must be the entity attribute (SortGuard whitelist),
-    // not the DTO wire name createdAt.
+    // Regression lock: the sort must be the entity attribute (SortGuard whitelist),
+    // not the DTO wire name createdAt — asserted inside the K-55 sq blob.
     await waitFor(() => {
-      expect(urls.some((u) => u.includes('sort=createdDate%2Cdesc'))).toBe(true);
-      expect(urls.some((u) => u.includes('sort=createdAt'))).toBe(false);
+      const states = urls.map(decodedSq);
+      expect(states.some((s) => s?.sorts[0]?.field === 'createdDate' && s.sorts[0].dir === 'desc')).toBe(true);
+      expect(states.some((s) => s?.sorts?.some((x) => x.field === 'createdAt'))).toBe(false);
     });
   });
 
@@ -96,7 +104,148 @@ describe('RequestLogsPage', () => {
 
     // toggleSort switches to the new field ascending and resets the page.
     await waitFor(() => {
-      expect(urls.some((u) => u.includes('sort=path%2Casc'))).toBe(true);
+      expect(urls.map(decodedSq).some((s) => s?.sorts[0]?.field === 'path' && s.sorts[0].dir === 'asc')).toBe(true);
     });
+  });
+
+  it('hydrates the query from the URL sq param (K-55 shareable view link)', async () => {
+    const blob = encodeSearchQuery({
+      v: 1,
+      page: 0,
+      size: 10,
+      sorts: [{ field: 'path', dir: 'asc' }],
+      q: 'admin',
+    })!;
+    window.history.replaceState(null, '', `/request-logs?sq=${blob}`);
+    renderPage();
+
+    expect(await screen.findByText('/api/v1/users')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(urls.map(decodedSq).some((s) => s?.q === 'admin'
+        && s?.sorts[0]?.field === 'path' && s.sorts[0].dir === 'asc')).toBe(true);
+    });
+  });
+
+  it('writes the sq param into the URL on a committed change', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText('/api/v1/users');
+
+    await user.click(screen.getByRole('button', { name: 'Path' }));
+
+    await waitFor(() => {
+      expect(window.location.search).toContain('sq=');
+    });
+  });
+
+  it('shows the error panel with retry when the first load fails, then recovers (K-55 step 1)', async () => {
+    const user = userEvent.setup();
+    let call = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        urls.push(String(input));
+        call++;
+        if (call === 1) {
+          return new Response(JSON.stringify({ error: 'Internal Server Error' }), { status: 500 });
+        }
+        return new Response(JSON.stringify(REQUEST_LOGS_PAYLOAD), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }),
+    );
+
+    renderPage();
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(screen.getByText('Failed to load results')).toBeInTheDocument();
+    // Empty rows are NOT rendered while the error panel is up.
+    expect(screen.queryByText('/api/v1/users')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /try again/i }));
+    expect(await screen.findByText('/api/v1/users')).toBeInTheDocument();
+  });
+
+  it('opening a row shows the detail drawer with the full trace id and body (K-55 F3)', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText('/api/v1/users');
+
+    await user.click(screen.getByText('admin@tenant.test'));
+
+    const dialog = screen.getByRole('dialog', { name: 'Request Details' });
+    expect(dialog).toBeInTheDocument();
+    // The FULL trace id (the table truncates to 8 chars) — scoped to the drawer.
+    expect(within(dialog).getByText('a1b2c3d4-1111-2222-3333-444444444444')).toBeInTheDocument();
+    expect(within(dialog).getByText('12345678-90ab-cdef-1234-567890abcdef')).toBeInTheDocument();
+  });
+
+  it('closing the drawer returns focus to the table and the list stays intact', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText('/api/v1/users');
+
+    await user.click(screen.getByText('admin@tenant.test'));
+    expect(screen.getByRole('dialog', { name: 'Request Details' })).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByText('/api/v1/users')).toBeInTheDocument();
+  });
+
+  it('exports the current query as CSV via the sq param (K-55 F5)', async () => {
+    const user = userEvent.setup();
+    const urls2: string[] = [];
+    const createObjectURL = vi.fn(() => 'blob:mock');
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal('URL', { ...URL, createObjectURL, revokeObjectURL });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        urls2.push(url);
+        if (url.startsWith('/api/v1/request-logs/export')) {
+          return new Response('\uFEFFid,traceId', { status: 200, headers: { 'Content-Type': 'text/csv;charset=UTF-8' } });
+        }
+        return new Response(JSON.stringify(REQUEST_LOGS_PAYLOAD), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }),
+    );
+
+    renderPage();
+    await screen.findByText('/api/v1/users');
+
+    // settings → export tab → CSV
+    await user.click(screen.getByRole('button', { name: /table settings/i }));
+    await user.click(screen.getByRole('button', { name: /export/i }));
+    await user.click(screen.getByRole('button', { name: /export csv/i }));
+
+    await waitFor(() => {
+      expect(urls2.some((u) => u.startsWith('/api/v1/request-logs/export?sq='))).toBe(true);
+    });
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    expect(revokeObjectURL).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the previous rows visible while the next query is in flight (keep-previous, K-55 step 1)', async () => {
+    const user = userEvent.setup();
+    let pends = false;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        urls.push(String(input));
+        if (pends) return new Promise<Response>(() => {}); // never resolves
+        return new Response(JSON.stringify(REQUEST_LOGS_PAYLOAD), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }),
+    );
+
+    const view = renderPage();
+    expect(await screen.findByText('/api/v1/users')).toBeInTheDocument();
+
+    pends = true;
+    await user.click(screen.getByRole('button', { name: 'Path' }));
+
+    await waitFor(() => {
+      expect(urls.map(decodedSq).some((s) => s?.sorts[0]?.field === 'path' && s.sorts[0].dir === 'asc')).toBe(true);
+    });
+    // Old rows stay on screen and the fetching indicator is up while the new query pends.
+    expect(screen.getByText('/api/v1/users')).toBeInTheDocument();
+    expect(view.container.querySelector('.animate-pulse')).not.toBeNull();
   });
 });

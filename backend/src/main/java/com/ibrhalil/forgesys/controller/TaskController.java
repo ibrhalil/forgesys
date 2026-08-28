@@ -6,6 +6,7 @@ import com.ibrhalil.forgesys.dto.TaskRequest;
 import com.ibrhalil.forgesys.dto.TaskResponse;
 import com.ibrhalil.forgesys.service.TaskService;
 import com.ibrhalil.forgesys.web.SortGuard;
+import com.ibrhalil.forgesys.web.filter.SearchQuery;
 import com.ibrhalil.forgesys.web.filter.SearchRequests;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -44,8 +45,15 @@ public class TaskController {
     public ResponseEntity<PageResponse<TaskResponse>> list(
             @PathVariable UUID projectId,
             @PageableDefault(sort = "createdDate", direction = Sort.Direction.DESC) Pageable pageable,
+            SearchQuery searchQuery,
             @RequestParam(required = false) String q,
             @RequestParam(required = false) List<String> qFields) {
+        if (searchQuery.present()) {
+            SearchRequest request = searchQuery.request();
+            Pageable sqPageable = SearchRequests.toPageable(request, TaskService.FILTER_FIELDS,
+                    Sort.by(Sort.Direction.DESC, "createdDate"));
+            return ResponseEntity.ok(PageResponse.of(taskService.search(projectId, request, sqPageable)));
+        }
         SortGuard.require(pageable, TaskService.FILTER_FIELDS);
         return ResponseEntity.ok(PageResponse.of(taskService.list(projectId, q, qFields, pageable)));
     }

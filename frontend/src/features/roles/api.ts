@@ -1,15 +1,12 @@
-import { api, normalizePage, searchPost, toQuery } from '../../lib/api';
-import type { PageParams, PageResponse, SearchOrListParams, SearchRequestBody } from '../../types';
+import { api, normalizePage, searchQueryGet, toQuery } from '../../lib/api';
+import type { PageParams, PageResponse, SearchOrListParams } from '../../types';
 import type { Role, CreateRoleRequest, AssignPermissionsRequest, AssignRolesRequest } from './types';
 
 export const rolesApi = {
   list: (params: PageParams = {}) =>
     api.get<PageResponse<Role>>(`/api/v1/roles${toQuery(params)}`).then(normalizePage),
-  /** Engine list read: clauses route through `POST /roles/search`, plain reads stay on GET. */
-  searchOrList: ({ filters, ...params }: SearchOrListParams) =>
-    filters?.length
-      ? searchPost<Role>('/api/v1/roles/search', { ...params } satisfies SearchRequestBody)
-      : rolesApi.list(params),
+  /** K-55 wire-flip: one GET with the encoded `sq` query (over-cap → POST fallback). */
+  searchOrList: (params: SearchOrListParams) => searchQueryGet<Role>('/api/v1/roles', params),
   get: (id: string) => api.get<Role>(`/api/v1/roles/${id}`),
   create: (data: CreateRoleRequest) => api.post<Role>('/api/v1/roles', data),
   update: (id: string, data: CreateRoleRequest) => api.put<Role>(`/api/v1/roles/${id}`, data),

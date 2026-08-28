@@ -29,10 +29,10 @@ export function LoginHistoryPage() {
   const {
     page, setPage, pageSize, setPageSize, sort, toggleSort,
     search, setSearch, searchFields, setSearchFields, filters, setFilters, listParams,
-  } = useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' }, storageKey: 'login-history' });
+  } = useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' }, storageKey: 'login-history', syncUrl: true });
 
   const successParam = success === 'all' ? undefined : success === 'true';
-  const { data, isLoading, isFetching } = useLoginHistory({
+  const { data, isLoading, isFetching, error, refetch } = useLoginHistory({
     ...listParams,
     success: successParam,
   });
@@ -106,7 +106,10 @@ export function LoginHistoryPage() {
         data={data?.items ?? []}
         rowKey={(l) => l.id}
         storageKey="login-history"
-        loading={isLoading || (isFetching && !data)}
+        loading={isLoading}
+        fetching={isFetching && !isLoading}
+        error={error && !data ? error : undefined}
+        onRetry={() => refetch()}
         emptyMessage={search ? t('loginHistory.emptyFiltered') : t('loginHistory.empty')}
         page={data?.page ?? page}
         pageSize={data?.size ?? pageSize}

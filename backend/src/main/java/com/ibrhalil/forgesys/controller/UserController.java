@@ -12,10 +12,12 @@ import com.ibrhalil.forgesys.dto.UserResponse;
 import com.ibrhalil.forgesys.dto.UserUpdateRequest;
 import com.ibrhalil.forgesys.service.UserService;
 import com.ibrhalil.forgesys.web.SortGuard;
+import com.ibrhalil.forgesys.web.filter.SearchQuery;
 import com.ibrhalil.forgesys.web.filter.SearchRequests;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -48,8 +50,14 @@ public class UserController {
     @PreAuthorize(READ_USERS)
     public ResponseEntity<PageResponse<UserDirectoryViewResponse>> list(
             @PageableDefault(sort = "email") Pageable pageable,
+            SearchQuery searchQuery,
             @RequestParam(required = false) String q,
             @RequestParam(required = false) List<String> qFields) {
+        if (searchQuery.present()) {
+            SearchRequest request = searchQuery.request();
+            Pageable sqPageable = SearchRequests.toPageable(request, UserService.FILTER_FIELDS, Sort.by("email"));
+            return ResponseEntity.ok(PageResponse.of(userService.search(request, sqPageable)));
+        }
         SortGuard.require(pageable, UserService.FILTER_FIELDS);
         return ResponseEntity.ok(PageResponse.of(userService.search(q, qFields, pageable)));
     }

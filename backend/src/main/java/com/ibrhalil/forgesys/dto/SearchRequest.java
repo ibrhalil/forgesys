@@ -1,5 +1,6 @@
 package com.ibrhalil.forgesys.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
@@ -10,8 +11,10 @@ import java.util.List;
  * Body of the {@code POST /{resource}/search} endpoints (K-49): paging +
  * multi-sort + structured filters + {@code q} (optionally narrowed to
  * {@code qFields}). Hard limits keep requests bounded: ≤5 sorts, ≤10 filters,
- * size ≤1000.
+ * size ≤1000. Also the decoded payload of the {@code GET ?sq=} param (K-55) —
+ * unknown properties (the blob's {@code v} marker, future fields) are tolerated.
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record SearchRequest(
         @Min(0) Integer page,
         @Min(1) @Max(1000) Integer size,

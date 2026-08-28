@@ -42,11 +42,11 @@ export function NotesPage() {
     setFilters,
     q,
     listParams,
-  } = useListPageState({ defaultSort: { field: 'updatedAt', dir: 'desc' }, storageKey: 'notes' });
+  } = useListPageState({ defaultSort: { field: 'updatedAt', dir: 'desc' }, storageKey: 'notes', syncUrl: true });
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [pinnedOnly, setPinnedOnly] = useState(false);
 
-  const { data, isLoading, isFetching } = useNotes({
+  const { data, isLoading, isFetching, error, refetch } = useNotes({
     ...listParams,
     categoryId: categoryId ?? undefined,
     pinned: pinnedOnly || undefined,
@@ -122,7 +122,10 @@ export function NotesPage() {
         rowKey={(n) => n.id}
         storageKey="notes"
         emptyIcon={LuStickyNote}
-        loading={isLoading || (isFetching && !data)}
+        loading={isLoading}
+        fetching={isFetching && !isLoading}
+        error={error && !data ? error : undefined}
+        onRetry={() => refetch()}
         emptyMessage={q || categoryId || pinnedOnly ? t('notes.emptyFiltered') : t('notes.empty')}
         page={data?.page ?? page}
         pageSize={data?.size ?? pageSize}

@@ -41,8 +41,8 @@ export function UsersPage() {
     setFilters,
     q,
     listParams,
-  } = useListPageState({ defaultSort: { field: 'email', dir: 'asc' }, storageKey: 'users' });
-  const { data, isLoading, isFetching } = useUsers(listParams);
+  } = useListPageState({ defaultSort: { field: 'email', dir: 'asc' }, storageKey: 'users', syncUrl: true });
+  const { data, isLoading, isFetching, error, refetch } = useUsers(listParams);
   const delUser = useDeleteUser();
   const unlockUser = useUnlockUser();
   const navigate = useNavigate();
@@ -172,7 +172,10 @@ export function UsersPage() {
         rowKey={(u) => u.id}
         storageKey="users"
         emptyIcon={LuUsers}
-        loading={isLoading || (isFetching && !data)}
+        loading={isLoading}
+        fetching={isFetching && !isLoading}
+        error={error && !data ? error : undefined}
+        onRetry={() => refetch()}
         emptyMessage={q ? t('users.emptyFiltered') : t('users.empty')}
         page={data?.page ?? page}
         pageSize={data?.size ?? pageSize}

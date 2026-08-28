@@ -5,9 +5,11 @@ import {
   LuLayoutGrid,
   LuList,
   LuRefreshCw,
+  LuRotateCw,
   LuRows3,
   LuSlidersHorizontal,
   LuTable2,
+  LuTriangleAlert,
 } from 'react-icons/lu';
 import { cn } from '../../lib/cn';
 import { useT } from '../../lib/i18n';
@@ -19,9 +21,10 @@ import {
 } from '../../lib/tablePreferences';
 import type { FilterCriteria, SortState } from '../../types';
 import { Badge } from './Badge';
+import { Button } from './Button';
 import { ColumnFilterButton, type ColumnFilterSpec } from './ColumnFilterButton';
+import { ConfirmDialog } from './ConfirmDialog';
 import { EmptyState } from './EmptyState';
-import { Spinner } from './Spinner';
 import { TablePagination } from './TablePagination';
 import { MICRO_LABEL } from './styles';
 
@@ -46,11 +49,28 @@ export interface Column<T> {
 
 export type TableDensity = 'compact' | 'normal' | 'relaxed';
 
+/** A bulk-bar action over the currently selected rows (K-55 F4). */
+export interface BulkAction<T> {
+  key: string;
+  label: string;
+  danger?: boolean;
+  /** Present → a ConfirmDialog guards the run (destructive actions). */
+  confirm?: { title: string; message: string };
+  run: (rows: T[]) => void | Promise<void>;
+}
+
 interface DataTableProps<T> {
   columns: Column<T>[];
   data: T[];
   rowKey: (row: T) => string;
+  /** First load (no data yet) — renders skeleton rows instead of a spinner. */
   loading?: boolean;
+  /** Background refetch with rows on screen — keeps rows, shows the thin top bar. */
+  fetching?: boolean;
+  /** Truthy with no rows renders the error panel; precedence: error > empty. */
+  error?: unknown;
+  /** Retry handler for the error panel (TanStack `refetch`). */
+  onRetry?: () => void;
   emptyMessage?: string;
   page: number;
   pageSize: number;
@@ -63,8 +83,15 @@ interface DataTableProps<T> {
   onPageSizeChange?: (size: number) => void;
   /** Active sort (single-column). Omitted/undefined when the caller has no sorting. */
   sort?: SortState;
-  /** Click handler on a sortable header — receives the column's `sortKey`. */
-  onSortChange?: (field: string) => void;
+  /** Click handler on a sortable header — receives the column's `sortKey` and whether
+   *  the click was additive (Shift) — multi-sort chains. */
+  onSortChange?: (field: string, additive?: boolean) => void;
+  /** Full multi-sort chain; drives the per-column order badges. */
+  sorts?: SortState[];
+  /** Row activation (click / Enter / Space, table mode) — opens the row-detail surface. */
+  onRowClick?: (row: T) => void;
+  /** Bulk operations over the selected rows; providing them enables the selection column (table mode). */
+  bulkActions?: BulkAction<T>[];
   /** Active structured filter clauses (K-49) — omitted means no column renders a filter trigger. */
   filters?: FilterCriteria[];
   /** Called with the full clause list after a column filter is applied or cleared. */
@@ -105,6 +132,9 @@ export function DataTable<T>({
   data,
   rowKey,
   loading = false,
+  fetching = false,
+  error,
+  onRetry,
   emptyMessage,
   page,
   pageSize,
@@ -115,6 +145,9 @@ export function DataTable<T>({
   onPageSizeChange,
   sort,
   onSortChange,
+  sorts,
+  onRowClick,
+  bulkActions,
   filters,
   onFiltersChange,
   actions,
@@ -151,6 +184,19 @@ export function DataTable<T>({
 
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [activeTab, setActiveTab] = useState<SettingsTab>('columns');
+  const [refreshMs, setRefreshMs] = useState(0);
+
+  // Auto-refresh (K-55 F6): the interval ticks onRefresh; the latest-ref keeps the
+  // subscription stable across the caller's inline closures.
+  const onRefreshRef = useRef(onRefresh);
+  useEffect(() => {
+    onRefreshRef.current = onRefresh;
+  });
+  useEffect(() => {
+    if (!refreshMs) return;
+    const id = setInterval(() => onRefreshRef.current?.(), refreshMs);
+    return () => clearInterval(id);
+  }, [refreshMs]);
 
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -183,7 +229,63 @@ export function DataTable<T>({
     return columns.filter((col) => !hiddenColumns.includes(col.key));
   }, [columns, hiddenColumns]);
 
-  const colCount = visibleColumns.length + (actions ? 1 : 0);
+  const colCount = visibleColumns.length + (actions ? 1 : 0) + (bulkActions?.length ? 1 : 0);
+
+  // ── Row selection (K-55 F4): ephemeral by design — any data change (page/filter/
+  //    sort refetch produces a new array identity) clears it. Shift+Click ranges.
+  const selectionEnabled = !!bulkActions?.length;
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [pendingConfirm, setPendingConfirm] = useState<{ action: BulkAction<T>; rows: T[] } | null>(null);
+  const lastClickedIndex = useRef<number | null>(null);
+  useEffect(() => {
+    setSelected(new Set());
+    lastClickedIndex.current = null;
+  }, [data]);
+
+  const selectedRows = useMemo(
+    () => data.filter((row) => selected.has(rowKey(row))),
+    [data, selected, rowKey],
+  );
+
+  const allSelected = selectionEnabled && data.length > 0 && selectedRows.length === data.length;
+  const someSelected = selectionEnabled && selected.size > 0;
+
+  const toggleRow = (row: T, index: number, shiftKey: boolean) => {
+    // Capture BEFORE enqueueing: React defers the updater to render time, after the
+    // ref below has already been mutated to this click's index.
+    const last = lastClickedIndex.current;
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (shiftKey && last != null) {
+        const [from, to] = [last, index].sort((a, b) => a - b);
+        data.slice(from, to + 1).forEach((r) => next.add(rowKey(r)));
+      } else if (next.has(rowKey(row))) {
+        next.delete(rowKey(row));
+      } else {
+        next.add(rowKey(row));
+      }
+      return next;
+    });
+    lastClickedIndex.current = index;
+  };
+
+  const toggleAll = () => {
+    setSelected(() => (allSelected ? new Set() : new Set(data.map(rowKey))));
+    lastClickedIndex.current = null;
+  };
+
+  const runBulkAction = (action: BulkAction<T>) => {
+    if (action.confirm) {
+      setPendingConfirm({ action, rows: selectedRows });
+      return;
+    }
+    void action.run(selectedRows);
+  };
+
+  const skeletonRows = Math.min(Math.max(pageSize, 3), 8);
+  const showSkeleton = loading && data.length === 0;
+  const showError = !!error && !loading && data.length === 0;
+  const showFetchingBar = fetching && !loading && data.length > 0;
 
   const isCustomizationEnabled = !!storageKey && customizableColumns;
   const hasActivePreferences =
@@ -247,14 +349,21 @@ export function DataTable<T>({
       ) : (
         (() => {
           const active = !!sort && sort.field === col.sortKey;
+          const chainIndex = (sorts ?? []).findIndex((s) => s.field === col.sortKey);
+          const showsIndex = !!sorts && sorts.length > 1 && chainIndex >= 0;
           return (
             <button
               type="button"
-              onClick={() => onSortChange?.(col.sortKey!)}
+              onClick={(e) => onSortChange?.(col.sortKey!, e.shiftKey)}
               className="group inline-flex items-center gap-1 uppercase tracking-wide transition-colors hover:text-main"
               title={col.header}
             >
               {col.header}
+              {showsIndex && (
+                <span className="text-[9px] font-semibold leading-none text-accent" aria-hidden>
+                  {chainIndex + 1}
+                </span>
+              )}
               <span
                 aria-hidden
                 className={cn(
@@ -295,7 +404,16 @@ export function DataTable<T>({
     density === 'compact' ? 'px-3 py-2 text-xs' : density === 'relaxed' ? 'px-5 py-4 text-base' : 'px-4 py-3.5 text-sm';
 
   return (
-    <div className="rounded-lg border border-glass bg-surface shadow-sm shadow-black/[0.03]">
+    <div
+      className="relative rounded-lg border border-glass bg-surface shadow-sm shadow-black/[0.03]"
+      aria-busy={loading || fetching}
+    >
+      {showFetchingBar && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 z-20 h-0.5 animate-pulse rounded-t-lg bg-accent/50"
+        />
+      )}
       {(toolbar || isCustomizationEnabled || tableTools) && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-t-lg border-b border-glass bg-bg/40 px-4 py-2.5">
           <div className="flex flex-1 flex-wrap items-center gap-3">
@@ -551,27 +669,50 @@ export function DataTable<T>({
                           <span className="mb-1 block text-xs font-semibold text-main">
                             {t('table.autoRefresh')}
                           </span>
+                          <button
+                            type="button"
+                            disabled={!onRefresh}
+                            onClick={() => onRefresh?.()}
+                            className={cn(
+                              'flex w-full items-center justify-between rounded-md border border-glass px-2.5 py-1.5 text-xs transition-colors',
+                              onRefresh
+                                ? 'bg-surface text-main hover:border-accent/40 hover:bg-accent/5'
+                                : 'cursor-not-allowed bg-bg/30 text-muted opacity-70',
+                            )}
+                          >
+                            <span>{t('table.refreshNow')}</span>
+                            <LuRefreshCw className="h-3 w-3" aria-hidden />
+                          </button>
                           {(
                             [
                               { interval: 0, label: t('table.refreshOff') },
-                              { interval: 30, label: '30s' },
-                              { interval: 60, label: '1m' },
-                              { interval: 300, label: '5m' },
+                              { interval: 30_000, label: '30s' },
+                              { interval: 60_000, label: '1m' },
+                              { interval: 300_000, label: '5m' },
                             ] as const
                           ).map((item) => (
                             <button
                               key={item.interval}
                               type="button"
                               disabled={!onRefresh}
+                              aria-pressed={refreshMs === item.interval}
+                              onClick={() => {
+                                setRefreshMs(item.interval);
+                                if (item.interval > 0) onRefresh?.();
+                              }}
                               className={cn(
-                                'flex w-full items-center justify-between rounded-md border border-glass px-2.5 py-1.5 text-xs transition-colors',
-                                onRefresh
-                                  ? 'bg-surface text-main hover:border-accent/40 hover:bg-accent/5'
-                                  : 'cursor-not-allowed bg-bg/30 text-muted opacity-70',
+                                'flex w-full items-center justify-between rounded-md border px-2.5 py-1.5 text-xs transition-colors',
+                                !onRefresh
+                                  ? 'cursor-not-allowed border-glass bg-bg/30 text-muted opacity-70'
+                                  : refreshMs === item.interval
+                                    ? 'border-accent/40 bg-accent/10 font-semibold text-accent'
+                                    : 'border-glass bg-surface text-main hover:border-accent/40 hover:bg-accent/5',
                               )}
                             >
                               <span>{item.label}</span>
-                              {!onRefresh && <Badge tone="muted">{t('table.comingSoon')}</Badge>}
+                              {refreshMs === item.interval && (
+                                <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+                              )}
                             </button>
                           ))}
                         </div>
@@ -588,10 +729,10 @@ export function DataTable<T>({
       {/* Render Mode 1: Cards Grid */}
       {activeViewMode === 'card' ? (
         <div className="p-4">
-          {loading ? (
-            <div className="py-16 text-center">
-              <Spinner className="border-muted/40 border-t-accent" />
-            </div>
+          {showSkeleton ? (
+            <SkeletonCards rowCount={skeletonRows} />
+          ) : showError ? (
+            <TableErrorState onRetry={onRetry} />
           ) : data.length === 0 ? (
             <EmptyState message={emptyMessage ?? t('table.noRecords')} icon={emptyIcon} />
           ) : (
@@ -636,10 +777,10 @@ export function DataTable<T>({
       ) : activeViewMode === 'list' ? (
         /* Render Mode 2: Compact List */
         <div className="p-2">
-          {loading ? (
-            <div className="py-16 text-center">
-              <Spinner className="border-muted/40 border-t-accent" />
-            </div>
+          {showSkeleton ? (
+            <SkeletonList rowCount={skeletonRows} />
+          ) : showError ? (
+            <TableErrorState onRetry={onRetry} />
           ) : data.length === 0 ? (
             <EmptyState message={emptyMessage ?? t('table.noRecords')} icon={emptyIcon} />
           ) : (
@@ -683,6 +824,20 @@ export function DataTable<T>({
           <table className="w-full border-collapse">
             <thead>
               <tr className="border-b border-glass bg-bg/40">
+                {selectionEnabled && (
+                  <th className={cn(MICRO_LABEL, 'w-10', thPadding)}>
+                    <input
+                      type="checkbox"
+                      aria-label={t('table.selectAll')}
+                      checked={allSelected}
+                      ref={(el) => {
+                        if (el) el.indeterminate = someSelected && !allSelected;
+                      }}
+                      onChange={toggleAll}
+                      className="accent-accent"
+                    />
+                  </th>
+                )}
                 {visibleColumns.map((col) => (
                   <th
                     key={col.key}
@@ -711,10 +866,12 @@ export function DataTable<T>({
               </tr>
             </thead>
             <tbody>
-              {loading ? (
+              {showSkeleton ? (
+                <SkeletonTableRows colCount={colCount} rowCount={skeletonRows} cell={tdPadding} />
+              ) : showError ? (
                 <tr>
-                  <td colSpan={colCount} className="px-4 py-16 text-center">
-                    <Spinner className="border-muted/40 border-t-accent" />
+                  <td colSpan={colCount}>
+                    <TableErrorState onRetry={onRetry} />
                   </td>
                 </tr>
               ) : data.length === 0 ? (
@@ -724,11 +881,38 @@ export function DataTable<T>({
                   </td>
                 </tr>
               ) : (
-                data.map((row) => (
+                data.map((row, index) => (
                   <tr
                     key={rowKey(row)}
-                    className="border-b border-glass/60 transition-colors last:border-0 hover:bg-accent/[0.04]"
+                    onClick={onRowClick ? () => onRowClick(row) : undefined}
+                    onKeyDown={
+                      onRowClick
+                        ? (e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              onRowClick(row);
+                            }
+                          }
+                        : undefined
+                    }
+                    tabIndex={onRowClick ? 0 : undefined}
+                    className={cn(
+                      'border-b border-glass/60 transition-colors last:border-0 focus:outline-none focus-visible:bg-accent/[0.06]',
+                      onRowClick ? 'cursor-pointer hover:bg-accent/[0.06]' : 'hover:bg-accent/[0.04]',
+                    )}
                   >
+                    {selectionEnabled && (
+                      <td className={tdPadding} onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          aria-label={t('table.selectRow')}
+                          checked={selected.has(rowKey(row))}
+                          onClick={(e) => toggleRow(row, index, e.shiftKey)}
+                          onChange={() => undefined}
+                          className="accent-accent"
+                        />
+                      </td>
+                    )}
                     {visibleColumns.map((col) => (
                       <td key={col.key} className={cn('text-main', tdPadding, col.className)}>
                         {col.render
@@ -736,12 +920,50 @@ export function DataTable<T>({
                           : String((row as Record<string, unknown>)[col.key] ?? '')}
                       </td>
                     ))}
-                    {actions && <td className={cn('text-right', tdPadding)}>{actions(row)}</td>}
+                    {actions && (
+                      <td
+                        className={cn('text-right', tdPadding)}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {actions(row)}
+                      </td>
+                    )}
                   </tr>
                 ))
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {selectionEnabled && someSelected && (
+        <div
+          role="toolbar"
+          aria-label={t('table.bulkActions')}
+          className="flex flex-wrap items-center gap-3 border-t border-glass bg-accent/[0.04] px-4 py-2.5"
+        >
+          <span className="text-xs font-medium text-accent">
+            {t('table.selectedCount', { count: selected.size })}
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {bulkActions!.map((action) => (
+              <Button
+                key={action.key}
+                size="sm"
+                variant={action.danger ? 'danger' : 'secondary'}
+                onClick={() => runBulkAction(action)}
+              >
+                {action.label}
+              </Button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => setSelected(new Set())}
+            className="ml-auto text-xs text-muted transition-colors hover:text-main hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+          >
+            {t('table.clearSelection')}
+          </button>
         </div>
       )}
 
@@ -754,6 +976,88 @@ export function DataTable<T>({
         pageSizeOptions={pageSizeOptions}
         onPageSizeChange={onPageSizeChange}
       />
+
+      {pendingConfirm && (
+        <ConfirmDialog
+          open
+          title={pendingConfirm.action.confirm!.title}
+          message={pendingConfirm.action.confirm!.message}
+          danger={pendingConfirm.action.danger}
+          onConfirm={() => {
+            void pendingConfirm.action.run(pendingConfirm.rows);
+            setPendingConfirm(null);
+          }}
+          onClose={() => setPendingConfirm(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/** First-load error panel (K-55 step 1): retry re-runs the query; precedence error > empty. */
+function TableErrorState({ onRetry }: { onRetry?: () => void }) {
+  const { t } = useT();
+  return (
+    <div role="alert" className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+      <LuTriangleAlert size={40} strokeWidth={1.5} className="text-danger/60" aria-hidden />
+      <div>
+        <p className="text-sm font-medium text-main">{t('table.errorTitle')}</p>
+        <p className="mt-1 text-xs text-muted">{t('table.errorHint')}</p>
+      </div>
+      {onRetry && (
+        <Button size="sm" variant="secondary" onClick={onRetry}>
+          <LuRotateCw className="h-3.5 w-3.5" aria-hidden />
+          {t('table.retry')}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/** Skeleton first-load states (K-55 step 1) — deterministic widths, never Math.random. */
+
+function SkeletonTableRows({ colCount, rowCount, cell }: { colCount: number; rowCount: number; cell: string }) {
+  return (
+    <>
+      {Array.from({ length: rowCount }).map((_, r) => (
+        <tr key={r} className="border-b border-glass/60 last:border-0">
+          {Array.from({ length: colCount }).map((_, c) => (
+            <td key={c} className={cell}>
+              <div className="h-4 animate-pulse rounded bg-main/10" style={{ width: `${56 + ((r * 7 + c * 13) % 40)}%` }} />
+            </td>
+          ))}
+        </tr>
+      ))}
+    </>
+  );
+}
+
+function SkeletonCards({ rowCount }: { rowCount: number }) {
+  return (
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+      {Array.from({ length: rowCount }).map((_, i) => (
+        <div key={i} className="rounded-lg border border-glass bg-surface p-4 shadow-sm">
+          <div className="h-4 w-1/2 animate-pulse rounded bg-main/10" />
+          <div className="mt-4 space-y-2">
+            <div className="h-3 w-full animate-pulse rounded bg-main/5" />
+            <div className="h-3 w-4/5 animate-pulse rounded bg-main/5" />
+            <div className="h-3 w-2/3 animate-pulse rounded bg-main/5" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SkeletonList({ rowCount }: { rowCount: number }) {
+  return (
+    <div className="divide-y divide-glass/60">
+      {Array.from({ length: rowCount }).map((_, i) => (
+        <div key={i} className="flex items-center gap-4 p-3">
+          <div className="h-4 w-40 animate-pulse rounded bg-main/10" />
+          <div className="h-3 flex-1 animate-pulse rounded bg-main/5" />
+        </div>
+      ))}
     </div>
   );
 }

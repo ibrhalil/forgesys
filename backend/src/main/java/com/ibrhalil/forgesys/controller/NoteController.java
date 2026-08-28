@@ -6,6 +6,7 @@ import com.ibrhalil.forgesys.dto.PageResponse;
 import com.ibrhalil.forgesys.dto.SearchRequest;
 import com.ibrhalil.forgesys.service.NoteService;
 import com.ibrhalil.forgesys.web.SortGuard;
+import com.ibrhalil.forgesys.web.filter.SearchQuery;
 import com.ibrhalil.forgesys.web.filter.SearchRequests;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -44,11 +45,18 @@ public class NoteController {
     @PreAuthorize("hasAuthority('notes:note:read')")
     public ResponseEntity<PageResponse<NoteResponse>> list(
             @PageableDefault(sort = "updatedAt", direction = Sort.Direction.DESC) Pageable pageable,
+            SearchQuery searchQuery,
             @RequestParam(required = false) String q,
             @RequestParam(required = false) List<String> qFields,
             @RequestParam(required = false) UUID categoryId,
             @RequestParam(required = false) Boolean pinned,
             @RequestParam(required = false) UUID projectId) {
+        if (searchQuery.present()) {
+            SearchRequest request = searchQuery.request();
+            Pageable sqPageable = SearchRequests.toPageable(request, NoteService.FILTER_FIELDS,
+                    Sort.by(Sort.Direction.DESC, "updatedAt"));
+            return ResponseEntity.ok(PageResponse.of(noteService.search(request, sqPageable)));
+        }
         SortGuard.require(pageable, NoteService.FILTER_FIELDS);
         return ResponseEntity.ok(PageResponse.of(
                 noteService.search(q, qFields, categoryId, pinned, projectId, pageable)));
