@@ -713,3 +713,161 @@ describe('DataTable auto-refresh status chip (K-55)', () => {
     }
   });
 });
+
+describe('DataTable hardening (K-55 Phase 4-6)', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    useLocaleStore.setState({ locale: 'en' });
+  });
+
+  /* ── Phase 4: Sort chain visual & aria alignment ── */
+
+  it('renders multi-sort secondary column direction glyph and aria-sort', () => {
+    renderTable({
+      sorts: [
+        { field: 'name', direction: 'asc' },
+        { field: 'note', direction: 'desc' },
+      ],
+      columns: [
+        { key: 'name', header: 'Name', sortKey: 'name' },
+        { key: 'note', header: 'Note', sortKey: 'note' },
+        { key: 'extra', header: 'Extra', sortKey: 'extra' }, // sortable but not in chain
+      ],
+    });
+
+    const nameTh = screen.getByRole('columnheader', { name: /name/i });
+    const noteTh = screen.getByRole('columnheader', { name: /note/i });
+    const extraTh = screen.getByRole('columnheader', { name: /extra/i });
+
+    expect(nameTh).toHaveAttribute('aria-sort', 'ascending');
+    expect(noteTh).toHaveAttribute('aria-sort', 'descending');
+    expect(extraTh).not.toHaveAttribute('aria-sort');
+
+    // Direction glyphs: Name has ▲, Note has ▼
+    expect(nameTh.textContent).toContain('▲');
+    expect(noteTh.textContent).toContain('▼');
+  });
+
+  /* ── Phase 5: viewMode controlled contract & clamping & errorIcon ── */
+
+  it('controlled viewMode fires onViewModeChange and does not write to localStorage', async () => {
+    const user = userEvent.setup();
+    const onViewModeChange = vi.fn();
+
+    const { rerender } = render(
+      <DataTable<Row>
+        columns={columns}
+        data={rows}
+        rowKey={(r) => r.id}
+        page={0}
+        pageSize={10}
+        totalElements={2}
+        totalPages={1}
+        onPageChange={vi.fn()}
+        viewModes={['table', 'card']}
+        viewMode="table"
+        onViewModeChange={onViewModeChange}
+        storageKey="controlled-test"
+      />,
+    );
+
+    // Initial render in table mode
+    expect(screen.getByRole('table')).toBeInTheDocument();
+
+    // Click card mode button in switcher
+    const cardBtn = screen.getByRole('button', { name: /cards/i });
+    await user.click(cardBtn);
+
+    expect(onViewModeChange).toHaveBeenCalledWith('card');
+    // LocalStorage should NOT have viewMode saved
+    const stored = JSON.parse(window.localStorage.getItem('sf_table_prefs_controlled-test') ?? '{}');
+    expect(stored.viewMode).toBeUndefined();
+
+    // Re-rendering with controlled prop changes mode
+    rerender(
+      <DataTable<Row>
+        columns={columns}
+        data={rows}
+        rowKey={(r) => r.id}
+        page={0}
+        pageSize={10}
+        totalElements={2}
+        totalPages={1}
+        onPageChange={vi.fn()}
+        viewModes={['table', 'card']}
+        viewMode="card"
+        onViewModeChange={onViewModeChange}
+        storageKey="controlled-test"
+      />,
+    );
+
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  });
+
+  it('clamps invalid persisted viewMode to first available viewMode', () => {
+    window.localStorage.setItem(
+      'sf_table_prefs_clamp-test',
+      JSON.stringify({ viewMode: 'card' }),
+    );
+
+    render(
+      <DataTable<Row>
+        columns={columns}
+        data={rows}
+        rowKey={(r) => r.id}
+        page={0}
+        pageSize={10}
+        totalElements={2}
+        totalPages={1}
+        onPageChange={vi.fn()}
+        viewModes={['table', 'list']} // 'card' is not allowed
+        storageKey="clamp-test"
+      />,
+    );
+
+    // Fallback to 'table'
+    expect(screen.getByRole('table')).toBeInTheDocument();
+  });
+
+  it('renders custom errorIcon when error occurs', () => {
+    const { container: iconRef } = render(<LuUsers />);
+    const expectedPath = iconRef.querySelector('path')?.getAttribute('d');
+
+    const { container } = renderTable({
+      data: [],
+      totalElements: 0,
+      totalPages: 0,
+      error: new Error('boom'),
+      errorIcon: LuUsers,
+    });
+
+    const errorAlert = container.querySelector('[role="alert"]');
+    expect(errorAlert).toBeInTheDocument();
+    const errorSvg = errorAlert?.querySelector('svg');
+    expect(errorSvg?.querySelector('path')?.getAttribute('d')).toBe(expectedPath);
+  });
+
+  /* ── Phase 6: cellText helper auto-render ── */
+
+  it('renders empty string for missing column key without error', () => {
+    render(
+      <DataTable<Row>
+        columns={[
+          { key: 'name', header: 'Name' },
+          { key: 'nonexistentField', header: 'Missing' },
+        ]}
+        data={rows}
+        rowKey={(r) => r.id}
+        page={0}
+        pageSize={10}
+        totalElements={2}
+        totalPages={1}
+        onPageChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Ada')).toBeInTheDocument();
+    // Headers exist
+    expect(screen.getByRole('columnheader', { name: /missing/i })).toBeInTheDocument();
+  });
+});
