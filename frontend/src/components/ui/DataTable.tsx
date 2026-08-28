@@ -198,10 +198,11 @@ export function DataTable<T>({
 
 
   const effectiveHiddenColumns = useMemo(() => {
-    const cols = columns.filter((c) => c.hideable !== false);
-    const validHidden = hiddenColumns.filter((k) => cols.some((c) => c.key === k));
-    if (validHidden.length >= cols.length && cols.length > 0) {
-      return cols.slice(0, -1).map((c) => c.key);
+    const hideableCols = columns.filter((c) => c.hideable !== false);
+    const validHidden = hiddenColumns.filter((k) => hideableCols.some((c) => c.key === k));
+    const hasNonHideable = columns.some((c) => c.hideable === false);
+    if (!hasNonHideable && validHidden.length >= hideableCols.length && hideableCols.length > 0) {
+      return hideableCols.slice(0, -1).map((c) => c.key);
     }
     return validHidden;
   }, [columns, hiddenColumns]);
@@ -493,7 +494,7 @@ export function DataTable<T>({
           className="pointer-events-none absolute inset-x-0 top-0 z-20 h-0.5 animate-pulse rounded-t-lg bg-accent/50"
         />
       )}
-      {(toolbar || isCustomizationEnabled || tableTools) && (
+      {(toolbar || isCustomizationEnabled || tableTools || (viewModes && viewModes.length > 1)) && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-t-lg border-b border-glass bg-bg/40 px-4 py-2.5">
           <div className="flex flex-1 flex-wrap items-center gap-3">
             {toolbar}
@@ -643,9 +644,9 @@ export function DataTable<T>({
                           </div>
 
                           <div className="max-h-48 space-y-1 overflow-y-auto pr-1">
-{columns.map((col) => {
-                                const isHideable = col.hideable !== false;
-                                const isChecked = !effectiveHiddenColumns.includes(col.key);
+                            {columns.map((col) => {
+                              const isHideable = col.hideable !== false;
+                              const isChecked = !effectiveHiddenColumns.includes(col.key);
 
                               return (
                                 <label
@@ -977,7 +978,6 @@ export function DataTable<T>({
                   <TableRow
                     key={rowKey(row)}
                     row={row}
-                    rowId={rowKey(row)}
                     index={index}
                     visibleColumns={visibleColumns}
                     actions={actions}
@@ -1042,8 +1042,8 @@ export function DataTable<T>({
           message={pendingConfirm.action.confirm!.message}
           danger={pendingConfirm.action.danger}
           onConfirm={() => {
-            const currentKeys = new Set(data.map(rowKey));
-            const freshRows = pendingConfirm.rows.filter((r) => currentKeys.has(rowKey(r)));
+            const pendingKeys = new Set(pendingConfirm.rows.map(rowKey));
+            const freshRows = data.filter((row) => pendingKeys.has(rowKey(row)));
             if (freshRows.length > 0) {
               void pendingConfirm.action.run(freshRows);
             }
@@ -1099,7 +1099,6 @@ function cellText<T>(row: T, col: Column<T> | undefined): string {
  *  memo comparison is cheap. */
 const TableRow = React.memo(function TableRow<T>({
   row,
-  rowId: _rowId,
   index,
   visibleColumns,
   actions,
@@ -1110,7 +1109,6 @@ const TableRow = React.memo(function TableRow<T>({
   onToggleRow,
 }: {
   row: T;
-  rowId: string;
   index: number;
   visibleColumns: Column<T>[];
   actions?: (row: T) => ReactNode;
@@ -1166,7 +1164,6 @@ const TableRow = React.memo(function TableRow<T>({
   );
 }) as <T>(props: {
   row: T;
-  rowId: string;
   index: number;
   visibleColumns: Column<T>[];
   actions?: (row: T) => ReactNode;
@@ -1176,6 +1173,7 @@ const TableRow = React.memo(function TableRow<T>({
   isSelected: boolean;
   onToggleRow: (row: T, index: number, shiftKey: boolean) => void;
 }) => React.ReactElement;
+
 
 
 /** Skeleton first-load states (K-55 step 1) — deterministic widths, never Math.random. */
