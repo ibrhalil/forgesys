@@ -17,7 +17,6 @@ import com.ibrhalil.forgesys.web.filter.SearchRequests;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -53,12 +52,11 @@ public class UserController {
             SearchQuery searchQuery,
             @RequestParam(required = false) String q,
             @RequestParam(required = false) List<String> qFields) {
+        SortGuard.require(pageable, UserService.FILTER_FIELDS);
         if (searchQuery.present()) {
             SearchRequest request = searchQuery.request();
-            Pageable sqPageable = SearchRequests.toPageable(request, UserService.FILTER_FIELDS, Sort.by("email"));
-            return ResponseEntity.ok(PageResponse.of(userService.search(request, sqPageable)));
+            return ResponseEntity.ok(PageResponse.of(userService.search(request, pageable)));
         }
-        SortGuard.require(pageable, UserService.FILTER_FIELDS);
         return ResponseEntity.ok(PageResponse.of(userService.search(q, qFields, pageable)));
     }
 

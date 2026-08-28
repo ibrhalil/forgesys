@@ -90,7 +90,7 @@ export function GroupDetailPage() {
             title={t('common.roles')}
             loadOptions={(input) =>
               rolesApi
-                .list({ q: input, size: 20, sorts: [{ field: 'name', dir: 'asc' }] })
+                .list({ q: input, size: 20, sorts: [{ field: 'name', direction: 'asc' }] })
                 .then((page) => page.items.map((r) => ({ value: r.id, label: r.name })))
                 .catch(() => [])
             }
@@ -123,7 +123,7 @@ export function GroupDetailPage() {
             title={t('groups.membersSection', { count: group.memberCount })}
             loadOptions={(input) =>
               usersApi
-                .list({ q: input, size: 20, sorts: [{ field: 'email', dir: 'asc' }] })
+                .list({ q: input, size: 20, sorts: [{ field: 'email', direction: 'asc' }] })
                 .then((page) => page.items.map((u) => ({ value: u.id, label: u.email })))
                 .catch(() => [])
             }

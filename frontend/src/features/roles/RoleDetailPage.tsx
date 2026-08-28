@@ -101,7 +101,7 @@ export function RoleDetailPage() {
           title={t('roles.parentSection')}
           loadOptions={(input) =>
             rolesApi
-              .list({ q: input, size: 20, sorts: [{ field: 'name', dir: 'asc' }] })
+              .list({ q: input, size: 20, sorts: [{ field: 'name', direction: 'asc' }] })
               // Parent candidates: every role except this one (no self-inheritance).
               .then((page) =>
                 page.items

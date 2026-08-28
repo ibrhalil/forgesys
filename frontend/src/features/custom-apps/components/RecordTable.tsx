@@ -59,7 +59,7 @@ export function RecordTable({
   const { t } = useT();
   const storageKey = `customApp-records-${customApp.id}`;
   const { page, setPage, pageSize, setPageSize, sort, toggleSort, listParams } =
-    useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' }, storageKey });
+    useListPageState({ defaultSort: { field: 'createdDate', direction: 'desc' }, storageKey });
   // Self-mode server query is disabled while the panel feeds records (override).
   const { data, isLoading, isFetching, error, refetch } = useRecords(override ? undefined : customApp.id, listParams);
   const client = useClientPagination(override?.records ?? [], 10, storageKey);

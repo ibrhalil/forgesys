@@ -20,7 +20,7 @@ export function ProjectNotesPanel({ projectId }: { projectId: string }) {
     projectId,
     page: 0,
     size: 50,
-    sorts: [{ field: 'updatedAt', dir: 'desc' }],
+    sorts: [{ field: 'updatedAt', direction: 'desc' }],
   });
   const canWrite = useAuthStore((s) => s.hasAuthority(PERMISSIONS.NOTE_WRITE));
   const notes = data?.items ?? [];

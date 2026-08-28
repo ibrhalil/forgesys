@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { api, ApiError, searchPost, setSessionExpiredHandler, toQuery } from '../lib/api';
+import { api, ApiError, searchPost, searchQueryGet, searchQueryGetUrl, setSessionExpiredHandler, toQuery } from '../lib/api';
+import { decodeSearchQuery } from '../lib/searchQuery';
+import { flatParams } from './sqUrl';
 
 /**
  * Unit tests for the transparent refresh-on-401 in `lib/api.ts` (K-39 first tests):
@@ -101,7 +103,7 @@ describe('toQuery (K-49 smart-search targeting)', () => {
     const qs = toQuery({
       page: 0,
       size: 20,
-      sorts: [{ field: 'email', dir: 'asc' }],
+      sorts: [{ field: 'email', direction: 'asc' }],
       q: 'ali',
       qFields: ['firstName', 'email'],
     });
@@ -133,6 +135,7 @@ describe('searchPost (filter-engine helper)', () => {
       const body = JSON.parse(String(init?.body));
       expect(body.filters).toEqual([{ field: 'enabled', operator: 'EQ', values: ['true'] }]);
       expect(body.qFields).toEqual(['firstName']);
+      expect(body.sorts).toEqual([{ field: 'email', direction: 'asc' }]);
       return json(
         {
           data: [{ id: 'u1' }],
@@ -146,6 +149,7 @@ describe('searchPost (filter-engine helper)', () => {
     const result = await searchPost<{ id: string }>('/api/v1/users/search', {
       page: 0,
       size: 10,
+      sorts: [{ field: 'email', direction: 'asc' }],
       filters: [{ field: 'enabled', operator: 'EQ', values: ['true'] }],
       q: 'ali',
       qFields: ['firstName'],
@@ -154,5 +158,127 @@ describe('searchPost (filter-engine helper)', () => {
     expect(result.items).toEqual([{ id: 'u1' }]);
     expect(result.totalElements).toBe(1);
     expect(result.page).toBe(0);
+  });
+
+  it('locks the POST body sort wire shape: {field, direction} (the dir/direction bug class)', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      expect(body.sorts).toEqual([{ field: 'path', direction: 'desc' }]);
+      return json({ data: [], meta: undefined }, 200);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await searchPost('/api/v1/request-logs/search', {
+      sorts: [{ field: 'path', direction: 'desc' }],
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('searchQueryGet (K-55 wire: flat paging/sort + sq filter blob)', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    setSessionExpiredHandler(() => {});
+  });
+
+  it('sends paging/sort as flat params and q/filters inside the sq blob', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) => json({ data: [], meta: undefined }, 200));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await searchQueryGet('/api/v1/request-logs', {
+      page: 2,
+      size: 25,
+      sorts: [{ field: 'path', direction: 'desc' }, { field: 'method', direction: 'asc' }],
+      q: 'ali',
+      filters: [{ field: 'status', operator: 'GTE', values: ['400'] }],
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const url = String(fetchMock.mock.calls[0][0]);
+    const [path, qs] = url.split('?');
+    expect(path).toBe('/api/v1/request-logs');
+    const sp = new URLSearchParams(qs);
+    expect(sp.get('page')).toBe('2');
+    expect(sp.get('size')).toBe('25');
+    expect(sp.getAll('sort')).toEqual(['path,desc', 'method,asc']);
+    expect(sp.has('q')).toBe(false); // q rides the blob
+    const sq = decodeSearchQuery(sp.get('sq') ?? '')!;
+    expect(sq.q).toBe('ali');
+    expect(sq.filters).toEqual([{ field: 'status', operator: 'GTE', values: ['400'] }]);
+      });
+
+  it('folds feature-scoped legacy keys into EQ clauses inside the blob', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) => json({ data: [], meta: undefined }, 200));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await searchQueryGet('/api/v1/login-history', { userId: 'u-42', success: true });
+
+    const sp = new URLSearchParams(String(fetchMock.mock.calls[0][0]).split('?')[1]);
+    const sq = decodeSearchQuery(sp.get('sq') ?? '')!;
+    expect(sq.filters).toEqual([
+      { field: 'userId', operator: 'EQ', values: ['u-42'] },
+      { field: 'success', operator: 'EQ', values: ['true'] },
+    ]);
+  });
+
+  it('writes no sq param for a clean query (no q/filters)', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) => json({ data: [], meta: undefined }, 200));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await searchQueryGet('/api/v1/users', { page: 0, size: 20, sorts: [{ field: 'email', direction: 'asc' }] });
+
+    const url = String(fetchMock.mock.calls[0][0]);
+    expect(url).not.toContain('sq=');
+    expect(flatParams(url).getAll('sort')).toEqual(['email,asc']);
+  });
+
+  it('falls back to POST /search through the SAME client when over cap (platform fix)', async () => {
+    const get = vi.fn(async () => {
+      throw new Error('GET must not be called');
+    });
+    const post = vi.fn(async (_path: string, _body?: unknown) => json({ data: [], meta: undefined }, 200));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const platformClient = { get, post } as any;
+
+    await searchQueryGet('/api/v1/platform/companies', {
+      page: 0,
+      size: 20,
+      filters: Array.from({ length: 300 }, (_, i) => ({
+        field: `field${i}`,
+        operator: 'CONTAINS' as const,
+        values: ['x'.repeat(100)],
+      })),
+    }, platformClient);
+
+    expect(get).not.toHaveBeenCalled();
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post.mock.calls[0][0]).toBe('/api/v1/platform/companies/search');
+    expect((post.mock.calls[0][1] as { filters: unknown[] }).filters).toHaveLength(300);
+  });
+
+  it('searchQueryGetUrl returns the combined URL and null when over cap', () => {
+    const url = searchQueryGetUrl('/api/v1/request-logs', {
+      page: 1,
+      size: 10,
+      sorts: [{ field: 'path', direction: 'asc' }],
+      q: 'x',
+    })!;
+    expect(url).toContain('page=1');
+    expect(flatParams(url).getAll('sort')).toEqual(['path,asc']);
+    expect(url).toContain('sq=');
+
+    const over = searchQueryGetUrl('/api/v1/request-logs', {
+      q: 'x',
+      filters: Array.from({ length: 300 }, (_, i) => ({
+        field: `field${i}`,
+        operator: 'CONTAINS' as const,
+        values: ['x'.repeat(100)],
+      })),
+    });
+    expect(over).toBeNull();
   });
 });

@@ -42,7 +42,7 @@ export function NotesPage() {
     setFilters,
     q,
     listParams,
-  } = useListPageState({ defaultSort: { field: 'updatedAt', dir: 'desc' }, storageKey: 'notes', syncUrl: true });
+  } = useListPageState({ defaultSort: { field: 'updatedAt', direction: 'desc' }, storageKey: 'notes', syncUrl: true });
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [pinnedOnly, setPinnedOnly] = useState(false);
 

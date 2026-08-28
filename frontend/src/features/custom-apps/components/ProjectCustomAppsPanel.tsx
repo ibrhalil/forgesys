@@ -24,7 +24,7 @@ export function ProjectCustomAppsPanel({ projectId }: { projectId: string }) {
     projectId,
     page: 0,
     size: 100,
-    sorts: [{ field: 'name', dir: 'asc' }],
+    sorts: [{ field: 'name', direction: 'asc' }],
   });
   const delApp = useDeleteCustomApp();
   const canWrite = useAuthStore((s) => s.hasAuthority(PERMISSIONS.CUSTOM_APP_WRITE));

@@ -11,7 +11,6 @@ import com.ibrhalil.forgesys.web.filter.SearchRequests;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -43,12 +42,11 @@ public class PermissionController {
             SearchQuery searchQuery,
             @RequestParam(required = false) String q,
             @RequestParam(required = false) List<String> qFields) {
+        SortGuard.require(pageable, PermissionService.FILTER_FIELDS);
         if (searchQuery.present()) {
             SearchRequest request = searchQuery.request();
-            Pageable sqPageable = SearchRequests.toPageable(request, PermissionService.FILTER_FIELDS, Sort.by("name"));
-            return ResponseEntity.ok(PageResponse.of(permissionService.search(request, sqPageable)));
+            return ResponseEntity.ok(PageResponse.of(permissionService.search(request, pageable)));
         }
-        SortGuard.require(pageable, PermissionService.FILTER_FIELDS);
         return ResponseEntity.ok(PageResponse.of(permissionService.search(q, qFields, pageable)));
     }
 

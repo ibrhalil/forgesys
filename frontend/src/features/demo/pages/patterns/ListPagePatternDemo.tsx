@@ -32,7 +32,7 @@ function LiveListPage() {
   const [users, setUsers] = useState<MockUser[]>(MOCK_USERS);
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(5);
-  const [sort, setSort] = useState<SortState>({ field: 'email', dir: 'asc' });
+  const [sort, setSort] = useState<SortState>({ field: 'email', direction: 'asc' });
   const [search, setSearch] = useState('');
   const [searchFields, setSearchFields] = useState<string[]>([]);
 
@@ -49,7 +49,7 @@ function LiveListPage() {
   const [formRole, setFormRole] = useState<SelectOption<string> | null>(ROLE_OPTIONS[1]);
 
   const toggleSort = (field: string) => {
-    setSort((s) => (s.field === field ? { field, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { field, dir: 'asc' }));
+    setSort((s) => (s.field === field ? { field, direction: s.direction === 'asc' ? 'desc' : 'asc' } : { field, direction: 'asc' }));
     setPage(0);
   };
 
@@ -66,7 +66,7 @@ function LiveListPage() {
     });
   });
 
-  const sorted = sortBy(filtered, sort.field as keyof MockUser, sort.dir);
+  const sorted = sortBy(filtered, sort.field as keyof MockUser, sort.direction);
   const result = paginate(sorted, page, pageSize);
 
   const handleCreate = () => {

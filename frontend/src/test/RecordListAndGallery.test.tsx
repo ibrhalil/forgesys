@@ -131,14 +131,14 @@ describe('RecordGallery', () => {
     const user = userEvent.setup();
     renderGallery(many);
 
-    expect(screen.getByText('Showing 1–12 of 15')).toBeInTheDocument();
+    expect(screen.getByText('1–12 / 15')).toBeInTheDocument();
     // Fixed page size — the rows-per-page selector must not render.
     expect(screen.queryByRole('group', { name: 'Rows per page' })).not.toBeInTheDocument();
     expect(screen.queryByText('Rows per page')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Next' }));
     expect(await screen.findByText('Order 13')).toBeInTheDocument();
-    expect(screen.getByText('Showing 13–15 of 15')).toBeInTheDocument();
-    expect(screen.getByText('Page 2 / 2')).toBeInTheDocument();
+    expect(screen.getByText('13–15 / 15')).toBeInTheDocument();
+    expect(screen.getByText('2 / 2')).toBeInTheDocument();
   });
 });

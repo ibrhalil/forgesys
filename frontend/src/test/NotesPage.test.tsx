@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { NotesPage } from '../features/notes/NotesPage';
 import { useAuthStore } from '../store/authStore';
 import { useLocaleStore } from '../store/localeStore';
-import { decodedSq } from './sqUrl';
+import { decodedSq, flatParams } from './sqUrl';
 
 const NOTES_PAYLOAD = {
   data: [
@@ -42,9 +42,11 @@ const CATEGORIES_PAYLOAD = {
 
 let urls: string[];
 
-/** Decoded sq states of the recorded /notes calls (K-55 wire-flip). */
-function noteStates() {
-  return urls.filter((u) => u.startsWith('/api/v1/notes?')).map(decodedSq);
+/** Recorded /notes calls as {sq, page} views — filters from the blob, paging flat (K-55). */
+function noteViews() {
+  return urls
+    .filter((u) => u.startsWith('/api/v1/notes?'))
+    .map((u) => ({ sq: decodedSq(u), page: Number(flatParams(u).get('page') ?? 0), sorts: flatParams(u).getAll('sort') }));
 }
 
 function renderPage() {
@@ -94,9 +96,9 @@ describe('NotesPage', () => {
     await screen.findByText('API design');
 
     await waitFor(() => {
-      const states = noteStates();
-      expect(states.some((s) => s?.sorts[0]?.field === 'updatedAt' && s.sorts[0].dir === 'desc')).toBe(true);
-      expect(states.some((s) => s?.sorts?.some((x) => x.field === 'updatedDate'))).toBe(false);
+      const views = noteViews();
+      expect(views.some((v) => v.sorts.includes('updatedAt,desc'))).toBe(true);
+      expect(views.some((v) => v.sorts.some((s) => s.startsWith('updatedDate')))).toBe(false);
     });
   });
 
@@ -109,7 +111,7 @@ describe('NotesPage', () => {
     await user.click(await screen.findByRole('option', { name: 'Work' }));
 
     await waitFor(() => {
-      expect(noteStates().some((s) => s?.filters?.some(
+      expect(noteViews().some((v) => v.sq?.filters?.some(
         (f) => f.field === 'categoryId' && f.operator === 'EQ' && f.values.includes('cat-1')))).toBe(true);
     });
   });
@@ -122,7 +124,7 @@ describe('NotesPage', () => {
     await user.click(screen.getByRole('button', { name: /Pinned/ }));
 
     await waitFor(() => {
-      expect(noteStates().some((s) => s?.filters?.some(
+      expect(noteViews().some((v) => v.sq?.filters?.some(
         (f) => f.field === 'pinned' && f.operator === 'EQ' && f.values.includes('true')))).toBe(true);
     });
   });
@@ -156,13 +158,13 @@ describe('NotesPage', () => {
     await screen.findByText('API design');
 
     await user.click(screen.getByRole('button', { name: 'Next' }));
-    await waitFor(() => expect(noteStates().some((s) => s?.page === 1)).toBe(true));
+    await waitFor(() => expect(noteViews().some((v) => v.page === 1)).toBe(true));
 
     await user.click(screen.getByText('All categories'));
     await user.click(await screen.findByRole('option', { name: 'Work' }));
 
     await waitFor(() => {
-      expect(noteStates().some((s) => s?.page === 0 && s?.filters?.some(
+      expect(noteViews().some((v) => v.page === 0 && v.sq?.filters?.some(
         (f) => f.field === 'categoryId' && f.values.includes('cat-1')))).toBe(true);
     });
   });
@@ -174,12 +176,12 @@ describe('NotesPage', () => {
     await screen.findByText('API design');
 
     await user.click(screen.getByRole('button', { name: 'Next' }));
-    await waitFor(() => expect(noteStates().some((s) => s?.page === 1)).toBe(true));
+    await waitFor(() => expect(noteViews().some((v) => v.page === 1)).toBe(true));
 
     await user.click(screen.getByRole('button', { name: /Pinned/ }));
 
     await waitFor(() => {
-      expect(noteStates().some((s) => s?.page === 0 && s?.filters?.some(
+      expect(noteViews().some((v) => v.page === 0 && v.sq?.filters?.some(
         (f) => f.field === 'pinned' && f.values.includes('true')))).toBe(true);
     });
   });

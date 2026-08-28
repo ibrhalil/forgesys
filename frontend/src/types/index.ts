@@ -41,10 +41,10 @@ export interface ApiErrorResponse {
 
 export type SortDir = 'asc' | 'desc';
 
-/** Single-column sort state for list pages (backend `sort=field,dir`). */
+/** Single-column sort state for list pages (`direction` — the POST /search body field name; flat params serialize as `sort=field,dir`). */
 export interface SortState {
   field: string;
-  dir: SortDir;
+  direction: SortDir;
 }
 
 export interface PageParams {
@@ -95,6 +95,13 @@ export interface SearchRequestBody {
   q?: string;
   qFields?: string[];
 }
+
+/**
+ * The FULL view state of a list page (K-55): what a saved view or a shared link
+ * captures — paging + sorting (flat URL params) plus the filter blob
+ * (`SearchQueryState`, the `sq` param). `v:1` versions the snapshot shape.
+ */
+export type ListQuerySnapshot = SearchRequestBody & { v: 1 };
 
 /** GET list params + structured filter clauses — the `searchOrList` entry-point params. */
 export type SearchOrListParams = PageParams & Pick<SearchRequestBody, 'filters'>;

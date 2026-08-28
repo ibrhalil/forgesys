@@ -25,6 +25,7 @@ import { Button } from './Button';
 import { ColumnFilterButton, type ColumnFilterSpec } from './ColumnFilterButton';
 import { ConfirmDialog } from './ConfirmDialog';
 import { EmptyState } from './EmptyState';
+import { FilterChips, RefreshStatusChip } from './FilterChips';
 import { TablePagination } from './TablePagination';
 import { MICRO_LABEL } from './styles';
 
@@ -185,18 +186,40 @@ export function DataTable<T>({
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [activeTab, setActiveTab] = useState<SettingsTab>('columns');
   const [refreshMs, setRefreshMs] = useState(0);
+  const [remainingMs, setRemainingMs] = useState(0);
 
-  // Auto-refresh (K-55 F6): the interval ticks onRefresh; the latest-ref keeps the
-  // subscription stable across the caller's inline closures.
+  // Auto-refresh (K-55 F6): a 1s countdown owns the interval — reaching zero fires
+  // onRefresh and refills. The remaining truth lives in a ref so the chip's manual
+  // trigger can reset the SAME countdown the interval uses; `remainingMs` state only
+  // mirrors it for display. The latest-ref keeps the subscription stable across the
+  // caller's inline closures; side effects stay out of state updaters (StrictMode-safe).
   const onRefreshRef = useRef(onRefresh);
+  const remainingRef = useRef(0);
   useEffect(() => {
     onRefreshRef.current = onRefresh;
   });
   useEffect(() => {
     if (!refreshMs) return;
-    const id = setInterval(() => onRefreshRef.current?.(), refreshMs);
+    remainingRef.current = refreshMs;
+    setRemainingMs(refreshMs);
+    const id = setInterval(() => {
+      remainingRef.current -= 1000;
+      if (remainingRef.current <= 0) {
+        remainingRef.current = refreshMs;
+        onRefreshRef.current?.();
+      }
+      setRemainingMs(remainingRef.current);
+    }, 1000);
     return () => clearInterval(id);
   }, [refreshMs]);
+
+  /** Immediate refresh with the countdown refilled — the chip click and the settings "refresh now" share it. */
+  const triggerRefreshNow = () => {
+    if (!onRefresh) return;
+    remainingRef.current = refreshMs;
+    setRemainingMs(refreshMs);
+    onRefreshRef.current?.();
+  };
 
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -371,7 +394,7 @@ export function DataTable<T>({
                   active ? 'text-accent' : 'text-muted/50 group-hover:text-muted',
                 )}
               >
-                {active && sort ? (sort.dir === 'asc' ? '▲' : '▼') : '▾'}
+                {active && sort ? (sort.direction === 'asc' ? '▲' : '▼') : '▾'}
               </span>
             </button>
           );
@@ -379,14 +402,14 @@ export function DataTable<T>({
       );
     if (!columnFilterEnabled(col)) return label;
     return (
-      <span className="inline-flex items-center gap-1.5">
-        {label}
+      <span className="inline-flex items-center gap-1">
         <ColumnFilterButton
           spec={col.filter!}
           header={col.header}
           active={activeFilterFor(col)}
           onChange={(criteria) => handleFilterChange(col, criteria)}
         />
+        {label}
       </span>
     );
   };
@@ -395,7 +418,7 @@ export function DataTable<T>({
     if (!sortable(col) || !sort || sort.field !== col.sortKey) {
       return undefined;
     }
-    return sort.dir === 'asc' ? 'ascending' : 'descending';
+    return sort.direction === 'asc' ? 'ascending' : 'descending';
   };
 
   const thPadding =
@@ -672,7 +695,7 @@ export function DataTable<T>({
                           <button
                             type="button"
                             disabled={!onRefresh}
-                            onClick={() => onRefresh?.()}
+                            onClick={triggerRefreshNow}
                             className={cn(
                               'flex w-full items-center justify-between rounded-md border border-glass px-2.5 py-1.5 text-xs transition-colors',
                               onRefresh
@@ -723,6 +746,19 @@ export function DataTable<T>({
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Active-query chips row (K-55): removable filter chips + the auto-refresh
+          status chip — renders while EITHER is live (filter-less refresh still shows). */}
+      {((filters !== undefined && onFiltersChange && filters.length > 0) || refreshMs > 0) && (
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-glass px-4 py-2">
+          {filters !== undefined && onFiltersChange && filters.length > 0 && (
+            <FilterChips columns={columns} filters={filters} onFiltersChange={onFiltersChange} />
+          )}
+          {refreshMs > 0 && (
+            <RefreshStatusChip intervalMs={refreshMs} remainingMs={remainingMs} onRefreshNow={triggerRefreshNow} />
+          )}
         </div>
       )}
 

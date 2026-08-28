@@ -7,7 +7,7 @@ import { RequestLogsPage } from '../features/audit/RequestLogsPage';
 import { useAuthStore } from '../store/authStore';
 import { useLocaleStore } from '../store/localeStore';
 import { encodeSearchQuery } from '../lib/searchQuery';
-import { decodedSq } from './sqUrl';
+import { decodedSq, flatParams } from './sqUrl';
 
 /** GET /api/v1/request-logs PageResponse payload. */
 const REQUEST_LOGS_PAYLOAD = {
@@ -87,11 +87,10 @@ describe('RequestLogsPage', () => {
     expect(screen.getByText('340 ms')).toBeInTheDocument();
 
     // Regression lock: the sort must be the entity attribute (SortGuard whitelist),
-    // not the DTO wire name createdAt — asserted inside the K-55 sq blob.
+    // not the DTO wire name createdAt — asserted in the flat sort param.
     await waitFor(() => {
-      const states = urls.map(decodedSq);
-      expect(states.some((s) => s?.sorts[0]?.field === 'createdDate' && s.sorts[0].dir === 'desc')).toBe(true);
-      expect(states.some((s) => s?.sorts?.some((x) => x.field === 'createdAt'))).toBe(false);
+      expect(urls.some((u) => flatParams(u).getAll('sort').includes('createdDate,desc'))).toBe(true);
+      expect(urls.some((u) => flatParams(u).getAll('sort').some((s) => s.startsWith('createdAt')))).toBe(false);
     });
   });
 
@@ -104,29 +103,23 @@ describe('RequestLogsPage', () => {
 
     // toggleSort switches to the new field ascending and resets the page.
     await waitFor(() => {
-      expect(urls.map(decodedSq).some((s) => s?.sorts[0]?.field === 'path' && s.sorts[0].dir === 'asc')).toBe(true);
+      expect(urls.some((u) => flatParams(u).getAll('sort').includes('path,asc'))).toBe(true);
     });
   });
 
-  it('hydrates the query from the URL sq param (K-55 shareable view link)', async () => {
-    const blob = encodeSearchQuery({
-      v: 1,
-      page: 0,
-      size: 10,
-      sorts: [{ field: 'path', dir: 'asc' }],
-      q: 'admin',
-    })!;
-    window.history.replaceState(null, '', `/request-logs?sq=${blob}`);
+  it('hydrates the query from the URL (flat sort + sq q) (K-55 shareable view link)', async () => {
+    const blob = encodeSearchQuery({ v: 1, q: 'admin' })!;
+    window.history.replaceState(null, '', `/request-logs?page=0&size=10&sort=path,asc&sq=${blob}`);
     renderPage();
 
     expect(await screen.findByText('/api/v1/users')).toBeInTheDocument();
     await waitFor(() => {
-      expect(urls.map(decodedSq).some((s) => s?.q === 'admin'
-        && s?.sorts[0]?.field === 'path' && s.sorts[0].dir === 'asc')).toBe(true);
+      expect(urls.some((u) => flatParams(u).getAll('sort').includes('path,asc')
+        && decodedSq(u)?.q === 'admin')).toBe(true);
     });
   });
 
-  it('writes the sq param into the URL on a committed change', async () => {
+  it('writes the flat sort param into the URL on a committed change', async () => {
     const user = userEvent.setup();
     renderPage();
     await screen.findByText('/api/v1/users');
@@ -134,7 +127,7 @@ describe('RequestLogsPage', () => {
     await user.click(screen.getByRole('button', { name: 'Path' }));
 
     await waitFor(() => {
-      expect(window.location.search).toContain('sq=');
+      expect(new URLSearchParams(window.location.search).getAll('sort')).toContain('path,asc');
     });
   });
 
@@ -217,7 +210,8 @@ describe('RequestLogsPage', () => {
     await user.click(screen.getByRole('button', { name: /export csv/i }));
 
     await waitFor(() => {
-      expect(urls2.some((u) => u.startsWith('/api/v1/request-logs/export?sq='))).toBe(true);
+      expect(urls2.some((u) => u.startsWith('/api/v1/request-logs/export?')
+        && flatParams(u).getAll('sort').includes('createdDate,desc'))).toBe(true);
     });
     expect(createObjectURL).toHaveBeenCalledTimes(1);
     expect(revokeObjectURL).toHaveBeenCalledTimes(1);
@@ -242,7 +236,7 @@ describe('RequestLogsPage', () => {
     await user.click(screen.getByRole('button', { name: 'Path' }));
 
     await waitFor(() => {
-      expect(urls.map(decodedSq).some((s) => s?.sorts[0]?.field === 'path' && s.sorts[0].dir === 'asc')).toBe(true);
+      expect(urls.some((u) => flatParams(u).getAll('sort').includes('path,asc'))).toBe(true);
     });
     // Old rows stay on screen and the fetching indicator is up while the new query pends.
     expect(screen.getByText('/api/v1/users')).toBeInTheDocument();

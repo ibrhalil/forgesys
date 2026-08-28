@@ -12,7 +12,7 @@ export function CustomAppPicker(props: ReferencePickerProps) {
       {...props}
       search={(input) =>
         customAppsApi
-          .list({ q: input, size: 20, sorts: [{ field: 'name', dir: 'asc' }] })
+          .list({ q: input, size: 20, sorts: [{ field: 'name', direction: 'asc' }] })
           .then((page) => page.items.map((a) => ({ value: a.id, label: a.name })))
           .catch(() => [])
       }

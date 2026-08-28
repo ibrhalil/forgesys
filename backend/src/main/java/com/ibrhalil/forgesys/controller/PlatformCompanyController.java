@@ -16,7 +16,6 @@ import com.ibrhalil.forgesys.web.filter.SearchRequests;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -60,12 +59,11 @@ public class PlatformCompanyController {
             SearchQuery searchQuery,
             @RequestParam(required = false) String q,
             @RequestParam(required = false) List<String> qFields) {
+        SortGuard.require(pageable, PlatformCompanyService.FILTER_FIELDS);
         if (searchQuery.present()) {
             SearchRequest request = searchQuery.request();
-            Pageable sqPageable = SearchRequests.toPageable(request, PlatformCompanyService.FILTER_FIELDS, Sort.by("name"));
-            return ResponseEntity.ok(PageResponse.of(platformCompanyService.search(request, sqPageable)));
+            return ResponseEntity.ok(PageResponse.of(platformCompanyService.search(request, pageable)));
         }
-        SortGuard.require(pageable, PlatformCompanyService.FILTER_FIELDS);
         return ResponseEntity.ok(PageResponse.of(platformCompanyService.search(q, qFields, pageable)));
     }
 

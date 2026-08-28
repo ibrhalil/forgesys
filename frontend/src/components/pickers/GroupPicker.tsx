@@ -8,7 +8,7 @@ export function GroupPicker(props: ReferencePickerProps) {
       {...props}
       search={(input) =>
         groupsApi
-          .list({ q: input, size: 20, sorts: [{ field: 'name', dir: 'asc' }] })
+          .list({ q: input, size: 20, sorts: [{ field: 'name', direction: 'asc' }] })
           .then((page) => page.items.map((g) => ({ value: g.id, label: g.name })))
           .catch(() => [])
       }

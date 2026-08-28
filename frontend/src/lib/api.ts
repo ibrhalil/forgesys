@@ -6,8 +6,8 @@ import type {
 } from '../types';
 import { useTenantStore } from '../store/tenantStore';
 import { ApiError, createApiClient } from './apiClient';
-import { encodeSearchQuery, SEARCH_QUERY_PARAM, type SearchQueryState } from './searchQuery';
-import type { FilterCriteria, SortState } from '../types';
+import { encodeSearchQuery, SEARCH_QUERY_PARAM } from './searchQuery';
+import type { FilterCriteria } from '../types';
 
 export { ApiError };
 
@@ -77,7 +77,7 @@ export function toQuery(params: PageParams = {}): string {
   if (params.page != null) sp.set('page', String(params.page));
   if (params.size != null) sp.set('size', String(params.size));
   if (params.sort) sp.set('sort', params.sort);
-  (params.sorts ?? []).forEach((s) => sp.append('sort', `${s.field},${s.dir}`));
+  (params.sorts ?? []).forEach((s) => sp.append('sort', `${s.field},${s.direction}`));
   if (params.q) sp.set('q', params.q);
   (params.qFields ?? []).forEach((f) => sp.append('qFields', f));
   const qs = sp.toString();
@@ -114,16 +114,17 @@ export function searchPost<T>(path: string, body: SearchRequestBody): Promise<Pa
   return api.post<PageResponse<T>>(path, body).then(normalizePage);
 }
 
-/** K-55 wire-flip params: the K-49 list params plus feature-scoped legacy keys. */
+/** K-55 wire params: the K-49 list params plus feature-scoped legacy keys. */
 export type SearchQueryGetParams = PageParams & Pick<SearchRequestBody, 'filters'> & Record<string, unknown>;
 
 /** Minimal client surface `searchQueryGet` needs — the platform client satisfies it too. */
 interface SqClient {
   get: <R>(path: string) => Promise<R>;
+  post: <R>(path: string, body?: unknown) => Promise<R>;
 }
 
-/** Prepared form of a list query: the encoded `sq` blob (null over cap) + the fallback body. */
-function prepareSearchQuery(params: object): { blob: string | null; body: SearchRequestBody } {
+/** Prepared form of a list query: the request URL (flat paging/sort + `sq` blob) and the fallback body. */
+function prepareSearchQuery(path: string, params: object): { url: string; body: SearchRequestBody; overCap: boolean } {
   // Callers keep their precisely-typed params (scoped legacy keys included); the
   // loose cast only feeds the generic fold below.
   const { page, size, sort, sorts, q, qFields, filters, ...scoped } = params as SearchQueryGetParams;
@@ -133,43 +134,52 @@ function prepareSearchQuery(params: object): { blob: string | null; body: Search
       value === undefined || value === null || value === '' ? [] : [{ field, operator: 'EQ' as const, values: [String(value)] }],
     ),
   ];
-  const state: SearchQueryState = {
-    v: 1,
-    page: page ?? 0,
-    size: size ?? 20,
-    sorts: sorts ?? (sort ? parseRawSort(sort) : []),
-    q: q || undefined,
-    qFields: qFields?.length ? qFields : undefined,
-    filters: clauses.length ? clauses : undefined,
-  };
-  return {
-    blob: encodeSearchQuery(state),
-    body: { page, size, sorts, q, qFields, filters: clauses.length ? clauses : undefined },
-  };
+  const body: SearchRequestBody = { page, size, sorts, q, qFields, filters: clauses.length ? clauses : undefined };
+
+  // Paging/sorting stay flat (Spring-native `sort=field,dir`); only the filter part
+  // rides the base64url `sq` blob — and only while there is one (clean URLs otherwise).
+  const sp = new URLSearchParams();
+  if (page != null) sp.set('page', String(page));
+  if (size != null) sp.set('size', String(size));
+  if (sort) sp.set('sort', sort);
+  (sorts ?? []).forEach((s) => sp.append('sort', `${s.field},${s.direction}`));
+  const flat = sp.toString();
+  let url = `${path}${flat ? `?${flat}` : ''}`;
+  let overCap = false;
+  if (q || qFields?.length || clauses.length) {
+    const blob = encodeSearchQuery({
+      v: 1,
+      q: q || undefined,
+      qFields: qFields?.length ? qFields : undefined,
+      filters: clauses.length ? clauses : undefined,
+    });
+    if (blob === null) {
+      overCap = true; // backend param cap would reject it — fall back to POST
+    } else {
+      url += `${flat ? '&' : '?'}${SEARCH_QUERY_PARAM}=${blob}`;
+    }
+  }
+  return { url, body, overCap };
 }
 
 /**
- * Single GET entry for server-side lists (K-55): the whole query state (paging +
- * multi-sort + `q` + filters) travels as one base64url `sq` param the backend decodes
- * into the same engine `POST /search` uses. Scoped legacy keys fold into EQ clauses
- * first. Over-cap state gracefully falls back to `POST /{resource}/search` — the
- * backend's param length cap would reject it.
+ * Single GET entry for server-side lists (K-55): paging + multi-sort travel as flat
+ * params, the filter part (q/qFields/filters + feature-scoped legacy keys folded
+ * into EQ clauses) as one base64url `sq` param the backend decodes into the same
+ * engine `POST /search` uses. Over-cap filter state gracefully falls back to
+ * `POST /{resource}/search` through the SAME client (platform calls keep their
+ * session/headers).
  */
 export function searchQueryGet<T>(path: string, params: object = {}, client: SqClient = api): Promise<PageResult<T>> {
-  const { blob, body } = prepareSearchQuery(params);
-  if (blob === null) {
-    return searchPost<T>(`${path}/search`, body);
+  const { url, body, overCap } = prepareSearchQuery(path, params);
+  if (overCap) {
+    return client.post<PageResponse<T>>(`${path}/search`, body).then(normalizePage);
   }
-  return client.get<PageResponse<T>>(`${path}?${SEARCH_QUERY_PARAM}=${blob}`).then(normalizePage);
+  return client.get<PageResponse<T>>(url).then(normalizePage);
 }
 
-/** The `?sq=` URL for an export-style GET over the same query (null when over cap). */
+/** The GET URL for an export-style download over the same query (null when over cap). */
 export function searchQueryGetUrl(path: string, params: object): string | null {
-  const { blob } = prepareSearchQuery(params);
-  return blob === null ? null : `${path}?${SEARCH_QUERY_PARAM}=${blob}`;
-}
-
-function parseRawSort(raw: string): SortState[] {
-  const [field, dir] = raw.split(',');
-  return [{ field, dir: dir === 'desc' ? 'desc' : 'asc' }];
+  const { url, overCap } = prepareSearchQuery(path, params);
+  return overCap ? null : url;
 }

@@ -142,6 +142,7 @@ export function SearchInput({
         type="search"
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        maxLength={200} // mirrors the backend SearchRequest q cap (@Size(max=200))
         placeholder={
           placeholder ??
           (hasActiveFilter

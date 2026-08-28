@@ -50,14 +50,12 @@ public class AuditController {
             @RequestParam(required = false) List<String> qFields,
             @RequestParam(required = false) String action,
             @RequestParam(required = false) UUID actorId) {
+        SortGuard.require(pageable, AuditQueryService.AUDIT_LOG_FIELDS);
         if (searchQuery.present()) {
             SearchRequest request = searchQuery.request();
-            Pageable sqPageable = SearchRequests.toPageable(request, AuditQueryService.AUDIT_LOG_FIELDS,
-                    Sort.by(Sort.Direction.DESC, "createdDate"));
             return ResponseEntity.ok(PageResponse.of(
-                    auditQueryService.searchAuditLogs(sqPageable, request.q(), request.qFields(), request.filters())));
+                    auditQueryService.searchAuditLogs(pageable, request.q(), request.qFields(), request.filters())));
         }
-        SortGuard.require(pageable, AuditQueryService.AUDIT_LOG_FIELDS);
         return ResponseEntity.ok(PageResponse.of(
                 auditQueryService.findAllAuditLogs(pageable, q, qFields, action, actorId)));
     }
@@ -80,14 +78,12 @@ public class AuditController {
             @RequestParam(required = false) List<String> qFields,
             @RequestParam(required = false) UUID userId,
             @RequestParam(required = false) Boolean success) {
+        SortGuard.require(pageable, AuditQueryService.LOGIN_HISTORY_FIELDS);
         if (searchQuery.present()) {
             SearchRequest request = searchQuery.request();
-            Pageable sqPageable = SearchRequests.toPageable(request, AuditQueryService.LOGIN_HISTORY_FIELDS,
-                    Sort.by(Sort.Direction.DESC, "createdDate"));
             return ResponseEntity.ok(PageResponse.of(
-                    auditQueryService.searchLoginHistory(sqPageable, request.q(), request.qFields(), request.filters())));
+                    auditQueryService.searchLoginHistory(pageable, request.q(), request.qFields(), request.filters())));
         }
-        SortGuard.require(pageable, AuditQueryService.LOGIN_HISTORY_FIELDS);
         return ResponseEntity.ok(PageResponse.of(
                 auditQueryService.findAllLoginHistory(pageable, q, qFields, userId, success)));
     }
@@ -113,14 +109,12 @@ public class AuditController {
             @RequestParam(required = false) Integer status,
             @RequestParam(required = false) UUID userId,
             @RequestParam(required = false) String username) {
+        SortGuard.require(pageable, RequestLogQueryService.REQUEST_LOG_FIELDS);
         if (searchQuery.present()) {
             SearchRequest request = searchQuery.request();
-            Pageable sqPageable = SearchRequests.toPageable(request, RequestLogQueryService.REQUEST_LOG_FIELDS,
-                    Sort.by(Sort.Direction.DESC, "createdDate"));
             return ResponseEntity.ok(PageResponse.of(
-                    requestLogQueryService.search(sqPageable, request.q(), request.qFields(), request.filters())));
+                    requestLogQueryService.search(pageable, request.q(), request.qFields(), request.filters())));
         }
-        SortGuard.require(pageable, RequestLogQueryService.REQUEST_LOG_FIELDS);
         return ResponseEntity.ok(PageResponse.of(
                 requestLogQueryService.findAll(pageable, q, qFields, traceId, method, status, userId, username)));
     }
@@ -152,14 +146,12 @@ public class AuditController {
             @RequestParam(required = false) Integer status,
             @RequestParam(required = false) UUID userId,
             @RequestParam(required = false) String username) {
+        SortGuard.require(pageable, RequestLogQueryService.REQUEST_LOG_FIELDS);
         String csv;
         if (searchQuery.present()) {
             SearchRequest request = searchQuery.request();
-            Pageable sqPageable = SearchRequests.toPageable(request, RequestLogQueryService.REQUEST_LOG_FIELDS,
-                    Sort.by(Sort.Direction.DESC, "createdDate"));
-            csv = requestLogQueryService.exportCsv(sqPageable, request.q(), request.qFields(), request.filters());
+            csv = requestLogQueryService.exportCsv(pageable, request.q(), request.qFields(), request.filters());
         } else {
-            SortGuard.require(pageable, RequestLogQueryService.REQUEST_LOG_FIELDS);
             csv = requestLogQueryService.exportCsvScoped(pageable, q, qFields, traceId, method, status, userId, username);
         }
         byte[] body = ('\uFEFF' + csv).getBytes(java.nio.charset.StandardCharsets.UTF_8);

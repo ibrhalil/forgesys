@@ -15,12 +15,14 @@ import java.util.Base64;
 
 /**
  * Binds {@link SearchQuery} parameters from the {@code sq} request param (K-55):
- * URL-safe base64 (unpadded) → UTF-8 JSON → {@link SearchRequest}. The payload shape
- * mirrors the POST /search body; the frontend's versioned blob carries an extra
- * {@code v} field, tolerated via {@code @JsonIgnoreProperties} on the DTO. An absent
- * param resolves {@link SearchQuery#empty()} — the endpoint's legacy flat-param path
- * stays intact. Malformed or oversized input fails fast with
- * {@link SearchQueryDecodingException} (400 {@code validation_error}).
+ * URL-safe base64 (unpadded) → UTF-8 JSON → {@link SearchRequest}. The payload is
+ * the FILTER part of the query (q/qFields/filters — mirroring the POST /search
+ * body); paging/sorting stay flat and never ride the blob. The frontend's
+ * versioned blob carries an extra {@code v} field, and legacy all-in-one blobs
+ * may still carry page/size/sorts — both tolerated via lenient decoding (unknown
+ * fields ignored). An absent param resolves {@link SearchQuery#empty()} — the
+ * endpoint's legacy flat-param path stays intact. Malformed or oversized input
+ * fails fast with {@link SearchQueryDecodingException} (400 {@code validation_error}).
  */
 @Component
 public class SearchQueryArgumentResolver implements HandlerMethodArgumentResolver {

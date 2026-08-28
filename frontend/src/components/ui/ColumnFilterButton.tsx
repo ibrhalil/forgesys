@@ -262,7 +262,7 @@ export function ColumnFilterButton({ spec, header, active, onChange }: ColumnFil
         aria-haspopup="dialog"
         className={cn(
           'inline-flex h-4 w-4 items-center justify-center rounded text-muted/60 transition-colors hover:text-main focus:outline-none focus-visible:ring-1 focus-visible:ring-accent',
-          active && 'text-accent',
+          active && 'bg-accent/15 text-accent',
           open && 'text-main',
         )}
       >

@@ -13,7 +13,6 @@ import com.ibrhalil.forgesys.web.filter.SearchRequests;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -47,12 +46,11 @@ public class ProjectController {
             @RequestParam(required = false) List<String> qFields,
             @RequestParam(required = false) UUID parentProjectId,
             @RequestParam(required = false) ProjectType type) {
+        SortGuard.require(pageable, ProjectService.FILTER_FIELDS);
         if (searchQuery.present()) {
             SearchRequest request = searchQuery.request();
-            Pageable sqPageable = SearchRequests.toPageable(request, ProjectService.FILTER_FIELDS, Sort.by("name"));
-            return ResponseEntity.ok(PageResponse.of(projectService.search(request, sqPageable)));
+            return ResponseEntity.ok(PageResponse.of(projectService.search(request, pageable)));
         }
-        SortGuard.require(pageable, ProjectService.FILTER_FIELDS);
         return ResponseEntity.ok(PageResponse.of(
                 projectService.search(q, qFields, parentProjectId, type, pageable)));
     }

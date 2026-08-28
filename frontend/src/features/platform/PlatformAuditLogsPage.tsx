@@ -19,7 +19,7 @@ export function PlatformAuditLogsPage() {
   const {
     page, setPage, pageSize, setPageSize, sort, toggleSort,
     search, setSearch, searchFields, setSearchFields, listParams,
-  } = useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' }, storageKey: 'platform-audit', syncUrl: true });
+  } = useListPageState({ defaultSort: { field: 'createdDate', direction: 'desc' }, storageKey: 'platform-audit', syncUrl: true });
   const { data, isLoading, isFetching, error, refetch } = usePlatformAuditLogs(listParams);
 
   // Aligned with the backend's searchable registrations

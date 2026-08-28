@@ -8,7 +8,7 @@ export function RolePicker(props: ReferencePickerProps) {
       {...props}
       search={(input) =>
         rolesApi
-          .list({ q: input, size: 20, sorts: [{ field: 'name', dir: 'asc' }] })
+          .list({ q: input, size: 20, sorts: [{ field: 'name', direction: 'asc' }] })
           .then((page) => page.items.map((r) => ({ value: r.id, label: r.name })))
           .catch(() => [])
       }

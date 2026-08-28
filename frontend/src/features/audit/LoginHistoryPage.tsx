@@ -29,7 +29,7 @@ export function LoginHistoryPage() {
   const {
     page, setPage, pageSize, setPageSize, sort, toggleSort,
     search, setSearch, searchFields, setSearchFields, filters, setFilters, listParams,
-  } = useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' }, storageKey: 'login-history', syncUrl: true });
+  } = useListPageState({ defaultSort: { field: 'createdDate', direction: 'desc' }, storageKey: 'login-history', syncUrl: true });
 
   const successParam = success === 'all' ? undefined : success === 'true';
   const { data, isLoading, isFetching, error, refetch } = useLoginHistory({

@@ -20,7 +20,7 @@ export function AuditLogsPage() {
   const {
     page, setPage, pageSize, setPageSize, sort, toggleSort,
     search, setSearch, searchFields, setSearchFields, filters, setFilters, listParams,
-  } = useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' }, storageKey: 'audit-logs', syncUrl: true });
+  } = useListPageState({ defaultSort: { field: 'createdDate', direction: 'desc' }, storageKey: 'audit-logs', syncUrl: true });
   const { data, isLoading, isFetching, error, refetch } = useAuditLogs(listParams);
 
   // Aligned with the backend's searchable registrations (AuditQueryService.AUDIT_LOG_FIELDS).

@@ -125,7 +125,7 @@ export function useRecords(customAppId: string | undefined, params: PageParams =
 export const VIEW_RECORDS_PARAMS: PageParams = {
   page: 0,
   size: 1000,
-  sorts: [{ field: 'createdDate', dir: 'desc' }],
+  sorts: [{ field: 'createdDate', direction: 'desc' }],
 };
 
 export function useViewRecords(customAppId: string | undefined) {

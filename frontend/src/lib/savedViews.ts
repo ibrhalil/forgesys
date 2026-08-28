@@ -1,16 +1,18 @@
-import type { SearchQueryState } from './searchQuery';
+import type { ListQuerySnapshot } from '../types';
 
 /**
  * Named list views persisted per table in localStorage (K-55 F7, v1 — browser-local
  * by decision; a DB-backed cross-device version is a later, migration-carrying step).
- * The stored payload is the same versioned SearchQueryState the URL `sq` param
- * carries, so applying a view is identical to opening a shared link.
+ * The stored payload is the full list-query snapshot (`ListQuerySnapshot`: paging +
+ * sorting + the filter blob), so applying a view is identical to opening a shared
+ * link. Legacy snapshots saved by the pre-split shape (paging inside `sq`) degrade
+ * gracefully — the codec ignores unknown fields.
  */
 
 export interface SavedView {
   id: string;
   name: string;
-  state: SearchQueryState;
+  state: ListQuerySnapshot;
   createdAt: string;
 }
 
@@ -40,7 +42,7 @@ export function listSavedViews(key: string): SavedView[] {
 }
 
 /** Saves (or replaces, matched case-insensitively by name) the current query state. */
-export function saveSavedView(key: string, name: string, state: SearchQueryState): SavedView | null {
+export function saveSavedView(key: string, name: string, state: ListQuerySnapshot): SavedView | null {
   const trimmed = name.trim();
   if (!trimmed) return null;
   const views = listSavedViews(key);

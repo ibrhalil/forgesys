@@ -138,7 +138,7 @@ export function PlatformServiceAccountsPage() {
   const {
     page, setPage, pageSize, setPageSize, sort, toggleSort,
     search, setSearch, listParams,
-  } = useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' }, storageKey: 'platform-svc' });
+  } = useListPageState({ defaultSort: { field: 'createdDate', direction: 'desc' }, storageKey: 'platform-svc' });
   const { data, isLoading, isFetching, error, refetch } = useServiceAccounts(listParams);
   const revoke = useRevokeServiceAccount();
 

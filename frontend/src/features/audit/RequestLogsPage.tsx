@@ -29,7 +29,7 @@ export function RequestLogsPage() {
   const {
     page, setPage, pageSize, setPageSize, sort, sorts, toggleSort, applySearchQuery, currentQuery,
     search, setSearch, searchFields, setSearchFields, filters, setFilters, listParams,
-  } = useListPageState({ defaultSort: { field: 'createdDate', dir: 'desc' }, storageKey: 'request-logs', syncUrl: true });
+  } = useListPageState({ defaultSort: { field: 'createdDate', direction: 'desc' }, storageKey: 'request-logs', syncUrl: true });
   const { data, isLoading, isFetching, error, refetch } = useRequestLogs(listParams);
   const [detail, setDetail] = useState<RequestLog | null>(null);
 

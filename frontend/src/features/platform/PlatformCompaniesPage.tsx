@@ -27,7 +27,7 @@ export function PlatformCompaniesPage() {
   const {
     page, setPage, pageSize, setPageSize, sort, toggleSort,
     search, setSearch, searchFields, setSearchFields, filters, setFilters, listParams,
-  } = useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'platform-companies', syncUrl: true });
+  } = useListPageState({ defaultSort: { field: 'name', direction: 'asc' }, storageKey: 'platform-companies', syncUrl: true });
   const { data, isLoading, isFetching, error, refetch } = usePlatformCompanies(listParams);
   const hasAuthority = usePlatformAuthStore((s) => s.hasAuthority);
   const canFilterStatus = hasAuthority(PLATFORM_PERMISSIONS.COMPANY_READ);
