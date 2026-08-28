@@ -688,6 +688,7 @@ export const messages = {
     // sessions
     'sessions.desc': 'Hesabınızda oturum açık cihazlar.',
     'sessions.empty': 'Aktif oturum yok',
+    'sessions.emptyFiltered': 'Aramaya uyan oturum yok',
     'sessions.thisDevice': 'Bu cihaz',
     'sessions.unknownIp': 'Bilinmeyen IP',
     'sessions.unknownDevice': 'Bilinmeyen cihaz',
@@ -704,6 +705,12 @@ export const messages = {
     'sessions.revokeAll': 'Tümünü sonlandır',
     'sessions.revokeAllTitle': 'Tüm oturumları sonlandır',
     'sessions.revokeAllMsg': 'Bu kullanıcının tüm aktif oturumları sonlandırılsın mı? Her cihazda tekrar giriş yapması gerekir.',
+    'sessions.device': 'Cihaz',
+    'sessions.ipAddress': 'IP Adresi',
+    'sessions.loginAt': 'Giriş Tarihi',
+    'sessions.lastSeen': 'Son Etkinlik',
+    'sessions.searchPh': 'Cihaz veya IP ara…',
+    'sessions.allSearchPh': 'Kullanıcı, cihaz veya IP ara…',
 
     // audit
     'audit.desc': 'Kiracı genelinde kaydedilen yönetimsel işlemler.',
@@ -1555,6 +1562,7 @@ export const messages = {
     // sessions
     'sessions.desc': 'Devices currently signed in to your account.',
     'sessions.empty': 'No active sessions',
+    'sessions.emptyFiltered': 'No sessions match your search',
     'sessions.thisDevice': 'This device',
     'sessions.unknownIp': 'Unknown IP',
     'sessions.unknownDevice': 'Unknown device',
@@ -1571,6 +1579,12 @@ export const messages = {
     'sessions.revokeAll': 'Revoke all',
     'sessions.revokeAllTitle': 'Revoke all sessions',
     'sessions.revokeAllMsg': "End every active session for this user? They'll need to sign in again on every device.",
+    'sessions.device': 'Device',
+    'sessions.ipAddress': 'IP Address',
+    'sessions.loginAt': 'Signed In',
+    'sessions.lastSeen': 'Last Active',
+    'sessions.searchPh': 'Search by device or IP…',
+    'sessions.allSearchPh': 'Search by user, device or IP…',
 
     // audit
     'audit.desc': 'Administrative actions recorded across the tenant.',
