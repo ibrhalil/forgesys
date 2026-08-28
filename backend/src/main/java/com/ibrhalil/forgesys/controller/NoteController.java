@@ -51,13 +51,11 @@ public class NoteController {
             @RequestParam(required = false) UUID categoryId,
             @RequestParam(required = false) Boolean pinned,
             @RequestParam(required = false) UUID projectId) {
+        SortGuard.require(pageable, NoteService.FILTER_FIELDS);
         if (searchQuery.present()) {
             SearchRequest request = searchQuery.request();
-            Pageable sqPageable = SearchRequests.toPageable(request, NoteService.FILTER_FIELDS,
-                    Sort.by(Sort.Direction.DESC, "updatedAt"));
-            return ResponseEntity.ok(PageResponse.of(noteService.search(request, sqPageable)));
+            return ResponseEntity.ok(PageResponse.of(noteService.search(request, pageable)));
         }
-        SortGuard.require(pageable, NoteService.FILTER_FIELDS);
         return ResponseEntity.ok(PageResponse.of(
                 noteService.search(q, qFields, categoryId, pinned, projectId, pageable)));
     }

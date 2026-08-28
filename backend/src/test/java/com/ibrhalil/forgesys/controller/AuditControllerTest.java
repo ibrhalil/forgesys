@@ -346,6 +346,48 @@ class AuditControllerTest extends AbstractRbacWebTest {
                 .andExpect(jsonPath("$.code").value("validation_error"));
     }
 
+    @Test
+    void requestLogsFlatSortGovernsOrderAlongsideSqFilters() throws Exception {
+        seedRequestLogWithStatus("sq_flat_sort", 200);
+        seedRequestLogWithStatus("sq_flat_sort", 500);
+
+        // The K-55 split: sq carries q/filters, the FLAT sort param governs order —
+        // regression lock for the wire bug where every direction collapsed to asc.
+        mockMvc.perform(get("/api/v1/request-logs")
+                        .param("sq", sq("{\"v\":1,\"q\":\"sq_flat_sort\"}"))
+                        .param("sort", "status,desc")
+                        .cookie(auth("reader@tenant.test", "iam:audit:read")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].status").value(500))
+                .andExpect(jsonPath("$.data[1].status").value(200));
+
+        mockMvc.perform(get("/api/v1/request-logs")
+                        .param("sq", sq("{\"v\":1,\"q\":\"sq_flat_sort\"}"))
+                        .param("sort", "status,asc")
+                        .cookie(auth("reader@tenant.test", "iam:audit:read")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].status").value(200));
+    }
+
+    @Test
+    void requestLogsSqLegacyBlobPagingAndSortsIgnored() throws Exception {
+        seedRequestLogWithStatus("sq_legacy_blob", 200);
+        seedRequestLogWithStatus("sq_legacy_blob", 500);
+
+        // Legacy all-in-one blob: page/size/sorts inside the blob are tolerated but
+        // ignored — the flat params own paging/sorting (size stays 10, sort stays asc).
+        mockMvc.perform(get("/api/v1/request-logs")
+                        .param("sq", sq("""
+                                {"v":1,"page":9,"size":1,"q":"sq_legacy_blob",
+                                 "sorts":[{"field":"status","direction":"desc"}]}"""))
+                        .param("sort", "status,asc")
+                        .cookie(auth("reader@tenant.test", "iam:audit:read")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.meta.pageSize").value(10)) // blob's size:1 ignored, endpoint default applies
+                .andExpect(jsonPath("$.data.length()").value(2))
+                .andExpect(jsonPath("$.data[0].status").value(200));
+    }
+
     /* ── K-55 F5: CSV export ── */
 
     @Test

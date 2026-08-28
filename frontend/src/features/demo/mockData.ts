@@ -79,7 +79,7 @@ export function paginate<T>(
 export function sortBy<T>(
   items: T[],
   field: keyof T,
-  dir: 'asc' | 'desc',
+  direction: 'asc' | 'desc',
 ): T[] {
   return [...items].sort((a, b) => {
     const av = a[field];
@@ -88,6 +88,6 @@ export function sortBy<T>(
       typeof av === 'number' && typeof bv === 'number'
         ? av - bv
         : String(av ?? '').localeCompare(String(bv ?? ''));
-    return dir === 'asc' ? cmp : -cmp;
+    return direction === 'asc' ? cmp : -cmp;
   });
 }

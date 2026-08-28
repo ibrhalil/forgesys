@@ -3,21 +3,21 @@ import { LuBookmark, LuTrash2 } from 'react-icons/lu';
 import { cn } from '../../lib/cn';
 import { useT } from '../../lib/i18n';
 import { deleteSavedView, listSavedViews, saveSavedView, type SavedView } from '../../lib/savedViews';
-import type { SearchQueryState } from '../../lib/searchQuery';
+import type { ListQuerySnapshot } from '../../types';
 
 interface SavedViewsMenuProps {
   /** localStorage scope — the table's storageKey. */
   storageKey: string;
   /** The current committed query state (persisted when saving). */
-  state: SearchQueryState;
+  state: ListQuerySnapshot;
   /** Applies a saved view — the page feeds it to `useListPageState.applySearchQuery`. */
-  onApply: (state: SearchQueryState) => void;
+  onApply: (state: ListQuerySnapshot) => void;
 }
 
 /**
  * Named-views dropdown for list pages (K-55 F7, localStorage v1): save the current
  * filters/sort/page under a name, re-apply in one click, delete stale ones. The
- * stored payload equals the URL `sq` blob — applying a view IS opening a shared link.
+ * stored payload is the full view snapshot — applying a view IS opening a shared link.
  */
 export function SavedViewsMenu({ storageKey, state, onApply }: SavedViewsMenuProps) {
   const { t } = useT();

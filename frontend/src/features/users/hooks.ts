@@ -27,7 +27,7 @@ export function useUser(id?: string) {
  * callers fall back to a shortened id.
  */
 export function useUserLabels(ids: Array<string | null | undefined>): Map<string, string> {
-  const { data: page } = useUsers({ page: 0, size: 100, sorts: [{ field: 'email', dir: 'asc' }] });
+  const { data: page } = useUsers({ page: 0, size: 100, sorts: [{ field: 'email', direction: 'asc' }] });
 
   const unique = useMemo(
     () => Array.from(new Set(ids.filter((id): id is string => !!id))),

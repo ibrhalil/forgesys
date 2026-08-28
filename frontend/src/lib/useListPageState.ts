@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { useDebouncedValue } from './useDebouncedValue';
 import { loadTablePreferences, saveTablePreferences } from './tablePreferences';
 import {
+  decodeSearchQuery,
   encodeSearchQuery,
-  readSearchQueryFromLocation,
   SEARCH_QUERY_PARAM,
   type SearchQueryState,
 } from './searchQuery';
-import type { FilterCriteria, SearchOrListParams, SortState } from '../types';
+import type { FilterCriteria, ListQuerySnapshot, SearchOrListParams, SortState } from '../types';
 
 export interface UseListPageStateOptions {
   /** Initial sort — the field MUST be in the backend feature's sort whitelist or the request 400s. */
@@ -19,13 +19,57 @@ export interface UseListPageStateOptions {
   /** Optional key persisting table preferences (e.g. pageSize) in localStorage. */
   storageKey?: string;
   /**
-   * Reflect the committed query state (filters/sort/page/search) into the URL as a
-   * single base64url `sq` param (K-55) — shareable view links. Mount precedence:
+   * Reflect the committed query state into the URL (K-55): filters/search travel as
+   * one base64url `sq` param, paging/sorting as ordinary flat params
+   * (`?page=&size=&sort=field,dir`) — shareable view links. Mount precedence:
    * URL > storageKey > defaults. Typing rewrites history (replace), committed
    * changes append (push); back/forward re-hydrates the view. Default false.
    */
   syncUrl?: boolean;
 }
+
+/** Mirror of the backend's POST /search sort cap (`SearchRequest.@Size(max=5)`). */
+const MAX_SORT_CHAIN = 5;
+
+/** URL params this hook owns when `syncUrl` is on — rewritten, never preserved. */
+const OWNED_URL_PARAMS = ['page', 'size', 'sort', SEARCH_QUERY_PARAM];
+
+interface UrlListState {
+  sq: SearchQueryState | null;
+  page?: number;
+  size?: number;
+  sorts?: SortState[];
+}
+
+function parseFlatSorts(params: URLSearchParams): SortState[] {
+  const sorts: SortState[] = [];
+  for (const raw of params.getAll('sort')) {
+    const [field, dir] = raw.split(',');
+    if (field && (dir === 'asc' || dir === 'desc')) sorts.push({ field, direction: dir });
+  }
+  return sorts;
+}
+
+/** Reads the list-page state (flat paging/sort + `sq` filter blob) from a query string. */
+function readListUrlState(search: string): UrlListState {
+  const params = new URLSearchParams(search);
+  const sqBlob = params.get(SEARCH_QUERY_PARAM);
+  // Number(null) is 0, not NaN — parse only present params or a bare URL fakes page=0.
+  const rawPage = params.get('page');
+  const rawSize = params.get('size');
+  const page = rawPage === null ? undefined : Number(rawPage);
+  const size = rawSize === null ? undefined : Number(rawSize);
+  const sorts = parseFlatSorts(params);
+  return {
+    sq: sqBlob ? decodeSearchQuery(sqBlob) : null,
+    page: page !== undefined && Number.isInteger(page) && page >= 0 ? page : undefined,
+    size: size !== undefined && Number.isInteger(size) && size > 0 ? size : undefined,
+    sorts: sorts.length ? sorts : undefined,
+  };
+}
+
+const urlStatePresent = (url: UrlListState | null): boolean =>
+  !!url && !!(url.sq || url.page != null || url.size != null || url.sorts);
 
 /**
  * The list-page scaffold (K-39): page/pageSize/sort/search/filter state with the
@@ -43,7 +87,8 @@ export function useListPageState({
   storageKey,
   syncUrl = false,
 }: UseListPageStateOptions) {
-  const [urlInitial] = useState(() => (syncUrl ? readSearchQueryFromLocation(window.location.search) : null));
+  const [urlInitial] = useState(() => (syncUrl ? readListUrlState(window.location.search) : null));
+  const hydratedFromUrl = urlStatePresent(urlInitial);
 
   const [page, setPageState] = useState(urlInitial?.page ?? 0);
   const [pageSize, setPageSizeState] = useState(() => {
@@ -55,13 +100,13 @@ export function useListPageState({
     urlInitial?.sorts?.length ? urlInitial.sorts : [defaultSort],
   );
   const sort: SortState = sorts[0] ?? defaultSort;
-  const [search, setSearchState] = useState(urlInitial?.q ?? '');
+  const [search, setSearchState] = useState(urlInitial?.sq?.q ?? '');
   const [searchFields, setSearchFieldsState] = useState<string[]>(() => {
-    if (urlInitial?.qFields?.length) return urlInitial.qFields;
+    if (urlInitial?.sq?.qFields?.length) return urlInitial.sq.qFields;
     if (!storageKey) return [];
     return loadTablePreferences(storageKey).searchFields ?? [];
   });
-  const [filters, setFiltersState] = useState<FilterCriteria[]>(urlInitial?.filters ?? []);
+  const [filters, setFiltersState] = useState<FilterCriteria[]>(urlInitial?.sq?.filters ?? []);
   const q = useDebouncedValue(search, debounceMs);
 
   // URL sync bookkeeping: `interacted` latches ON with the first user change and is
@@ -70,9 +115,9 @@ export function useListPageState({
   // late must still write. `mode` picks replace (typing) vs push (committed changes);
   // `hydrating` shields the q-effect's page reset from hydration (the debounced q can
   // land up to `debounceMs` AFTER a popstate re-hydration already restored the page).
-  const interactedRef = useRef(!!urlInitial);
+  const interactedRef = useRef(hydratedFromUrl);
   const modeRef = useRef<'replace' | 'push'>('replace');
-  const hydratingRef = useRef(!!urlInitial);
+  const hydratingRef = useRef(hydratedFromUrl);
 
   useEffect(() => {
     if (hydratingRef.current) {
@@ -84,19 +129,23 @@ export function useListPageState({
 
   useEffect(() => {
     if (!syncUrl || !interactedRef.current) return;
-    const state: SearchQueryState = {
-      v: 1,
-      page,
-      size: pageSize,
-      sorts,
-      q: q || undefined,
-      qFields: searchFields.length ? searchFields : undefined,
-      filters: filters.length ? filters : undefined,
-    };
-    const blob = encodeSearchQuery(state);
-    if (blob === null) return; // over the size cap — leave the URL untouched
     const params = new URLSearchParams(window.location.search);
-    params.set(SEARCH_QUERY_PARAM, blob);
+    OWNED_URL_PARAMS.forEach((key) => params.delete(key));
+    params.set('page', String(page));
+    params.set('size', String(pageSize));
+    sorts.forEach((s) => params.append('sort', `${s.field},${s.direction}`));
+    // The sq blob only exists while there is something to filter — a clean query
+    // keeps the URL flat-only. Over-cap: the URL is left untouched (documented).
+    if (q || searchFields.length || filters.length) {
+      const state: SearchQueryState = {
+        v: 1,
+        q: q || undefined,
+        qFields: searchFields.length ? searchFields : undefined,
+        filters: filters.length ? filters : undefined,
+      };
+      const blob = encodeSearchQuery(state);
+      if (blob !== null) params.set(SEARCH_QUERY_PARAM, blob);
+    }
     const qs = params.toString();
     const next = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
     if (next === window.location.pathname + window.location.search) return;
@@ -116,17 +165,17 @@ export function useListPageState({
   useEffect(() => {
     if (!syncUrl) return;
     const onPopState = () => {
-      const state = readSearchQueryFromLocation(window.location.search);
+      const url = readListUrlState(window.location.search);
       const { defaultSort: sort0, defaultPageSize: size0, storageKey: key0 } = defaultsRef.current;
       interactedRef.current = false;
       hydratingRef.current = true;
-      if (state) {
-        setPageState(state.page);
-        setPageSizeState(state.size);
-        setSorts(state.sorts.length ? state.sorts : [sort0]);
-        setSearchState(state.q ?? '');
-        setSearchFieldsState(state.qFields ?? []);
-        setFiltersState(state.filters ?? []);
+      if (urlStatePresent(url)) {
+        setPageState(url!.page ?? 0);
+        setPageSizeState(url!.size ?? (key0 ? loadTablePreferences(key0).pageSize ?? size0 : size0));
+        setSorts(url!.sorts?.length ? url!.sorts : [sort0]);
+        setSearchState(url!.sq?.q ?? '');
+        setSearchFieldsState(url!.sq?.qFields ?? []);
+        setFiltersState(url!.sq?.filters ?? []);
       } else {
         setPageState(0);
         setPageSizeState(key0 ? loadTablePreferences(key0).pageSize ?? size0 : size0);
@@ -181,8 +230,9 @@ export function useListPageState({
   };
 
   /**
-   * Sort toggle: plain click replaces the single sort (asc→desc→gone on repeat);
-   * additive (Shift+click) appends/toggles/removes within a multi-sort chain.
+   * Sort toggle: plain click replaces the single sort (asc↔desc); additive
+   * (Shift+click) appends/toggles/removes within a multi-sort chain (≤ MAX_SORT_CHAIN,
+   * mirroring the backend's POST body cap).
    */
   const toggleSort = (field: string, additive = false) => {
     markInteraction('push');
@@ -192,29 +242,31 @@ export function useListPageState({
         if (!existing) {
           // The untouched default sort is not part of a user-built chain.
           const untouchedDefault = prev.length === 1 && prev[0].field === defaultSort.field;
-          return untouchedDefault ? [{ field, dir: 'asc' as const }] : [...prev, { field, dir: 'asc' as const }];
+          if (untouchedDefault) return [{ field, direction: 'asc' as const }];
+          if (prev.length >= MAX_SORT_CHAIN) return prev;
+          return [...prev, { field, direction: 'asc' as const }];
         }
-        if (existing.dir === 'asc') {
-          return prev.map((s) => (s.field === field ? { field, dir: 'desc' as const } : s));
+        if (existing.direction === 'asc') {
+          return prev.map((s) => (s.field === field ? { field, direction: 'desc' as const } : s));
         }
         return prev.filter((s) => s.field !== field);
       }
       if (existing) {
-        return [{ field, dir: existing.dir === 'asc' ? ('desc' as const) : ('asc' as const) }];
+        return [{ field, direction: existing.direction === 'asc' ? ('desc' as const) : ('asc' as const) }];
       }
-      return [{ field, dir: 'asc' as const }];
+      return [{ field, direction: 'asc' as const }];
     });
     setPageState(0);
   };
 
   /** Applies a saved/shared query as a COMMITTED change (K-55 F7) — same hydration
    *  path as popstate, but marked as an interaction so the URL updates via push. */
-  const applySearchQuery = (state: SearchQueryState) => {
+  const applySearchQuery = (state: ListQuerySnapshot) => {
     markInteraction('push');
     hydratingRef.current = true;
-    setPageState(state.page);
-    setPageSizeState(state.size);
-    setSorts(state.sorts.length ? state.sorts : [defaultSort]);
+    setPageState(state.page ?? 0);
+    setPageSizeState(state.size ?? defaultPageSize);
+    setSorts(state.sorts?.length ? state.sorts : [defaultSort]);
     setSearchState(state.q ?? '');
     setSearchFieldsState(state.qFields ?? []);
     setFiltersState(state.filters ?? []);
@@ -232,7 +284,7 @@ export function useListPageState({
   };
 
   /** The committed query state in its canonical (URL/API) form — what saving a view persists. */
-  const currentQuery: SearchQueryState = {
+  const currentQuery: ListQuerySnapshot = {
     v: 1,
     page,
     size: pageSize,

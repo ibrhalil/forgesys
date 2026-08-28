@@ -41,7 +41,7 @@ export function RolesPage() {
     setFilters,
     q,
     listParams,
-  } = useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'roles', syncUrl: true });
+  } = useListPageState({ defaultSort: { field: 'name', direction: 'asc' }, storageKey: 'roles', syncUrl: true });
   const { data, isLoading, isFetching, error, refetch } = useRoles(listParams);
   const delRole = useDeleteRole();
   const canWrite = useAuthStore((s) => s.hasAuthority(PERMISSIONS.ROLE_WRITE));

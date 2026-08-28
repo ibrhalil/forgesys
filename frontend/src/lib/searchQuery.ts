@@ -1,11 +1,14 @@
-import type { FilterCriteria, SortDir, SortState } from '../types';
+import type { FilterCriteria } from '../types';
 
 /**
- * Versioned, URL-safe serialization of list-page query state (K-55).
- * The JSON shape mirrors the backend `SearchRequest`, so the browser URL and the
- * future `GET ?sq=` wire contract share one codec. Decoding is schema-tolerant:
- * unknown fields are ignored, a malformed or wrong-version blob yields `null`
- * (callers fall back to defaults) — shared links must survive schema evolution.
+ * Versioned, URL-safe serialization of the FILTER part of a list-page query (K-55):
+ * `{v, q, qFields, filters}` — the base64url `sq` param. Paging (`page`/`size`) and
+ * sorting (`sort=field,dir` params) deliberately stay OUT of the blob: they travel
+ * as ordinary flat params on both the browser URL and the API wire, so the blob only
+ * carries what plain params cannot express. Decoding is schema-tolerant: unknown
+ * fields are ignored (legacy all-in-one blobs lose only their paging/sort), a
+ * malformed or wrong-version blob yields `null` (callers fall back to defaults) —
+ * shared links must survive schema evolution.
  */
 
 /** Wire operators of the backend filter engine — the decode-side whitelist. */
@@ -14,7 +17,7 @@ const FILTER_OPERATORS = new Set([
   'GT', 'GTE', 'LT', 'LTE', 'BETWEEN', 'IS_NULL', 'IS_NOT_NULL',
 ]);
 
-/** Hard cap on the encoded blob — mirrors the planned backend limit. */
+/** Hard cap on the encoded blob — mirrors the backend limit. */
 export const SEARCH_QUERY_MAX_LENGTH = 4096;
 
 /** The single query param carrying the encoded search query. */
@@ -22,9 +25,6 @@ export const SEARCH_QUERY_PARAM = 'sq';
 
 export interface SearchQueryState {
   v: 1;
-  page: number;
-  size: number;
-  sorts: SortState[];
   q?: string;
   qFields?: string[];
   filters?: FilterCriteria[];
@@ -60,20 +60,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function sanitize(raw: unknown): SearchQueryState | null {
   if (!isRecord(raw) || raw.v !== 1) return null;
 
-  const page = Number(raw.page);
-  const size = Number(raw.size);
-  if (!Number.isInteger(page) || page < 0 || !Number.isInteger(size) || size <= 0) return null;
-
-  const sorts: SortState[] = [];
-  if (Array.isArray(raw.sorts)) {
-    for (const s of raw.sorts) {
-      if (!isRecord(s) || typeof s.field !== 'string' || !s.field) continue;
-      const dir: SortDir = s.dir === 'desc' ? 'desc' : 'asc';
-      sorts.push({ field: s.field, dir });
-    }
-  }
-  if (!sorts.length) return null;
-
   const q = typeof raw.q === 'string' && raw.q ? raw.q : undefined;
 
   const qFields = Array.isArray(raw.qFields)
@@ -91,7 +77,7 @@ function sanitize(raw: unknown): SearchQueryState | null {
     }
   }
 
-  const state: SearchQueryState = { v: 1, page, size, sorts };
+  const state: SearchQueryState = { v: 1 };
   if (q) state.q = q;
   if (qFields?.length) state.qFields = qFields;
   if (filters.length) state.filters = filters;

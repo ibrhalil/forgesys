@@ -48,13 +48,11 @@ public class TaskController {
             SearchQuery searchQuery,
             @RequestParam(required = false) String q,
             @RequestParam(required = false) List<String> qFields) {
+        SortGuard.require(pageable, TaskService.FILTER_FIELDS);
         if (searchQuery.present()) {
             SearchRequest request = searchQuery.request();
-            Pageable sqPageable = SearchRequests.toPageable(request, TaskService.FILTER_FIELDS,
-                    Sort.by(Sort.Direction.DESC, "createdDate"));
-            return ResponseEntity.ok(PageResponse.of(taskService.search(projectId, request, sqPageable)));
+            return ResponseEntity.ok(PageResponse.of(taskService.search(projectId, request, pageable)));
         }
-        SortGuard.require(pageable, TaskService.FILTER_FIELDS);
         return ResponseEntity.ok(PageResponse.of(taskService.list(projectId, q, qFields, pageable)));
     }
 

@@ -21,16 +21,10 @@ public final class SearchRequests {
     }
 
     public static Pageable toPageable(SearchRequest request, FilterFieldSet fields) {
-        return toPageable(request, fields, Sort.unsorted());
-    }
-
-    /** Same mapping, falling back to {@code defaultSort} when the request sorts nothing (K-55 {@code sq} path). */
-    public static Pageable toPageable(SearchRequest request, FilterFieldSet fields, Sort defaultSort) {
         int page = request.page() == null ? 0 : request.page();
         int size = request.size() == null ? DEFAULT_SIZE : request.size();
-        Sort sort = defaultSort;
+        Sort sort = Sort.unsorted();
         if (request.sorts() != null && !request.sorts().isEmpty()) {
-            sort = Sort.unsorted();
             for (SortCriteria s : request.sorts()) {
                 sort = sort.and(Sort.by(Sort.Direction.fromString(s.direction()), s.field()));
             }

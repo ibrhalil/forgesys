@@ -45,7 +45,7 @@ export function PermissionsPage() {
     setFilters,
     q,
     listParams,
-  } = useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'permissions', syncUrl: true });
+  } = useListPageState({ defaultSort: { field: 'name', direction: 'asc' }, storageKey: 'permissions', syncUrl: true });
 
   const { data, isLoading, isFetching, error, refetch } = usePermissionSearch(listParams);
   const hasFilterInput = q.length > 0 || filters.length > 0 || searchFields.length > 0;

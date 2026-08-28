@@ -37,7 +37,7 @@ function renderTable(overrides: Partial<Parameters<typeof DataTable<Row>>[0]> = 
     totalElements: 25,
     totalPages: 3,
     onPageChange: vi.fn(),
-    sort: { field: 'name', dir: 'asc' } satisfies SortState,
+    sort: { field: 'name', direction: 'asc' } satisfies SortState,
     onSortChange: vi.fn(),
     pageSizeOptions: [10, 25, 50],
     onPageSizeChange: vi.fn(),
@@ -54,7 +54,7 @@ describe('DataTable', () => {
   });
 
   it('renders rows and marks the active sort column via aria-sort', () => {
-    renderTable({ sort: { field: 'name', dir: 'desc' } });
+    renderTable({ sort: { field: 'name', direction: 'desc' } });
 
     expect(screen.getByText('Ada')).toBeInTheDocument();
     expect(screen.getByText('Linus')).toBeInTheDocument();
@@ -278,7 +278,7 @@ describe('DataTable', () => {
 
     // Active state: the trigger is accent-colored; opening shows Clear
     await user.click(screen.getByRole('button', { name: /filter note/i }));
-    await user.click(screen.getByRole('button', { name: /clear/i }));
+    await user.click(screen.getByRole('button', { name: 'Clear' }));
 
     expect(onFiltersChange).toHaveBeenCalledWith([]);
   });
@@ -462,8 +462,8 @@ describe('DataTable', () => {
 
   it('shows multi-sort order badges from the sorts chain', () => {
     renderTable({
-      sort: { field: 'name', dir: 'asc' },
-      sorts: [{ field: 'name', dir: 'asc' }, { field: 'note', dir: 'desc' }],
+      sort: { field: 'name', direction: 'asc' },
+      sorts: [{ field: 'name', direction: 'asc' }, { field: 'note', direction: 'desc' }],
       columns: [
         { key: 'name', header: 'Name', sortKey: 'name' },
         { key: 'note', header: 'Note', sortKey: 'note' },
@@ -489,6 +489,225 @@ describe('DataTable', () => {
       expect(onRefresh).toHaveBeenCalledTimes(2); // selection triggers an immediate refresh
       act(() => vi.advanceTimersByTime(30_000));
       expect(onRefresh).toHaveBeenCalledTimes(3); // interval tick
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('DataTable active-filter chips (K-55)', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    useLocaleStore.setState({ locale: 'en' });
+  });
+
+  const filterCols: Column<Row>[] = [
+    { key: 'name', header: 'Name', sortKey: 'name', filter: { field: 'name', control: 'text' } },
+    { key: 'note', header: 'Note', filter: { field: 'pinned', control: 'boolean' } },
+    {
+      key: 'grp', header: 'Group',
+      filter: { field: 'groupId', control: 'multiselect', options: [{ value: 'g1', label: 'Admins' }] },
+    },
+  ];
+
+  it('renders one chip per clause and removes a single clause via its X', async () => {
+    const onFiltersChange = vi.fn();
+    render(
+      <DataTable<Row>
+        columns={filterCols}
+        data={rows}
+        rowKey={(r) => r.id}
+        page={0}
+        pageSize={10}
+        totalElements={2}
+        totalPages={1}
+        onPageChange={vi.fn()}
+        filters={[
+          { field: 'name', operator: 'CONTAINS', values: ['Ada'] },
+          { field: 'pinned', operator: 'EQ', values: ['true'] },
+        ]}
+        onFiltersChange={onFiltersChange}
+      />,
+    );
+
+    const chips = screen.getByRole('group', { name: /active filters/i });
+    expect(withinChips(chips).getByText(/Name/)).toBeInTheDocument();
+    expect(withinChips(chips).getByText(/Ada/)).toBeInTheDocument();
+    expect(withinChips(chips).getByText(/Note/)).toBeInTheDocument();
+    expect(withinChips(chips).getByText(/Yes/)).toBeInTheDocument(); // boolean localized
+
+    fireEvent.click(withinChips(chips).getAllByRole('button', { name: /remove/i })[0]);
+    expect(onFiltersChange).toHaveBeenCalledWith([{ field: 'pinned', operator: 'EQ', values: ['true'] }]);
+  });
+
+  it('clear-all empties every clause', () => {
+    const onFiltersChange = vi.fn();
+    render(
+      <DataTable<Row>
+        columns={filterCols}
+        data={rows}
+        rowKey={(r) => r.id}
+        page={0}
+        pageSize={10}
+        totalElements={2}
+        totalPages={1}
+        onPageChange={vi.fn()}
+        filters={[{ field: 'name', operator: 'CONTAINS', values: ['Ada'] }]}
+        onFiltersChange={onFiltersChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /clear all filters/i }));
+    expect(onFiltersChange).toHaveBeenCalledWith([]);
+  });
+
+  it('resolves static option labels and async loader labels for values', async () => {
+    render(
+      <DataTable<Row>
+        columns={[
+          filterCols[2],
+          {
+            key: 'owner', header: 'Owner',
+            filter: { field: 'ownerId', control: 'select', optionsLoader: async () => [{ value: 'u9', label: 'Ada L.' }] },
+          },
+        ]}
+        data={rows}
+        rowKey={(r) => r.id}
+        page={0}
+        pageSize={10}
+        totalElements={2}
+        totalPages={1}
+        onPageChange={vi.fn()}
+        filters={[
+          { field: 'groupId', operator: 'IN', values: ['g1'] },
+          { field: 'ownerId', operator: 'EQ', values: ['u9'] },
+        ]}
+        onFiltersChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/Admins/)).toBeInTheDocument(); // static label, not g1
+    expect(await screen.findByText(/Ada L\./)).toBeInTheDocument(); // async label
+  });
+
+  it('renders no chip row without active filters', () => {
+    render(
+      <DataTable<Row>
+        columns={filterCols}
+        data={rows}
+        rowKey={(r) => r.id}
+        page={0}
+        pageSize={10}
+        totalElements={2}
+        totalPages={1}
+        onPageChange={vi.fn()}
+        filters={[]}
+        onFiltersChange={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole('group', { name: /active filters/i })).not.toBeInTheDocument();
+  });
+});
+
+function withinChips(container: HTMLElement) {
+  return {
+    getByText: (matcher: RegExp | string) => {
+      const el = Array.from(container.querySelectorAll('*')).find((n) =>
+        typeof matcher === 'string' ? n.textContent === matcher : matcher.test(n.textContent ?? ''),
+      );
+      if (!el) throw new Error(`no element matching ${matcher} in chips`);
+      return el as HTMLElement;
+    },
+    getAllByRole: (_role: string, opts?: { name?: RegExp }) =>
+      Array.from(container.querySelectorAll('button')).filter((b) =>
+        !opts?.name || opts.name.test(b.getAttribute('aria-label') ?? b.textContent ?? ''),
+      ) as HTMLElement[],
+  };
+}
+
+describe('DataTable auto-refresh status chip (K-55)', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    useLocaleStore.setState({ locale: 'en' });
+  });
+
+  it('shows the status chip only while an interval is active (also without filters)', async () => {
+    const user = userEvent.setup();
+    const onRefresh = vi.fn();
+    renderTable({ storageKey: 'refresh-chip-t', onRefresh });
+
+    expect(screen.queryByText(/Auto: /)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /table settings/i }));
+    await user.click(screen.getByRole('button', { name: 'Refresh' }));
+    await user.click(screen.getByRole('button', { name: '30s' }));
+
+    expect(screen.getByText('Auto: 30s')).toBeInTheDocument();
+    expect(onRefresh).toHaveBeenCalled(); // picking an interval refreshes immediately
+
+    await user.click(screen.getByRole('button', { name: 'Off' }));
+    expect(screen.queryByText(/Auto: /)).not.toBeInTheDocument();
+  });
+
+  it('renders beside the filter chips when both are live', async () => {
+    const user = userEvent.setup();
+    renderTable({
+      storageKey: 'refresh-chip-t',
+      onRefresh: vi.fn(),
+      filters: [{ field: 'name', operator: 'CONTAINS', values: ['Ada'] }],
+      onFiltersChange: vi.fn(),
+    });
+
+    await user.click(screen.getByRole('button', { name: /table settings/i }));
+    await user.click(screen.getByRole('button', { name: 'Refresh' }));
+    await user.click(screen.getByRole('button', { name: '1m' }));
+
+    expect(screen.getByText('Auto: 1:00')).toBeInTheDocument();
+    const chips = screen.getByRole('group', { name: /active filters/i });
+    expect(withinChips(chips).getByText(/Ada/)).toBeTruthy(); // filter chip still visible
+  });
+
+  it('counts down each second and fires onRefresh at zero, refilling the countdown', () => {
+    vi.useFakeTimers();
+    try {
+      const onRefresh = vi.fn();
+      renderTable({ storageKey: 'refresh-count-t', onRefresh });
+
+      fireEvent.click(screen.getByRole('button', { name: /table settings/i }));
+      fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+      fireEvent.click(screen.getByRole('button', { name: '30s' }));
+      expect(onRefresh).toHaveBeenCalledTimes(1); // interval selection fires immediately
+      expect(screen.getByText('Auto: 30s')).toBeInTheDocument();
+
+      act(() => vi.advanceTimersByTime(1000));
+      expect(screen.getByText('Auto: 29s')).toBeInTheDocument();
+
+      act(() => vi.advanceTimersByTime(29_000));
+      expect(onRefresh).toHaveBeenCalledTimes(2); // countdown reached zero → refresh
+      expect(screen.getByText('Auto: 30s')).toBeInTheDocument(); // refilled
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('clicking the chip refreshes now and resets the countdown', () => {
+    vi.useFakeTimers();
+    try {
+      const onRefresh = vi.fn();
+      renderTable({ storageKey: 'refresh-click-t', onRefresh });
+
+      fireEvent.click(screen.getByRole('button', { name: /table settings/i }));
+      fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+      fireEvent.click(screen.getByRole('button', { name: '30s' }));
+      // Close the menu — its "Refresh now" button would collide with the chip's aria-label.
+      fireEvent.click(screen.getByRole('button', { name: /table settings/i }));
+
+      act(() => vi.advanceTimersByTime(10_000));
+      expect(screen.getByText('Auto: 20s')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Refresh now' }));
+      expect(onRefresh).toHaveBeenCalledTimes(2); // interval selection + manual click
+      expect(screen.getByText('Auto: 30s')).toBeInTheDocument(); // countdown refilled
     } finally {
       vi.useRealTimers();
     }

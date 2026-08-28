@@ -41,7 +41,7 @@ export function UsersPage() {
     setFilters,
     q,
     listParams,
-  } = useListPageState({ defaultSort: { field: 'email', dir: 'asc' }, storageKey: 'users', syncUrl: true });
+  } = useListPageState({ defaultSort: { field: 'email', direction: 'asc' }, storageKey: 'users', syncUrl: true });
   const { data, isLoading, isFetching, error, refetch } = useUsers(listParams);
   const delUser = useDeleteUser();
   const unlockUser = useUnlockUser();

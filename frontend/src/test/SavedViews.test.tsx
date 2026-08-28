@@ -2,16 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { SavedViewsMenu } from '../components/ui/SavedViewsMenu';
 import { deleteSavedView, listSavedViews, saveSavedView } from '../lib/savedViews';
-import type { SearchQueryState } from '../lib/searchQuery';
+import type { ListQuerySnapshot } from '../types';
 import { useLocaleStore } from '../store/localeStore';
 
 /** Unit tests for saved views (K-55 F7, localStorage v1): store + menu wiring. */
 
-const STATE: SearchQueryState = {
+const STATE: ListQuerySnapshot = {
   v: 1,
   page: 0,
   size: 10,
-  sorts: [{ field: 'createdDate', dir: 'desc' }],
+  sorts: [{ field: 'createdDate', direction: 'desc' }],
   q: 'errors',
 };
 

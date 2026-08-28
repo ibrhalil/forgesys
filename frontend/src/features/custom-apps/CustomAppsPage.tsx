@@ -21,7 +21,7 @@ import { CustomAppFormModal } from './components/CustomAppFormModal';
 export function CustomAppsPage() {
   const { t } = useT();
   const { page, setPage, pageSize, setPageSize, sort, toggleSort, search, setSearch, searchFields, setSearchFields, filters, setFilters, q, listParams } =
-    useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'customApps', syncUrl: true });
+    useListPageState({ defaultSort: { field: 'name', direction: 'asc' }, storageKey: 'customApps', syncUrl: true });
   const { data, isLoading, isFetching, error, refetch } = useCustomApps(listParams);
   // Usage indicator: unfiltered total via a one-row probe (the list above is q-filtered).
   const { data: usage } = useCustomApps({ page: 0, size: 1 });

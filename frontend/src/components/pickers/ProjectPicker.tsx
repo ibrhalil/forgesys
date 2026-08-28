@@ -8,7 +8,7 @@ export function ProjectPicker(props: ReferencePickerProps) {
       {...props}
       search={(input) =>
         projectsApi
-          .list({ q: input, size: 20, sorts: [{ field: 'name', dir: 'asc' }], type: 'NOTES' })
+          .list({ q: input, size: 20, sorts: [{ field: 'name', direction: 'asc' }], type: 'NOTES' })
           .then((page) => page.items.map((p) => ({ value: p.id, label: p.name })))
           .catch(() => [])
       }

@@ -16,7 +16,7 @@ import type { CustomAppDetail, CustomAppProperty, CustomAppRecord } from './type
  * display.
  */
 
-const TARGET_RECORDS_PARAMS: PageParams = { page: 0, size: 100, sorts: [{ field: 'createdDate', dir: 'desc' }] };
+const TARGET_RECORDS_PARAMS: PageParams = { page: 0, size: 100, sorts: [{ field: 'createdDate', direction: 'desc' }] };
 
 export type ValueResolver = (prop: CustomAppProperty, record: CustomAppRecord) => string;
 

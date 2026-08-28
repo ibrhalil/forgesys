@@ -1,3 +1,4 @@
+import { LuChevronLeft, LuChevronRight } from 'react-icons/lu';
 import { cn } from '../../lib/cn';
 import { useT } from '../../lib/i18n';
 import { META_MONO } from './styles';
@@ -80,28 +81,28 @@ export function TablePagination({
         )
       ) : null}
       <div className="flex items-center gap-3">
-        <span className="text-xs text-muted">
-          {totalElements === 0
-            ? t('table.noItems')
-            : t('table.showingRange', { from: rangeStart, to: rangeEnd, total: totalElements })}
+        <span className={totalElements === 0 ? 'text-xs text-muted' : META_MONO}>
+          {totalElements === 0 ? t('table.noItems') : `${rangeStart}–${rangeEnd} / ${totalElements}`}
         </span>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           <button
             onClick={() => onPageChange(page - 1)}
             disabled={page === 0}
-            className="rounded-md border border-glass bg-surface px-3 py-1 text-xs text-main transition-colors hover:bg-accent/5 hover:border-accent/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:opacity-50 disabled:hover:bg-surface disabled:hover:border-glass"
+            aria-label={t('table.prev')}
+            className="rounded-md p-1.5 text-main transition-colors hover:bg-main/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:opacity-50"
           >
-            {t('table.prev')}
+            <LuChevronLeft className="h-4 w-4" aria-hidden />
           </button>
           <span className={META_MONO}>
-            {t('table.page', { current: totalPages === 0 ? 0 : page + 1, total: totalPages })}
+            {totalPages === 0 ? 0 : page + 1} / {totalPages}
           </span>
           <button
             onClick={() => onPageChange(page + 1)}
             disabled={page >= totalPages - 1}
-            className="rounded-md border border-glass bg-surface px-3 py-1 text-xs text-main transition-colors hover:bg-accent/5 hover:border-accent/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:opacity-50 disabled:hover:bg-surface disabled:hover:border-glass"
+            aria-label={t('table.next')}
+            className="rounded-md p-1.5 text-main transition-colors hover:bg-main/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:opacity-50"
           >
-            {t('table.next')}
+            <LuChevronRight className="h-4 w-4" aria-hidden />
           </button>
         </div>
       </div>

@@ -13,7 +13,6 @@ import com.ibrhalil.forgesys.web.filter.SearchRequests;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -45,12 +44,11 @@ public class GroupController {
             SearchQuery searchQuery,
             @RequestParam(required = false) String q,
             @RequestParam(required = false) List<String> qFields) {
+        SortGuard.require(pageable, GroupService.FILTER_FIELDS);
         if (searchQuery.present()) {
             SearchRequest request = searchQuery.request();
-            Pageable sqPageable = SearchRequests.toPageable(request, GroupService.FILTER_FIELDS, Sort.by("name"));
-            return ResponseEntity.ok(PageResponse.of(groupService.search(request, sqPageable)));
+            return ResponseEntity.ok(PageResponse.of(groupService.search(request, pageable)));
         }
-        SortGuard.require(pageable, GroupService.FILTER_FIELDS);
         return ResponseEntity.ok(PageResponse.of(groupService.search(q, qFields, pageable)));
     }
 

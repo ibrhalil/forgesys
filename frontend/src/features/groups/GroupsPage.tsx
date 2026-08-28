@@ -41,7 +41,7 @@ export function GroupsPage() {
     setFilters,
     q,
     listParams,
-  } = useListPageState({ defaultSort: { field: 'name', dir: 'asc' }, storageKey: 'groups', syncUrl: true });
+  } = useListPageState({ defaultSort: { field: 'name', direction: 'asc' }, storageKey: 'groups', syncUrl: true });
   const { data, isLoading, isFetching, error, refetch } = useGroups(listParams);
   const delGroup = useDeleteGroup();
   const canWrite = useAuthStore((s) => s.hasAuthority(PERMISSIONS.GROUP_WRITE));

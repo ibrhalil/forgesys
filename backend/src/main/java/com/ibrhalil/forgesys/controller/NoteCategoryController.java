@@ -11,7 +11,6 @@ import com.ibrhalil.forgesys.web.filter.SearchRequests;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -48,12 +47,11 @@ public class NoteCategoryController {
             @RequestParam(required = false) String q,
             @RequestParam(required = false) List<String> qFields,
             @RequestParam(required = false) UUID projectId) {
+        SortGuard.require(pageable, NoteCategoryService.FILTER_FIELDS);
         if (searchQuery.present()) {
             SearchRequest request = searchQuery.request();
-            Pageable sqPageable = SearchRequests.toPageable(request, NoteCategoryService.FILTER_FIELDS, Sort.by("name"));
-            return ResponseEntity.ok(PageResponse.of(noteCategoryService.search(request, sqPageable)));
+            return ResponseEntity.ok(PageResponse.of(noteCategoryService.search(request, pageable)));
         }
-        SortGuard.require(pageable, NoteCategoryService.FILTER_FIELDS);
         return ResponseEntity.ok(PageResponse.of(
                 noteCategoryService.search(q, qFields, projectId, pageable)));
     }

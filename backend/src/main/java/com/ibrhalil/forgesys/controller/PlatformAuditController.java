@@ -5,7 +5,6 @@ import com.ibrhalil.forgesys.dto.PlatformAuditLogResponse;
 import com.ibrhalil.forgesys.service.PlatformAuditQueryService;
 import com.ibrhalil.forgesys.web.SortGuard;
 import com.ibrhalil.forgesys.web.filter.SearchQuery;
-import com.ibrhalil.forgesys.web.filter.SearchRequests;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -44,14 +43,12 @@ public class PlatformAuditController {
             @RequestParam(required = false) String targetType,
             @RequestParam(required = false) OffsetDateTime fromDate,
             @RequestParam(required = false) OffsetDateTime toDate) {
+        SortGuard.require(pageable, PlatformAuditQueryService.FILTER_FIELDS);
         if (searchQuery.present()) {
             com.ibrhalil.forgesys.dto.SearchRequest request = searchQuery.request();
-            Pageable sqPageable = SearchRequests.toPageable(request, PlatformAuditQueryService.FILTER_FIELDS,
-                    Sort.by(Sort.Direction.DESC, "createdDate"));
             return ResponseEntity.ok(PageResponse.of(
-                    platformAuditQueryService.search(sqPageable, request.q(), request.qFields(), request.filters())));
+                    platformAuditQueryService.search(pageable, request.q(), request.qFields(), request.filters())));
         }
-        SortGuard.require(pageable, PlatformAuditQueryService.FILTER_FIELDS);
         return ResponseEntity.ok(PageResponse.of(platformAuditQueryService.findAll(
                 pageable, q, qFields, action, actorId, targetType, fromDate, toDate)));
     }
