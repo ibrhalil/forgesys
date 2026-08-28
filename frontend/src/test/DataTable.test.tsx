@@ -714,6 +714,324 @@ describe('DataTable auto-refresh status chip (K-55)', () => {
   });
 });
 
+describe('DataTable hardening (K-55 Phase 1-3)', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    useLocaleStore.setState({ locale: 'en' });
+  });
+
+  /* ── Phase 1: hiddenColumns persistence reconciliation ── */
+
+  it('drops stale keys and applies valid hidden columns from storage', () => {
+    window.localStorage.setItem(
+      'sf_table_prefs_stale-key-test',
+      JSON.stringify({ hiddenColumns: ['note', 'stale-key'] }),
+    );
+
+    renderTable({ storageKey: 'stale-key-test' });
+
+    expect(screen.queryByRole('columnheader', { name: /note/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: /name/i })).toBeInTheDocument();
+  });
+
+  it('renders hideable:false columns even if listed in stored hiddenColumns', async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem(
+      'sf_table_prefs_non-hideable-test',
+      JSON.stringify({ hiddenColumns: ['name', 'note'] }),
+    );
+
+    renderTable({
+      storageKey: 'non-hideable-test',
+      columns: [
+        { key: 'name', header: 'Name', hideable: false },
+        { key: 'note', header: 'Note' },
+      ],
+    });
+
+    // Name has hideable: false, so it still renders
+    expect(screen.getByRole('columnheader', { name: /name/i })).toBeInTheDocument();
+    // Note is hideable and was in hiddenColumns, so it is hidden
+    expect(screen.queryByRole('columnheader', { name: /note/i })).not.toBeInTheDocument();
+
+    // Check settings menu checkbox for Name
+    await user.click(screen.getByRole('button', { name: /table settings/i }));
+    const nameCheckbox = screen.getByRole('checkbox', { name: /name/i });
+    expect(nameCheckbox).toBeChecked();
+    expect(nameCheckbox).toBeDisabled();
+  });
+
+  it('keeps at least one column visible when storage hides all hideable columns', () => {
+    window.localStorage.setItem(
+      'sf_table_prefs_all-hidden-test',
+      JSON.stringify({ hiddenColumns: ['name', 'note'] }),
+    );
+
+    renderTable({
+      storageKey: 'all-hidden-test',
+      columns: [
+        { key: 'name', header: 'Name' },
+        { key: 'note', header: 'Note' },
+      ],
+    });
+
+    // At least one column still renders
+    const headers = screen.getAllByRole('columnheader');
+    expect(headers.length).toBeGreaterThanOrEqual(1);
+  });
+
+  /* ── Phase 2: selection lifecycle (key-signature semantics) ── */
+
+  it('preserves selection on rerender with new array reference containing same rows', async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <DataTable<Row>
+        columns={columns}
+        data={rows}
+        rowKey={(r) => r.id}
+        page={0}
+        pageSize={10}
+        totalElements={2}
+        totalPages={1}
+        onPageChange={vi.fn()}
+        bulkActions={[{ key: 'act', label: 'Action', run: vi.fn() }]}
+      />,
+    );
+
+    // Select first row
+    await user.click(screen.getAllByRole('checkbox', { name: 'Select row' })[0]);
+    expect(screen.getByRole('toolbar', { name: /bulk actions/i })).toBeInTheDocument();
+    expect(screen.getByText('1 selected')).toBeInTheDocument();
+
+    // Rerender with a NEW array reference containing the same rows
+    rerender(
+      <DataTable<Row>
+        columns={columns}
+        data={[...rows]}
+        rowKey={(r) => r.id}
+        page={0}
+        pageSize={10}
+        totalElements={2}
+        totalPages={1}
+        onPageChange={vi.fn()}
+        bulkActions={[{ key: 'act', label: 'Action', run: vi.fn() }]}
+      />,
+    );
+
+    // Selection must be preserved
+    expect(screen.getByRole('toolbar', { name: /bulk actions/i })).toBeInTheDocument();
+    expect(screen.getByText('1 selected')).toBeInTheDocument();
+  });
+
+  it('clears selection when data changes to different rows', async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <DataTable<Row>
+        columns={columns}
+        data={rows}
+        rowKey={(r) => r.id}
+        page={0}
+        pageSize={10}
+        totalElements={2}
+        totalPages={1}
+        onPageChange={vi.fn()}
+        bulkActions={[{ key: 'act', label: 'Action', run: vi.fn() }]}
+      />,
+    );
+
+    // Select first row
+    await user.click(screen.getAllByRole('checkbox', { name: 'Select row' })[0]);
+    expect(screen.getByRole('toolbar', { name: /bulk actions/i })).toBeInTheDocument();
+
+    // Rerender with DIFFERENT rows
+    const differentRows: Row[] = [
+      { id: '3', name: 'Grace' },
+      { id: '4', name: 'Alan' },
+    ];
+    rerender(
+      <DataTable<Row>
+        columns={columns}
+        data={differentRows}
+        rowKey={(r) => r.id}
+        page={0}
+        pageSize={10}
+        totalElements={2}
+        totalPages={1}
+        onPageChange={vi.fn()}
+        bulkActions={[{ key: 'act', label: 'Action', run: vi.fn() }]}
+      />,
+    );
+
+    // Selection must be cleared
+    expect(screen.queryByRole('toolbar', { name: /bulk actions/i })).not.toBeInTheDocument();
+  });
+
+  it('clears selection when leaving table mode and keeps it cleared when switching back', async () => {
+    const user = userEvent.setup();
+    render(
+      <DataTable<Row>
+        columns={columns}
+        data={rows}
+        rowKey={(r) => r.id}
+        page={0}
+        pageSize={10}
+        totalElements={2}
+        totalPages={1}
+        onPageChange={vi.fn()}
+        viewModes={['table', 'card']}
+        bulkActions={[{ key: 'act', label: 'Action', run: vi.fn() }]}
+      />,
+    );
+
+    // Select row in table mode
+    await user.click(screen.getAllByRole('checkbox', { name: 'Select row' })[0]);
+    expect(screen.getByRole('toolbar', { name: /bulk actions/i })).toBeInTheDocument();
+
+    // Switch to Cards view
+    await user.click(screen.getByRole('button', { name: /cards/i }));
+    expect(screen.queryByRole('toolbar', { name: /bulk actions/i })).not.toBeInTheDocument();
+
+    // Switch back to Table view
+    await user.click(screen.getByRole('button', { name: /table/i }));
+    expect(screen.queryByRole('toolbar', { name: /bulk actions/i })).not.toBeInTheDocument();
+  });
+
+  /* ── Phase 3: bulk-confirm stale-row guard ── */
+
+  it('closes dialog without running when selected row is no longer in data', async () => {
+    const user = userEvent.setup();
+    const run = vi.fn();
+    const { rerender } = render(
+      <DataTable<Row>
+        columns={columns}
+        data={rows}
+        rowKey={(r) => r.id}
+        page={0}
+        pageSize={10}
+        totalElements={2}
+        totalPages={1}
+        onPageChange={vi.fn()}
+        bulkActions={[
+          {
+            key: 'delete',
+            label: 'Delete',
+            danger: true,
+            confirm: { title: 'Delete rows?', message: 'Are you sure?' },
+            run,
+          },
+        ]}
+      />,
+    );
+
+    // Select row 1 ('Ada') and click Delete
+    await user.click(screen.getAllByRole('checkbox', { name: 'Select row' })[0]);
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+
+    // Confirm dialog is open
+    expect(screen.getByText('Delete rows?')).toBeInTheDocument();
+
+    // Rerender with data that no longer contains 'Ada' (e.g. only Linus)
+    rerender(
+      <DataTable<Row>
+        columns={columns}
+        data={[{ id: '2', name: 'Linus' }]}
+        rowKey={(r) => r.id}
+        page={0}
+        pageSize={10}
+        totalElements={1}
+        totalPages={1}
+        onPageChange={vi.fn()}
+        bulkActions={[
+          {
+            key: 'delete',
+            label: 'Delete',
+            danger: true,
+            confirm: { title: 'Delete rows?', message: 'Are you sure?' },
+            run,
+          },
+        ]}
+      />,
+    );
+
+    // Click Confirm
+    await user.click(screen.getByRole('button', { name: /confirm/i }));
+
+    // run NOT called and dialog is closed
+    expect(run).not.toHaveBeenCalled();
+    expect(screen.queryByText('Delete rows?')).not.toBeInTheDocument();
+  });
+
+  it('runs with surviving rows and fresh object identity on confirm', async () => {
+    const user = userEvent.setup();
+    const run = vi.fn();
+    const initialRows: Row[] = [
+      { id: '1', name: 'Ada (stale)' },
+      { id: '2', name: 'Linus (stale)' },
+    ];
+    const { rerender } = render(
+      <DataTable<Row>
+        columns={columns}
+        data={initialRows}
+        rowKey={(r) => r.id}
+        page={0}
+        pageSize={10}
+        totalElements={2}
+        totalPages={1}
+        onPageChange={vi.fn()}
+        bulkActions={[
+          {
+            key: 'delete',
+            label: 'Delete',
+            danger: true,
+            confirm: { title: 'Delete rows?', message: 'Are you sure?' },
+            run,
+          },
+        ]}
+      />,
+    );
+
+    // Select both rows and click Delete
+    await user.click(screen.getAllByRole('checkbox', { name: 'Select row' })[0]);
+    await user.click(screen.getAllByRole('checkbox', { name: 'Select row' })[1]);
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+
+    expect(screen.getByText('Delete rows?')).toBeInTheDocument();
+
+    // Data refetched while dialog is open: row 1 dropped, row 2 updated with fresh object
+    const freshLinus: Row = { id: '2', name: 'Linus (fresh)' };
+    rerender(
+      <DataTable<Row>
+        columns={columns}
+        data={[freshLinus]}
+        rowKey={(r) => r.id}
+        page={0}
+        pageSize={10}
+        totalElements={1}
+        totalPages={1}
+        onPageChange={vi.fn()}
+        bulkActions={[
+          {
+            key: 'delete',
+            label: 'Delete',
+            danger: true,
+            confirm: { title: 'Delete rows?', message: 'Are you sure?' },
+            run,
+          },
+        ]}
+      />,
+    );
+
+    // Click Confirm
+    await user.click(screen.getByRole('button', { name: /confirm/i }));
+
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(run.mock.calls[0][0]).toHaveLength(1);
+    // Exact object identity from current data array
+    expect(run.mock.calls[0][0][0]).toBe(freshLinus);
+    expect(screen.queryByText('Delete rows?')).not.toBeInTheDocument();
+  });
+});
+
 describe('DataTable hardening (K-55 Phase 4-6)', () => {
   beforeEach(() => {
     window.localStorage.clear();
