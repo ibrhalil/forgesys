@@ -84,10 +84,13 @@ components/              # cross-feature/shared components
     ui/                    #   design system: Badge, Button, CheckboxList, ConfirmDialog,
                             #   DataTable (sortable headers + per-column filter popovers + `toolbar` slot + SearchInput;
                             #   K-55 list states: first-load skeleton, keep-previous fetching bar, error+retry panel
-                            #   — props `loading`/`fetching`/`error`/`onRetry`, precedence error > empty;
-                            #   K-55 F3..F7: `onRowClick` row activation (click/Enter/Space), `bulkActions` selection
-                            #   column + floating bulk bar (ephemeral selection, ConfirmDialog-guarded destructive),
-                            #   multi-sort chains (`sorts` + additive onSortChange via Shift+click, capped at 5),
+                            #   — props `loading`/`fetching`/`error`/`errorIcon`/`onRetry`, precedence error > empty;
+                            #   K-55 F3..F7 hardening: `onRowClick` row activation (click/Enter/Space), `bulkActions` selection
+                            #   column + floating bulk bar (ephemeral key-signature selection preserved across auto-refetch,
+                            #   cleared on dataset/mode change, ConfirmDialog-guarded destructive with stale-row filtering),
+                            #   multi-sort chains (`sorts` + additive onSortChange via Shift+click, visual direction ▲/▼ +
+                            #   aria-sort aligned across chain, inactive sortable LuChevronsUpDown), controlled/uncontrolled
+                            #   viewModes (controlled skips local persistence), TableRow React.memo memoization,
                             #   auto-refresh interval in the settings menu (`onRefresh`),
                             #   active-query chips row (FilterChips — one removable chip per live clause,
                             #   static/async option label resolution, clear-all — plus the clickable
@@ -268,24 +271,13 @@ rows with invented numbers · hover/focus states invented per component.
 
 ## Planned: DataTable enhancements
 
-### 1. Bulk Operations *(planned — not started)*
+### 1. Bulk Operations — **IMPLEMENTED** (K-55 F4)
 
-**Goal:** Checkbox-based multi-row selection in `DataTable`, floating bulk-action bar, extensible `bulkActions` prop. Requires user approval before starting.
-
-**Scope:**
-- `DataTable` gains an optional `bulkActions?: BulkAction<T>[]` prop. When provided, a checkbox column is prepended automatically.
-- Header checkbox: checked if all visible rows selected; indeterminate if some are.
-- Shift+Click for range selection.
-- When ≥1 rows are selected, a floating action bar appears at the bottom of the table (above the pagination row) with: selection count, provided bulk action buttons, and a "Clear selection" link.
-- Built-in `bulkDelete` convenience action: shows a `ConfirmDialog` then calls a provided `onBulkDelete(ids: string[])` callback; clears selection on success.
-- Custom actions receive `(selectedItems: T[]) => void` — the caller decides the backend call.
-- Selection is **not persisted** (ephemeral per-page; cleared on page/filter change).
-- Wiring pages: `UsersPage` (bulk delete), others as needed.
-
-**Files to touch:** `DataTable.tsx`, affected list pages, i18n `messages.ts`.
+Shipped: optional `bulkActions?: BulkAction<T>[]` prop automatically prepends checkbox selection column. Key-signature row tracking preserves selection across same-dataset auto-refreshes; changes to dataset / view-mode reset selection. Shift+Click range selection supported. Floating bulk toolbar with selection count and action buttons, plus ConfirmDialog guards with stale-row filtering.
 
 ---
 
 ### 2. Table View Modes — **IMPLEMENTED**
 
 Shipped: `viewModes?: TableViewMode[]` (table/card/list) + the toolbar view-switcher (`table.viewMode`), `cardRender?: (row: T) => ReactNode` / `listRender?: (row: T) => ReactNode` custom renderers (auto-generated structured cards when omitted), column visibility + density (`compact/normal/relaxed`) and the persisted `viewMode` — all stored via `tablePreferences` under the table's `storageKey` in localStorage. Per-column hiding keeps `hideable: false` primary columns visible. No further work planned here; new render modes follow the existing prop pattern.
+

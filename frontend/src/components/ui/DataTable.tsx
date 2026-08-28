@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
+  LuChevronsUpDown,
   LuColumns3,
   LuDownload,
   LuLayoutGrid,
@@ -32,6 +33,11 @@ import { MICRO_LABEL } from './styles';
 export type { TableViewMode };
 
 export interface Column<T> {
+  /**
+   * Unique column identifier. For auto-render (no `render`), this must be a field present
+   * on the row object. Composite/virtual columns (key is not a row field) MUST provide
+   * `render` — see RecordTable's dynamic property columns.
+   */
   key: string;
   header: string;
   render?: (row: T) => ReactNode;
@@ -123,6 +129,8 @@ interface DataTableProps<T> {
   listRender?: (row: T) => ReactNode;
   /** Empty-state icon (defaults to EmptyState's generic folder). */
   emptyIcon?: IconType;
+  /** Error-state icon (defaults to LuTriangleAlert). */
+  errorIcon?: IconType;
 }
 
 
@@ -165,6 +173,7 @@ export function DataTable<T>({
   cardRender,
   listRender,
   emptyIcon,
+  errorIcon,
 }: DataTableProps<T>) {
   const { t } = useT();
 
@@ -174,14 +183,28 @@ export function DataTable<T>({
   });
   const [density, setDensity] = useState<TableDensity>(() => {
     if (!storageKey) return 'normal';
-    return (loadTablePreferences(storageKey).density as TableDensity) ?? 'normal';
+    const pref = loadTablePreferences(storageKey).density;
+    return (['compact', 'normal', 'relaxed'] as const).includes(pref as TableDensity) ? (pref as TableDensity) : 'normal';
   });
   const [internalViewMode, setInternalViewMode] = useState<TableViewMode>(() => {
     if (!storageKey) return viewModes?.[0] ?? 'table';
     return (loadTablePreferences(storageKey).viewMode as TableViewMode) ?? viewModes?.[0] ?? 'table';
   });
 
-  const activeViewMode = controlledViewMode ?? internalViewMode;
+  // Clamp uncontrolled mode: a stale persisted mode not in viewModes falls back to viewModes[0].
+  const activeViewMode =
+    controlledViewMode ??
+    (viewModes && !viewModes.includes(internalViewMode) ? viewModes[0] ?? 'table' : internalViewMode);
+
+
+  const effectiveHiddenColumns = useMemo(() => {
+    const cols = columns.filter((c) => c.hideable !== false);
+    const validHidden = hiddenColumns.filter((k) => cols.some((c) => c.key === k));
+    if (validHidden.length >= cols.length && cols.length > 0) {
+      return cols.slice(0, -1).map((c) => c.key);
+    }
+    return validHidden;
+  }, [columns, hiddenColumns]);
 
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [activeTab, setActiveTab] = useState<SettingsTab>('columns');
@@ -249,21 +272,36 @@ export function DataTable<T>({
   }, [showSettingsMenu]);
 
   const visibleColumns = useMemo(() => {
-    return columns.filter((col) => !hiddenColumns.includes(col.key));
-  }, [columns, hiddenColumns]);
+    return columns.filter((col) => !effectiveHiddenColumns.includes(col.key));
+  }, [columns, effectiveHiddenColumns]);
 
   const colCount = visibleColumns.length + (actions ? 1 : 0) + (bulkActions?.length ? 1 : 0);
 
-  // ── Row selection (K-55 F4): ephemeral by design — any data change (page/filter/
-  //    sort refetch produces a new array identity) clears it. Shift+Click ranges.
+  // ── Row selection (K-55 F4): ephemeral by design — selection is bound to the
+  //    current row-key set. Any data change that produces a DIFFERENT key set (page/
+  //    filter/sort refetch with different rows) clears it. A same-key-set refetch
+  //    (auto-refresh returning identical rows) preserves selection. Shift+Click ranges.
   const selectionEnabled = !!bulkActions?.length;
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [pendingConfirm, setPendingConfirm] = useState<{ action: BulkAction<T>; rows: T[] } | null>(null);
   const lastClickedIndex = useRef<number | null>(null);
+
+  const dataSignature = useMemo(() => data.map(rowKey).join('\u0000'), [data, rowKey]);
+  const prevSignatureRef = useRef<string>('');
   useEffect(() => {
-    setSelected(new Set());
-    lastClickedIndex.current = null;
-  }, [data]);
+    if (prevSignatureRef.current && dataSignature !== prevSignatureRef.current) {
+      setSelected((prev) => (prev.size > 0 ? new Set() : prev));
+      lastClickedIndex.current = null;
+    }
+    prevSignatureRef.current = dataSignature;
+  }, [dataSignature]);
+
+  useEffect(() => {
+    if (activeViewMode !== 'table') {
+      setSelected((prev) => (prev.size > 0 ? new Set() : prev));
+      lastClickedIndex.current = null;
+    }
+  }, [activeViewMode]);
 
   const selectedRows = useMemo(
     () => data.filter((row) => selected.has(rowKey(row))),
@@ -273,24 +311,28 @@ export function DataTable<T>({
   const allSelected = selectionEnabled && data.length > 0 && selectedRows.length === data.length;
   const someSelected = selectionEnabled && selected.size > 0;
 
-  const toggleRow = (row: T, index: number, shiftKey: boolean) => {
-    // Capture BEFORE enqueueing: React defers the updater to render time, after the
-    // ref below has already been mutated to this click's index.
-    const last = lastClickedIndex.current;
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (shiftKey && last != null) {
-        const [from, to] = [last, index].sort((a, b) => a - b);
-        data.slice(from, to + 1).forEach((r) => next.add(rowKey(r)));
-      } else if (next.has(rowKey(row))) {
-        next.delete(rowKey(row));
-      } else {
-        next.add(rowKey(row));
-      }
-      return next;
-    });
-    lastClickedIndex.current = index;
-  };
+  const toggleRow = useCallback(
+    (row: T, index: number, shiftKey: boolean) => {
+      // Capture BEFORE enqueueing: React defers the updater to render time, after the
+      // ref below has already been mutated to this click's index.
+      const last = lastClickedIndex.current;
+      setSelected((prev) => {
+        const next = new Set(prev);
+        if (shiftKey && last != null) {
+          const [from, to] = [last, index].sort((a, b) => a - b);
+          data.slice(from, to + 1).forEach((r) => next.add(rowKey(r)));
+        } else if (next.has(rowKey(row))) {
+          next.delete(rowKey(row));
+        } else {
+          next.add(rowKey(row));
+        }
+        return next;
+      });
+      lastClickedIndex.current = index;
+    },
+    [data, rowKey],
+  );
+
 
   const toggleAll = () => {
     setSelected(() => (allSelected ? new Set() : new Set(data.map(rowKey))));
@@ -312,7 +354,7 @@ export function DataTable<T>({
 
   const isCustomizationEnabled = !!storageKey && customizableColumns;
   const hasActivePreferences =
-    hiddenColumns.length > 0 || density !== 'normal' || (viewModes && activeViewMode !== (viewModes[0] ?? 'table'));
+    effectiveHiddenColumns.length > 0 || density !== 'normal' || (viewModes && activeViewMode !== (viewModes[0] ?? 'table'));
 
   const toggleColumnVisibility = (colKey: string) => {
     const isHidden = hiddenColumns.includes(colKey);
@@ -344,6 +386,11 @@ export function DataTable<T>({
   };
 
   const handleViewModeChange = (newMode: TableViewMode) => {
+    // Controlled: parent is source of truth — no internal state / localStorage write.
+    if (controlledViewMode !== undefined) {
+      onViewModeChange?.(newMode);
+      return;
+    }
     setInternalViewMode(newMode);
     if (storageKey) {
       saveTablePreferences(storageKey, { viewMode: newMode });
@@ -371,8 +418,10 @@ export function DataTable<T>({
         col.header
       ) : (
         (() => {
-          const active = !!sort && sort.field === col.sortKey;
-          const chainIndex = (sorts ?? []).findIndex((s) => s.field === col.sortKey);
+          // Use chain entry for this column (from sorts[] if provided, else fall back to sort).
+          const chain = sorts ?? (sort ? [sort] : []);
+          const chainEntry = chain.find((s) => s.field === col.sortKey);
+          const chainIndex = chain.findIndex((s) => s.field === col.sortKey);
           const showsIndex = !!sorts && sorts.length > 1 && chainIndex >= 0;
           return (
             <button
@@ -390,11 +439,15 @@ export function DataTable<T>({
               <span
                 aria-hidden
                 className={cn(
-                  'text-[10px] leading-none',
-                  active ? 'text-accent' : 'text-muted/50 group-hover:text-muted',
+                  'leading-none',
+                  chainEntry ? 'text-[10px] text-accent' : 'text-muted/50 group-hover:text-muted',
                 )}
               >
-                {active && sort ? (sort.direction === 'asc' ? '▲' : '▼') : '▾'}
+                {chainEntry ? (
+                  chainEntry.direction === 'asc' ? '▲' : '▼'
+                ) : (
+                  <LuChevronsUpDown className="h-3 w-3" />
+                )}
               </span>
             </button>
           );
@@ -415,11 +468,14 @@ export function DataTable<T>({
   };
 
   const ariaSort = (col: Column<T>): 'ascending' | 'descending' | undefined => {
-    if (!sortable(col) || !sort || sort.field !== col.sortKey) {
-      return undefined;
-    }
-    return sort.direction === 'asc' ? 'ascending' : 'descending';
+    if (!sortable(col)) return undefined;
+    // Check chain entry (covers both primary and secondary multi-sort columns).
+    const chain = sorts ?? (sort ? [sort] : []);
+    const chainEntry = chain.find((s) => s.field === col.sortKey);
+    if (!chainEntry) return undefined;
+    return chainEntry.direction === 'asc' ? 'ascending' : 'descending';
   };
+
 
   const thPadding =
     density === 'compact' ? 'px-3 py-2 text-[11px]' : density === 'relaxed' ? 'px-5 py-3.5 text-sm' : 'px-4 py-3 text-xs';
@@ -575,7 +631,7 @@ export function DataTable<T>({
                             <span className="text-xs font-semibold text-main">
                               {t('table.customizeColumns')}
                             </span>
-                            {hiddenColumns.length > 0 && (
+                            {effectiveHiddenColumns.length > 0 && (
                               <button
                                 type="button"
                                 onClick={handleResetColumns}
@@ -587,9 +643,9 @@ export function DataTable<T>({
                           </div>
 
                           <div className="max-h-48 space-y-1 overflow-y-auto pr-1">
-                            {columns.map((col) => {
-                              const isHideable = col.hideable !== false;
-                              const isChecked = !hiddenColumns.includes(col.key);
+{columns.map((col) => {
+                                const isHideable = col.hideable !== false;
+                                const isChecked = !effectiveHiddenColumns.includes(col.key);
 
                               return (
                                 <label
@@ -768,7 +824,7 @@ export function DataTable<T>({
           {showSkeleton ? (
             <SkeletonCards rowCount={skeletonRows} />
           ) : showError ? (
-            <TableErrorState onRetry={onRetry} />
+            <TableErrorState onRetry={onRetry} icon={errorIcon} />
           ) : data.length === 0 ? (
             <EmptyState message={emptyMessage ?? t('table.noRecords')} icon={emptyIcon} />
           ) : (
@@ -786,7 +842,7 @@ export function DataTable<T>({
                         <div className="min-w-0 font-semibold text-main text-sm truncate">
                           {visibleColumns[0]?.render
                             ? visibleColumns[0].render(row)
-                            : String((row as Record<string, unknown>)[visibleColumns[0]?.key] ?? '')}
+                            : cellText(row, visibleColumns[0])}
                         </div>
                         {actions && <div className="shrink-0">{actions(row)}</div>}
                       </div>
@@ -798,7 +854,7 @@ export function DataTable<T>({
                             <span className="text-main font-medium truncate">
                               {col.render
                                 ? col.render(row)
-                                : String((row as Record<string, unknown>)[col.key] ?? '')}
+                                : cellText(row, col)}
                             </span>
                           </div>
                         ))}
@@ -816,7 +872,7 @@ export function DataTable<T>({
           {showSkeleton ? (
             <SkeletonList rowCount={skeletonRows} />
           ) : showError ? (
-            <TableErrorState onRetry={onRetry} />
+            <TableErrorState onRetry={onRetry} icon={errorIcon} />
           ) : data.length === 0 ? (
             <EmptyState message={emptyMessage ?? t('table.noRecords')} icon={emptyIcon} />
           ) : (
@@ -842,7 +898,7 @@ export function DataTable<T>({
                           >
                             {col.render
                               ? col.render(row)
-                              : String((row as Record<string, unknown>)[col.key] ?? '')}
+                              : cellText(row, col)}
                           </div>
                         ))}
                       </div>
@@ -907,7 +963,7 @@ export function DataTable<T>({
               ) : showError ? (
                 <tr>
                   <td colSpan={colCount}>
-                    <TableErrorState onRetry={onRetry} />
+                    <TableErrorState onRetry={onRetry} icon={errorIcon} />
                   </td>
                 </tr>
               ) : data.length === 0 ? (
@@ -918,53 +974,19 @@ export function DataTable<T>({
                 </tr>
               ) : (
                 data.map((row, index) => (
-                  <tr
+                  <TableRow
                     key={rowKey(row)}
-                    onClick={onRowClick ? () => onRowClick(row) : undefined}
-                    onKeyDown={
-                      onRowClick
-                        ? (e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault();
-                              onRowClick(row);
-                            }
-                          }
-                        : undefined
-                    }
-                    tabIndex={onRowClick ? 0 : undefined}
-                    className={cn(
-                      'border-b border-glass/60 transition-colors last:border-0 focus:outline-none focus-visible:bg-accent/[0.06]',
-                      onRowClick ? 'cursor-pointer hover:bg-accent/[0.06]' : 'hover:bg-accent/[0.04]',
-                    )}
-                  >
-                    {selectionEnabled && (
-                      <td className={tdPadding} onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          aria-label={t('table.selectRow')}
-                          checked={selected.has(rowKey(row))}
-                          onClick={(e) => toggleRow(row, index, e.shiftKey)}
-                          onChange={() => undefined}
-                          className="accent-accent"
-                        />
-                      </td>
-                    )}
-                    {visibleColumns.map((col) => (
-                      <td key={col.key} className={cn('text-main', tdPadding, col.className)}>
-                        {col.render
-                          ? col.render(row)
-                          : String((row as Record<string, unknown>)[col.key] ?? '')}
-                      </td>
-                    ))}
-                    {actions && (
-                      <td
-                        className={cn('text-right', tdPadding)}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {actions(row)}
-                      </td>
-                    )}
-                  </tr>
+                    row={row}
+                    rowId={rowKey(row)}
+                    index={index}
+                    visibleColumns={visibleColumns}
+                    actions={actions}
+                    onRowClick={onRowClick}
+                    tdPadding={tdPadding}
+                    selectionEnabled={selectionEnabled}
+                    isSelected={selected.has(rowKey(row))}
+                    onToggleRow={toggleRow}
+                  />
                 ))
               )}
             </tbody>
@@ -1020,7 +1042,11 @@ export function DataTable<T>({
           message={pendingConfirm.action.confirm!.message}
           danger={pendingConfirm.action.danger}
           onConfirm={() => {
-            void pendingConfirm.action.run(pendingConfirm.rows);
+            const currentKeys = new Set(data.map(rowKey));
+            const freshRows = pendingConfirm.rows.filter((r) => currentKeys.has(rowKey(r)));
+            if (freshRows.length > 0) {
+              void pendingConfirm.action.run(freshRows);
+            }
             setPendingConfirm(null);
           }}
           onClose={() => setPendingConfirm(null)}
@@ -1031,11 +1057,11 @@ export function DataTable<T>({
 }
 
 /** First-load error panel (K-55 step 1): retry re-runs the query; precedence error > empty. */
-function TableErrorState({ onRetry }: { onRetry?: () => void }) {
+function TableErrorState({ onRetry, icon: Icon = LuTriangleAlert }: { onRetry?: () => void; icon?: IconType }) {
   const { t } = useT();
   return (
     <div role="alert" className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-      <LuTriangleAlert size={40} strokeWidth={1.5} className="text-danger/60" aria-hidden />
+      <Icon size={40} strokeWidth={1.5} className="text-danger/60" aria-hidden />
       <div>
         <p className="text-sm font-medium text-main">{t('table.errorTitle')}</p>
         <p className="mt-1 text-xs text-muted">{t('table.errorHint')}</p>
@@ -1049,6 +1075,108 @@ function TableErrorState({ onRetry }: { onRetry?: () => void }) {
     </div>
   );
 }
+
+/** (K-55 F6) Auto-render helper: extracts the string value for a column without `render`.
+ *  In dev mode, warns once per column key when the key is absent from the row. */
+const _warnedCellKeys = new Set<string>();
+function cellText<T>(row: T, col: Column<T> | undefined): string {
+  if (!col) return '';
+  const value = (row as Record<string, unknown>)[col.key];
+  if (import.meta.env.DEV && !col.render && !(col.key in (row as Record<string, unknown>))) {
+    if (!_warnedCellKeys.has(col.key)) {
+      _warnedCellKeys.add(col.key);
+      console.warn(
+        `[DataTable] Column key "${col.key}" is not a field on the row object. ` +
+          `Composite/virtual columns must provide a render function.`,
+      );
+    }
+  }
+  return String(value ?? '');
+}
+
+/** (K-55 F7) Memoized classic-table row — prevents full-table re-renders on auto-refresh
+ *  countdown ticks and individual selection toggles. Props use stable primitives so the
+ *  memo comparison is cheap. */
+const TableRow = React.memo(function TableRow<T>({
+  row,
+  rowId: _rowId,
+  index,
+  visibleColumns,
+  actions,
+  onRowClick,
+  tdPadding,
+  selectionEnabled,
+  isSelected,
+  onToggleRow,
+}: {
+  row: T;
+  rowId: string;
+  index: number;
+  visibleColumns: Column<T>[];
+  actions?: (row: T) => ReactNode;
+  onRowClick?: (row: T) => void;
+  tdPadding: string;
+  selectionEnabled: boolean;
+  isSelected: boolean;
+  onToggleRow: (row: T, index: number, shiftKey: boolean) => void;
+}) {
+  const { t } = useT();
+  return (
+    <tr
+      onClick={onRowClick ? () => onRowClick(row) : undefined}
+      onKeyDown={
+        onRowClick
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onRowClick(row);
+              }
+            }
+          : undefined
+      }
+      tabIndex={onRowClick ? 0 : undefined}
+      className={cn(
+        'border-b border-glass/60 transition-colors last:border-0 focus:outline-none focus-visible:bg-accent/[0.06]',
+        onRowClick ? 'cursor-pointer hover:bg-accent/[0.06]' : 'hover:bg-accent/[0.04]',
+      )}
+    >
+      {selectionEnabled && (
+        <td className={tdPadding} onClick={(e) => e.stopPropagation()}>
+          <input
+            type="checkbox"
+            aria-label={t('table.selectRow')}
+            checked={isSelected}
+            onClick={(e) => onToggleRow(row, index, e.shiftKey)}
+            onChange={() => undefined}
+            className="accent-accent"
+          />
+        </td>
+      )}
+      {visibleColumns.map((col) => (
+        <td key={col.key} className={cn('text-main', tdPadding, col.className)}>
+          {col.render ? col.render(row) : cellText(row, col)}
+        </td>
+      ))}
+      {actions && (
+        <td className={cn('text-right', tdPadding)} onClick={(e) => e.stopPropagation()}>
+          {actions(row)}
+        </td>
+      )}
+    </tr>
+  );
+}) as <T>(props: {
+  row: T;
+  rowId: string;
+  index: number;
+  visibleColumns: Column<T>[];
+  actions?: (row: T) => ReactNode;
+  onRowClick?: (row: T) => void;
+  tdPadding: string;
+  selectionEnabled: boolean;
+  isSelected: boolean;
+  onToggleRow: (row: T, index: number, shiftKey: boolean) => void;
+}) => React.ReactElement;
+
 
 /** Skeleton first-load states (K-55 step 1) — deterministic widths, never Math.random. */
 
